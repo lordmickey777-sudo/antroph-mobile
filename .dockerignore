@@ -1,0 +1,12 @@
+build/
+.dart_tool/
+.git/
+.gitignore
+.idea/
+.vscode/
+ios/Flutter/Flutter.podspec
+ios/Pods/
+android/.gradle/
+android/build/
+**/*.iml
+**/.DS_Store
