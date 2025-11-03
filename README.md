@@ -44,6 +44,10 @@ flutter run --dart-define=SENTRY_DSN=YOUR_SENTRY_DSN
 - `lib/features/bluetooth/*`: Basic Bluetooth streams using flutter_blue_plus
 - `lib/features/wifi/*`: Basic Wi‑Fi status/SSID via wifi_iot
 
+## Theme
+
+The app uses dark mode globally. The Scaffold background color is set to `#141718` via the dark theme in `lib/app.dart`.
+
 ## Android/iOS permissions
 
 Bluetooth and Wi‑Fi permissions/descriptions have been added in:
