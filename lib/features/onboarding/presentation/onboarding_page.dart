@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:antroph_mobile/widgets/typography_text.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
@@ -94,21 +95,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  Text(
+                  TypographyText(
                     _slides[i].title,
+                    variant: TypographyVariant.h2,
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
                   ),
                   const SizedBox(height: 12),
-                  Text(
+                  TypographyText(
                     _slides[i].subtitle,
+                    variant: TypographyVariant.body2,
                     textAlign: TextAlign.center,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                    color: Colors.white70,
                   ),
                   const Spacer(),
 
@@ -154,7 +153,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
                               ),
                               Expanded(
                                 child: Center(
-                                  child: Text(_index < 2 ? 'Next' : 'Start'),
+                                  child: TypographyText(
+                                    _index < 2 ? 'Next' : 'Start',
+                                    variant: TypographyVariant.body1,
+                                  ),
                                 ),
                               ),
                               Padding(

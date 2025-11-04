@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:antroph_mobile/widgets/typography_text.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -51,11 +52,10 @@ class _SplashPageState extends State<SplashPage> {
               alignment: Alignment.bottomCenter,
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 20),
-                child: Text(
+                child: const TypographyText(
                   'Aura 1.0',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.white70),
+                  variant: TypographyVariant.body2,
+                  color: Colors.white70,
                 ),
               ),
             ),
