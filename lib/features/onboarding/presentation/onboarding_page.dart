@@ -14,6 +14,30 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final _controller = PageController();
   int _index = 0;
 
+  // Slide content configuration
+  static const _slides = [
+    (
+      title: 'Chat With Your\nFavourite Ai',
+      subtitle:
+          'Chat with the smartest AI Future\nExperience power of AI with us',
+      kind: 'eye',
+      asset: '',
+    ),
+    (
+      title: 'Chat With Your\nFavourite Ai',
+      subtitle:
+          'Chat with the smartest AI Future\nExperience power of AI with us',
+      kind: 'eye',
+      asset: '',
+    ),
+    (
+      title: 'Your Sweet\nCompanion',
+      subtitle: 'Have crazy fun with the smartest AI powered\nTablebot',
+      kind: 'image',
+      asset: 'assets/images/onboarding_3.png',
+    ),
+  ];
+
   @override
   void dispose() {
     _controller.dispose();
@@ -26,20 +50,67 @@ class _OnboardingPageState extends State<OnboardingPage> {
       body: SafeArea(
         child: Stack(
           children: [
-            // Decorative big eye top-left
+            // Top visual per slide: decorative eye for slides 0-1, image card for slide 2
             Positioned(
               top: 0,
               left: 0,
               right: 0,
               child: IgnorePointer(
-                child: Platform.environment.containsKey('FLUTTER_TEST')
-                    ? const SizedBox.shrink()
-                    : Image.asset(
-                        'assets/images/eye_logo.png',
-                        height: MediaQuery.of(context).size.height * 0.42,
-                        fit: BoxFit.cover,
-                        alignment: Alignment.topLeft,
-                      ),
+                child: Builder(
+                  builder: (context) {
+                    final isTest = Platform.environment.containsKey(
+                      'FLUTTER_TEST',
+                    );
+                    final slide = _slides[_index];
+                    if (slide.kind == 'image') {
+                      // Big rounded image card centered near top
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 24),
+                        child: Column(
+                          children: [
+                            // Soft glow behind image
+                            Container(
+                              width: 340,
+                              height: 430,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(28),
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Color(0x222C2F31),
+                                    Color(0x002C2F31),
+                                  ],
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(28),
+                                child: isTest
+                                    ? const SizedBox(width: 300, height: 380)
+                                    : Image.asset(
+                                        slide.asset,
+                                        width: 300,
+                                        height: 380,
+                                        fit: BoxFit.cover,
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    // Default decorative eye
+                    return isTest
+                        ? const SizedBox.shrink()
+                        : Image.asset(
+                            'assets/images/eye_logo.png',
+                            height: MediaQuery.of(context).size.height * 0.42,
+                            fit: BoxFit.cover,
+                            alignment: Alignment.topLeft,
+                          );
+                  },
+                ),
               ),
             ),
 
@@ -81,7 +152,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           children: [
                             const SizedBox(height: 8),
                             Text(
-                              'Chat With Your\nFavourite Ai',
+                              _slides[i].title,
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.headlineMedium
                                   ?.copyWith(
@@ -91,7 +162,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'Chat with the smartest AI Future\nExperience power of AI with us',
+                              _slides[i].subtitle,
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(color: Colors.white70),
