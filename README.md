@@ -59,6 +59,10 @@ fvm flutter pub get
 fvm flutter pub run flutter_launcher_icons
 ```
 
+## Typography
+
+The global font for the app is Aeonik. The font file is included at `assets/fonts/aeonik.ttf` and registered in `pubspec.yaml`. Both light and dark themes set `fontFamily: 'Aeonik'` in `lib/app.dart`.
+
 ## Android/iOS permissions
 
 Bluetooth and Wi‑Fi permissions/descriptions have been added in:

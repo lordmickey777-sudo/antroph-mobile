@@ -19,6 +19,7 @@ class App extends ConsumerWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
+        fontFamily: 'Aeonik',
       ),
       // Define the dark theme with the specified scaffold background color
       darkTheme: ThemeData(
@@ -28,6 +29,7 @@ class App extends ConsumerWidget {
           seedColor: Colors.deepPurple,
           brightness: Brightness.dark,
         ),
+        fontFamily: 'Aeonik',
         scaffoldBackgroundColor: const Color(0xFF141718),
         appBarTheme: const AppBarTheme(
           surfaceTintColor: Colors.transparent,

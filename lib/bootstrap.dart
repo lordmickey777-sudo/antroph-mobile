@@ -9,11 +9,6 @@ import 'core/logging/logger.dart';
 typedef AppRunner = Future<void> Function();
 
 Future<void> bootstrap(AppRunner runAppCallback) async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize logger
-  Log.init();
-
   final sentryDsn = const String.fromEnvironment(
     'SENTRY_DSN',
     defaultValue: '',
@@ -28,6 +23,9 @@ Future<void> bootstrap(AppRunner runAppCallback) async {
     l.Logger().i('Starting app without Sentry (no DSN provided).');
     await runZonedGuarded(
       () async {
+        WidgetsFlutterBinding.ensureInitialized();
+        // Initialize logger
+        Log.init();
         await runAppCallback();
       },
       (error, stack) {
@@ -47,6 +45,9 @@ Future<void> bootstrap(AppRunner runAppCallback) async {
     appRunner: () async {
       await runZonedGuarded(
         () async {
+          WidgetsFlutterBinding.ensureInitialized();
+          // Initialize logger
+          Log.init();
           await runAppCallback();
         },
         (error, stack) async {

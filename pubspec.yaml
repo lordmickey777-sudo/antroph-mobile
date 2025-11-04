@@ -74,6 +74,11 @@ flutter:
   assets:
     - assets/images/
 
+  fonts:
+    - family: Aeonik
+      fonts:
+        - asset: assets/fonts/aeonik.ttf
+
 # App icons configuration
 flutter_launcher_icons:
   android: true
