@@ -48,6 +48,17 @@ flutter run --dart-define=SENTRY_DSN=YOUR_SENTRY_DSN
 
 The app uses dark mode globally. The Scaffold background color is set to `#141718` via the dark theme in `lib/app.dart`.
 
+## App icon
+
+Launcher icons are generated with `flutter_launcher_icons` from `assets/images/app_logo.png`.
+
+Regenerate after updating the logo:
+
+```sh
+fvm flutter pub get
+fvm flutter pub run flutter_launcher_icons
+```
+
 ## Android/iOS permissions
 
 Bluetooth and Wi‑Fi permissions/descriptions have been added in:
