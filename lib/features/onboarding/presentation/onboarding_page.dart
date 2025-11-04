@@ -17,16 +17,16 @@ class _OnboardingPageState extends State<OnboardingPage> {
     (
       title: 'Chat With Your\nFavourite Ai',
       subtitle:
-          'Chat with the smartest AI Future\nExperience power of AI with us',
+          'Chat with the smartest ArI Future\nExperience power of AI with us',
       kind: 'eye',
-      asset: 'assets/images/t_logo.png',
+      asset: 'assets/images/onboarding_3.png',
     ),
     (
       title: 'Chat With Your\nFavourite Ai',
       subtitle:
           'Chat with the smartest AI Future\nExperience power of AI with us',
       kind: 'eye',
-      asset: 'assets/images/t_logo.png',
+      asset: 'assets/images/onboarding_3.png',
     ),
     (
       title: 'Your Sweet\nCompanion',
@@ -58,7 +58,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 children: [
                   const SizedBox(height: 24),
                   _buildTopVisual(context, i),
-                  const SizedBox(height: 60),
+                  const SizedBox(height: 20),
 
                   // Page indicators under the image
                   Row(
@@ -158,7 +158,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                 ),
                               ),
                               Padding(
-                                padding: const EdgeInsets.only(right: 12.0, top: 4.0),
+                                padding: const EdgeInsets.only(
+                                  right: 12.0,
+                                  top: 4.0,
+                                ),
                                 child: const Icon(Icons.double_arrow),
                               ),
                             ],
