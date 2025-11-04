@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/launch.json",
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter: iOS Simulator (Debug)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "deviceId": "C806869F-4818-4B2F-868D-1D5DA5D31FA4",
+      "flutterMode": "debug"
+    },
+    {
+      "name": "Flutter: Select Device (Debug)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "flutterMode": "debug"
+    },
+    {
+      "name": "Flutter: Chrome (Web)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
+      "flutterMode": "debug"
+    },
+    {
+      "name": "Flutter: Profile",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "flutterMode": "profile"
+    },
+    {
+      "name": "Flutter: Release",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "flutterMode": "release"
+    },
+    {
+      "name": "Flutter: Attach",
+      "type": "dart",
+      "request": "attach"
+    }
+  ]
+}

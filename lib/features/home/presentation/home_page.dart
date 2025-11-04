@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/bottom_nav.dart';
 import 'package:antroph_mobile/features/profile/presentation/profile_page.dart';
+import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,7 +16,7 @@ class _HomePageState extends State<HomePage> {
   HomeTab _tab = HomeTab.interact;
 
   static const _bg = Color(0xFF121516);
-  static const _panel = Color(0xFF2A2D2F);
+  // Panel color was used by the inline sheet; kept here for future use if needed.
 
   @override
   Widget build(BuildContext context) {
@@ -59,17 +60,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openStorySheet(BuildContext context) async {
-    await Navigator.of(context).push(
-      CupertinoSheetRoute(
-        builder: (context) => CupertinoPageScaffold(
-          backgroundColor: _panel,
-          child: const SafeArea(
-            top: false,
-            child: SizedBox.expand(), // empty full-height sheet
-          ),
-        ),
-      ),
-    );
+    await Navigator.of(
+      context,
+    ).push(CupertinoSheetRoute(builder: (context) => const StorySheet()));
   }
 }
 
@@ -136,12 +129,12 @@ class _InteractContent extends StatelessWidget {
                 ),
               ],
             ),
-              child: Image.asset(
-                'assets/images/gif.png',
-                fit: BoxFit.cover,
-                width: size.width * 0.55,
-                height: size.width * 0.55,
-              ),
+            child: Image.asset(
+              'assets/images/gif.png',
+              fit: BoxFit.cover,
+              width: size.width * 0.55,
+              height: size.width * 0.55,
+            ),
           ),
         ),
         const SizedBox(height: 28),

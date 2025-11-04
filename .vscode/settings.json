@@ -1,0 +1,8 @@
+{
+  // Ensure VS Code uses FVM's Flutter SDK
+  "dart.flutterSdkPath": ".fvm/flutter_sdk",
+  // Optional: set Dart SDK from Flutter cache (usually auto-detected from flutterSdkPath)
+  "dart.sdkPath": ".fvm/flutter_sdk/bin/cache/dart-sdk",
+  // Formatting preference (adjust as you like)
+  "dart.lineLength": 100
+}
