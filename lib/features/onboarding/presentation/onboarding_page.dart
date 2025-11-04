@@ -58,7 +58,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 children: [
                   const SizedBox(height: 24),
                   _buildTopVisual(context, i),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 60),
 
                   // Page indicators under the image
                   Row(
@@ -68,12 +68,27 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       return AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         margin: const EdgeInsets.symmetric(horizontal: 6),
-                        width: selected ? 10 : 6,
-                        height: selected ? 10 : 6,
+                        width: selected ? 16 : 10,
+                        height: selected ? 16 : 10,
                         decoration: BoxDecoration(
-                          color: selected ? Colors.white : Colors.white24,
                           shape: BoxShape.circle,
+                          color: selected ? Colors.transparent : Colors.white24,
+                          border: selected
+                              ? Border.all(color: Colors.white, width: 0.7)
+                              : null,
                         ),
+                        child: selected
+                            ? Center(
+                                child: Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              )
+                            : null,
                       );
                     }),
                   ),
@@ -102,13 +117,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       SizedBox(
-                        height: 64,
-                        width: 260,
+                        height: 76,
+                        width: 200,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF2A2D2F),
                             foregroundColor: Colors.white,
                             shape: const StadiumBorder(),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
                           onPressed: () {
                             if (_index < 2) {
@@ -121,25 +137,30 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             }
                           },
                           child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.max,
                             children: [
                               Container(
-                                width: 36,
-                                height: 36,
+                                width: 64,
+                                height: 64,
                                 decoration: const BoxDecoration(
                                   color: Colors.black,
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
                                   Icons.smart_toy_outlined,
-                                  size: 20,
+                                  size: 32,
                                   color: Colors.white,
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Text(_index < 2 ? 'Next' : 'Start'),
-                              const SizedBox(width: 12),
-                              const Icon(Icons.double_arrow),
+                              Expanded(
+                                child: Center(
+                                  child: Text(_index < 2 ? 'Next' : 'Start'),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(right: 12.0, top: 4.0),
+                                child: const Icon(Icons.double_arrow),
+                              ),
                             ],
                           ),
                         ),
