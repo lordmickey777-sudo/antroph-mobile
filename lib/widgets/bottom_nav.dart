@@ -15,11 +15,11 @@ class BottomNav extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         return Container(
-          width: width,
+          width: MediaQuery.of(context).size.width / 0.4,
           height: 76,
           decoration: BoxDecoration(
             color: const Color(0xFF2A2D2F),
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(50),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
@@ -74,7 +74,7 @@ class BottomNav extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
               color: Colors.black.withOpacity(0.35),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(50),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -94,19 +94,6 @@ class BottomNav extends StatelessWidget {
               ],
             ),
           ),
-          if (current == HomeTab.interact)
-            Positioned(
-              left: -4,
-              top: -4,
-              child: Container(
-                width: 10,
-                height: 10,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF23D18B),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -119,7 +106,7 @@ class BottomNav extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return InkWell(
-      borderRadius: BorderRadius.circular(28),
+      borderRadius: BorderRadius.circular(50),
       onTap: onTap,
       child: SizedBox(
         height: 56,

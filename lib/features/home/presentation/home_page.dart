@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/bottom_nav.dart';
+import 'package:antroph_mobile/features/profile/presentation/profile_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -26,7 +27,7 @@ class _HomePageState extends State<HomePage> {
           alignment: Alignment.center,
           children: [
             if (_tab == HomeTab.interact) _InteractContent(size: size),
-            if (_tab == HomeTab.profile) const _ProfileContent(),
+            if (_tab == HomeTab.profile) const ProfilePage(),
 
             // Bottom rounded navigation panel
             Positioned(
@@ -62,9 +63,9 @@ class _HomePageState extends State<HomePage> {
       CupertinoSheetRoute(
         builder: (context) => CupertinoPageScaffold(
           backgroundColor: _panel,
-          child: SafeArea(
+          child: const SafeArea(
             top: false,
-            child: Container(), // empty 100% height sheet
+            child: SizedBox.expand(), // empty full-height sheet
           ),
         ),
       ),
@@ -135,12 +136,12 @@ class _InteractContent extends StatelessWidget {
                 ),
               ],
             ),
-            child: Image.asset(
-              'assets/images/gif.png',
-              fit: BoxFit.cover,
-              width: size.width * 0.55,
-              height: size.width * 0.55,
-            ),
+              child: Image.asset(
+                'assets/images/gif.png',
+                fit: BoxFit.cover,
+                width: size.width * 0.55,
+                height: size.width * 0.55,
+              ),
           ),
         ),
         const SizedBox(height: 28),
@@ -166,129 +167,6 @@ class _InteractContent extends StatelessWidget {
         ),
         SizedBox(height: size.height * 0.15),
       ],
-    );
-  }
-}
-
-class _ProfileContent extends StatelessWidget {
-  const _ProfileContent();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const SizedBox(height: 28),
-        // Avatar with online dot
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            ClipOval(
-              child: Image.asset(
-                'assets/images/avatar.png',
-                width: 116,
-                height: 116,
-                fit: BoxFit.cover,
-              ),
-            ),
-            Positioned(
-              right: 6,
-              bottom: 6,
-              child: Container(
-                width: 14,
-                height: 14,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF23D18B),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        const TypographyText(
-          'Otunba Fortune',
-          variant: TypographyVariant.h2,
-          color: Colors.white,
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 6),
-        TypographyText(
-          '4tuneadebiyi@gmail.com',
-          variant: TypographyVariant.body2,
-          color: Colors.white.withOpacity(0.7),
-        ),
-        const SizedBox(height: 30),
-
-        // Menu items
-        const _ProfileMenuItem(
-          icon: Icons.settings_outlined,
-          title: 'Customization',
-        ),
-        const _DividerInset(),
-        const _ProfileMenuItem(icon: Icons.lock_outline, title: 'Security'),
-        const _DividerInset(),
-        const _ProfileMenuItem(icon: Icons.help_outline, title: 'Support'),
-        const _DividerInset(),
-        const _ProfileMenuItem(
-          icon: Icons.attach_money_outlined,
-          title: 'Subscription',
-        ),
-        const _DividerInset(),
-        const _ProfileMenuItem(
-          icon: Icons.logout,
-          title: 'Logout',
-          showChevron: false,
-        ),
-
-        const Spacer(),
-        const SizedBox(height: 110),
-      ],
-    );
-  }
-}
-
-class _ProfileMenuItem extends StatelessWidget {
-  const _ProfileMenuItem({
-    required this.icon,
-    required this.title,
-    this.showChevron = true,
-  });
-
-  final IconData icon;
-  final String title;
-  final bool showChevron;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.white, size: 26),
-          const SizedBox(width: 18),
-          Expanded(
-            child: TypographyText(
-              title,
-              variant: TypographyVariant.body1,
-              color: Colors.white,
-            ),
-          ),
-          if (showChevron)
-            const Icon(Icons.chevron_right, color: Colors.white70),
-        ],
-      ),
-    );
-  }
-}
-
-class _DividerInset extends StatelessWidget {
-  const _DividerInset();
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(height: 1, color: Colors.white12),
     );
   }
 }
