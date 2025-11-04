@@ -13,7 +13,6 @@ class BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = constraints.maxWidth;
         return Container(
           width: MediaQuery.of(context).size.width / 0.4,
           height: 76,
