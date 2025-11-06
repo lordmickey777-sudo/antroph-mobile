@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
+import 'package:antroph_mobile/widgets/toast.dart';
+import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -67,11 +71,11 @@ class _ProfileHeader extends StatelessWidget {
   }
 }
 
-class _ProfileMenu extends StatelessWidget {
+class _ProfileMenu extends ConsumerWidget {
   const _ProfileMenu();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     const items = [
       (Icons.settings_outlined, 'Customization', true),
       (Icons.lock_outline, 'Security', true),
@@ -83,8 +87,23 @@ class _ProfileMenu extends StatelessWidget {
     return Column(
       children: [
         for (int i = 0; i < items.length; i++) ...[
-          _ProfileMenuItem(icon: items[i].$1, title: items[i].$2, showChevron: items[i].$3),
-          // if (i != items.length - 1) const _DividerInset(),
+          InkWell(
+            onTap: items[i].$2 == 'Logout'
+                ? () async {
+                    final controller = ref.read(authControllerProvider.notifier);
+                    await controller.logout();
+                    if (context.mounted) {
+                      showToast(context, 'Logged out', success: true);
+                      context.goNamed('login');
+                    }
+                  }
+                : null,
+            child: _ProfileMenuItem(
+              icon: items[i].$1,
+              title: items[i].$2,
+              showChevron: items[i].$3,
+            ),
+          ),
         ],
       ],
     );

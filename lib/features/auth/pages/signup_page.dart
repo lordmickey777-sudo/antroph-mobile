@@ -5,6 +5,7 @@ import '../widgets/auth_input.dart';
 import '../../../core/auth/state/auth_state.dart';
 import '../../../core/auth/repository/auth_repository.dart';
 import '../../../widgets/toast.dart';
+import 'package:go_router/go_router.dart';
 
 class SignUpPage extends ConsumerStatefulWidget {
   const SignUpPage({super.key, this.onSwitchLogin});
@@ -68,82 +69,97 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
         final msg = next.error?.toString() ?? 'Unexpected error';
         showToast(context, msg);
       }
-      if (next.hasValue && previous?.hasValue == false && mounted) {
-        // showToast(context, 'Account created. Verify your email.', success: true);
+      final user = next.value;
+      final prevUser = previous?.value;
+      if (mounted && user != null && user != prevUser) {
+        showToast(context, 'Account created.', success: true);
+        context.go('/home');
       }
     });
     final loading = authState.isLoading;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 96, 24, 24),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const TypographyText(
-              'Create your',
-              variant: TypographyVariant.h2,
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-            const SizedBox(height: 4),
-            const TypographyText(
-              'Account',
-              variant: TypographyVariant.h2,
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-            const SizedBox(height: 36),
-            AuthInput(controller: _nameCtrl, hint: 'Full Name', icon: Icons.person_outline),
-            const SizedBox(height: 20),
-            AuthInput(
-              controller: _emailCtrl,
-              hint: 'Enter Your Email',
-              icon: Icons.email_outlined,
-              keyboardType: TextInputType.emailAddress,
-              validator: _validateEmail,
-            ),
-            const SizedBox(height: 20),
-            AuthInput(
-              controller: _passwordCtrl,
-              hint: 'Password',
-              icon: Icons.lock_outline,
-              obscure: _obscure,
-              onToggleObscure: () => setState(() => _obscure = !_obscure),
-              validator: _validatePassword,
-            ),
-            const SizedBox(height: 28),
-            AuthButton(label: 'Register', onTap: _submit, loading: loading),
-            const SizedBox(height: 28),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 96, 24, 24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const TypographyText(
-                  'Already Have An Account? ',
-                  variant: TypographyVariant.body2,
-                  color: Colors.white70,
+                  'Create your',
+                  variant: TypographyVariant.h2,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
                 ),
-                GestureDetector(
-                  onTap: widget.onSwitchLogin,
-                  child: const TypographyText(
-                    'Sign In',
-                    variant: TypographyVariant.body2,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
+                const SizedBox(height: 4),
+                const TypographyText(
+                  'Account',
+                  variant: TypographyVariant.h2,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+                const SizedBox(height: 36),
+                AuthInput(controller: _nameCtrl, hint: 'Full Name', icon: Icons.person_outline),
+                const SizedBox(height: 20),
+                AuthInput(
+                  controller: _emailCtrl,
+                  hint: 'Enter Your Email',
+                  icon: Icons.email_outlined,
+                  keyboardType: TextInputType.emailAddress,
+                  validator: _validateEmail,
+                ),
+                const SizedBox(height: 20),
+                AuthInput(
+                  controller: _passwordCtrl,
+                  hint: 'Password',
+                  icon: Icons.lock_outline,
+                  obscure: _obscure,
+                  onToggleObscure: () => setState(() => _obscure = !_obscure),
+                  validator: _validatePassword,
+                ),
+                const SizedBox(height: 28),
+                AuthButton(label: 'Register', onTap: _submit, loading: loading),
+                const SizedBox(height: 28),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const TypographyText(
+                      'Already Have An Account? ',
+                      variant: TypographyVariant.body2,
+                      color: Colors.white70,
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        if (widget.onSwitchLogin != null) {
+                          widget.onSwitchLogin!();
+                        } else {
+                          // Fallback to routing when not embedded in _AuthGated
+                          context.go('/auth/login');
+                        }
+                      },
+                      child: const TypographyText(
+                        'Sign In',
+                        variant: TypographyVariant.body2,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                if (authState.hasError)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: TypographyText(
+                      'Error: ${authState.error}',
+                      variant: TypographyVariant.body2,
+                      color: Colors.redAccent,
+                    ),
                   ),
-                ),
               ],
             ),
-            if (authState.hasError)
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: TypographyText(
-                  'Error: ${authState.error}',
-                  variant: TypographyVariant.body2,
-                  color: Colors.redAccent,
-                ),
-              ),
-          ],
+          ),
         ),
       ),
     );

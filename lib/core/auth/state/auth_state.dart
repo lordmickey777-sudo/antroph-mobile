@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../models/user.dart';
 import '../repository/auth_repository.dart';
 import '../../network/error_formatter.dart';
+import '../../network/api_client.dart';
 
 class AuthTokens {
   final String accessToken;
@@ -24,6 +25,32 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   @override
   Future<AuthUser?> build() async {
     // No persisted auth yet.
+    // Wire token refresher so the HTTP layer can refresh on 401.
+    ApiClient.I.setTokenRefresher((refreshToken) async {
+      try {
+        final map = await _repo.refreshToken(refreshToken: refreshToken);
+        final newTokens = AuthTokens(
+          accessToken: map['access_token'] ?? '',
+          refreshToken: map['refresh_token'] ?? refreshToken,
+          tokenType: map['token_type'] ?? 'bearer',
+        );
+        _tokens = newTokens;
+        ApiClient.I.setAuthTokens(
+          accessToken: newTokens.accessToken,
+          refreshToken: newTokens.refreshToken,
+          tokenType: newTokens.tokenType,
+        );
+        // Keep the current user; just refreshed tokens.
+        return true;
+      } catch (_) {
+        // On refresh failure ensure tokens are cleared and auth state reset.
+        _tokens = null;
+        ApiClient.I.clearAuthTokens();
+        // Expose unauth state (do not emit error from build).
+        state = const AsyncValue.data(null);
+        return false;
+      }
+    });
     return null;
   }
 
@@ -59,6 +86,11 @@ class AuthController extends AsyncNotifier<AuthUser?> {
         refreshToken: tokensMap['refresh_token']!,
         tokenType: tokensMap['token_type']!,
       );
+      ApiClient.I.setAuthTokens(
+        accessToken: _tokens!.accessToken,
+        refreshToken: _tokens!.refreshToken,
+        tokenType: _tokens!.tokenType,
+      );
       state = AsyncValue.data(AuthUser(id: 'self', email: email, emailVerificationRequired: false));
     } on DioException catch (e, st) {
       final apiError = ErrorFormatter.fromDio(e);
@@ -68,9 +100,24 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     }
   }
 
-  void logout() {
-    _tokens = null;
-    state = const AsyncValue.data(null);
+  Future<void> logout() async {
+    final refresh = _tokens?.refreshToken;
+    try {
+      if (refresh != null && refresh.isNotEmpty) {
+        await _repo.logout(refreshToken: refresh);
+      }
+    } on DioException catch (e, st) {
+      // We still proceed to clear local auth, but expose error for listeners
+      final apiError = ErrorFormatter.fromDio(e);
+      state = AsyncValue.error(apiError.message, st);
+    } catch (e, st) {
+      state = AsyncValue.error(e.toString(), st);
+    } finally {
+      _tokens = null;
+      ApiClient.I.clearAuthTokens();
+      // Clear the authenticated user
+      state = const AsyncValue.data(null);
+    }
   }
 }
 
