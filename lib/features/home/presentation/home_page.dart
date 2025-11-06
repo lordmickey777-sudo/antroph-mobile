@@ -1,10 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/bottom_nav.dart';
 import 'package:antroph_mobile/features/profile/presentation/profile_page.dart';
-import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
+import 'package:antroph_mobile/features/story/presentation/story_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,9 +14,22 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   HomeTab _tab = HomeTab.interact;
+  late final PageController _pageController;
 
   static const _bg = Color(0xFF121516);
   // Panel color was used by the inline sheet; kept here for future use if needed.
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: 0);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,8 +40,30 @@ class _HomePageState extends State<HomePage> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            if (_tab == HomeTab.interact) _InteractContent(size: size),
-            if (_tab == HomeTab.profile) const ProfilePage(),
+            // Sliding content between tabs using PageView for fluid transitions
+            Positioned.fill(
+              child: PageView(
+                controller: _pageController,
+                physics: const BouncingScrollPhysics(),
+                onPageChanged: (index) {
+                  // Sync the active tab when user swipes
+                  setState(() {
+                    if (index == 0) {
+                      _tab = HomeTab.interact;
+                    } else if (index == 1) {
+                      _tab = HomeTab.story;
+                    } else {
+                      _tab = HomeTab.profile;
+                    }
+                  });
+                },
+                children: [
+                  _InteractContent(size: size),
+                  const StoryPage(),
+                  const ProfilePage(),
+                ],
+              ),
+            ),
 
             // Bottom rounded navigation panel
             Positioned(
@@ -41,13 +75,14 @@ class _HomePageState extends State<HomePage> {
                 child: BottomNav(
                   current: _tab,
                   onChanged: (tab) async {
-                    if (tab == HomeTab.story) {
-                      setState(() => _tab = HomeTab.story);
-                      await _openStorySheet(context);
-                      if (mounted && _tab == HomeTab.story) {
-                        setState(() => _tab = HomeTab.interact);
-                      }
-                      return;
+                    // Animate to the chosen tab with a smooth slide
+                    final targetPage = tab == HomeTab.interact ? 0 : (tab == HomeTab.story ? 1 : 2);
+                    if (_pageController.hasClients) {
+                      _pageController.animateToPage(
+                        targetPage,
+                        duration: const Duration(milliseconds: 320),
+                        curve: Curves.easeOutCubic,
+                      );
                     }
                     setState(() => _tab = tab);
                   },
@@ -57,20 +92,6 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
-    );
-  }
-
-  Future<void> _openStorySheet(BuildContext context) async {
-    // Present a Cupertino-style modal bottom sheet that properly
-    // coordinates drag-to-dismiss with inner scrollables.
-    await showCupertinoModalBottomSheet(
-      context: context,
-      // Expand to full height while still allowing swipe-to-dismiss
-      // when the inner scroll is at the top.
-      expand: true,
-      // Transparent to let the sheet widget control its own background.
-      backgroundColor: Colors.transparent,
-      builder: (_) => const StorySheet(),
     );
   }
 }

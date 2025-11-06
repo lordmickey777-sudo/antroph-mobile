@@ -6,7 +6,20 @@ import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
 class StorySheet extends StatelessWidget {
-  const StorySheet({super.key});
+  const StorySheet({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.imageAsset,
+    this.users,
+    this.views,
+  });
+
+  final String title;
+  final String subtitle;
+  final String imageAsset;
+  final int? users;
+  final int? views;
 
   static const _panel = Color(0xFF2A2D2F);
 
@@ -33,10 +46,10 @@ class StorySheet extends StatelessWidget {
                   children: [
                     const _GrabHandle(),
                     const SizedBox(height: 16),
-                    _HeroCard(size: size),
+                    _HeroCard(size: size, title: title, subtitle: subtitle, imageAsset: imageAsset),
                     const SizedBox(height: 20),
-                    const TypographyText(
-                      'Bonjour! are you ready to have a fun experience learning french with me? Beware, you might just become an expert 🧐',
+                    TypographyText(
+                      subtitle,
                       variant: TypographyVariant.body1,
                       color: Colors.white,
                       height: 1.35,
@@ -79,9 +92,17 @@ class _GrabHandle extends StatelessWidget {
 }
 
 class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.size});
+  const _HeroCard({
+    required this.size,
+    required this.title,
+    required this.subtitle,
+    required this.imageAsset,
+  });
 
   final Size size;
+  final String title;
+  final String subtitle;
+  final String imageAsset;
 
   @override
   Widget build(BuildContext context) {
@@ -102,10 +123,7 @@ class _HeroCard extends StatelessWidget {
         child: Stack(
           children: [
             // Background image
-            AspectRatio(
-              aspectRatio: 1.0,
-              child: Image.asset('assets/images/avatar.png', fit: BoxFit.cover),
-            ),
+            AspectRatio(aspectRatio: 1.0, child: Image.asset(imageAsset, fit: BoxFit.cover)),
 
             // Top subtle inner glass border
             Positioned.fill(
@@ -142,17 +160,9 @@ class _HeroCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const TypographyText(
-                    'Learn French',
-                    variant: TypographyVariant.h2,
-                    color: Colors.white,
-                  ),
+                  TypographyText(title, variant: TypographyVariant.h2, color: Colors.white),
                   const SizedBox(height: 6),
-                  const TypographyText(
-                    'Let Maurie teach you french',
-                    variant: TypographyVariant.body2,
-                    color: Colors.white70,
-                  ),
+                  TypographyText(subtitle, variant: TypographyVariant.body2, color: Colors.white70),
                   const SizedBox(height: 14),
                   Row(
                     children: [

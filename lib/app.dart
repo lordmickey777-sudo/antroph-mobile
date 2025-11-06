@@ -20,6 +20,10 @@ class App extends ConsumerWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
         fontFamily: 'Aeonik',
+        splashFactory: NoSplash.splashFactory,
+        highlightColor: Colors.transparent,
+        splashColor: Colors.transparent,
+        hoverColor: Colors.transparent,
       ),
       // Define the dark theme with the specified scaffold background color
       darkTheme: ThemeData(
@@ -31,10 +35,11 @@ class App extends ConsumerWidget {
         ),
         fontFamily: 'Aeonik',
         scaffoldBackgroundColor: const Color(0xFF141718),
-        appBarTheme: const AppBarTheme(
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-        ),
+        splashFactory: NoSplash.splashFactory,
+        highlightColor: Colors.transparent,
+        splashColor: Colors.transparent,
+        hoverColor: Colors.transparent,
+        appBarTheme: const AppBarTheme(surfaceTintColor: Colors.transparent, elevation: 0),
       ),
     );
   }
