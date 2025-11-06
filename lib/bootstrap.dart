@@ -3,20 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart' as l;
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'core/env/env.dart';
 
 import 'core/logging/logger.dart';
 
 typedef AppRunner = Future<void> Function();
 
 Future<void> bootstrap(AppRunner runAppCallback) async {
-  final sentryDsn = const String.fromEnvironment(
-    'SENTRY_DSN',
-    defaultValue: '',
-  );
-  final release = const String.fromEnvironment(
-    'APP_RELEASE',
-    defaultValue: 'dev',
-  );
+  final sentryDsn = const String.fromEnvironment('SENTRY_DSN', defaultValue: '');
+  final release = const String.fromEnvironment('APP_RELEASE', defaultValue: 'dev');
 
   if (sentryDsn.isEmpty) {
     // Run without Sentry
@@ -24,6 +19,7 @@ Future<void> bootstrap(AppRunner runAppCallback) async {
     await runZonedGuarded(
       () async {
         WidgetsFlutterBinding.ensureInitialized();
+        await AppEnv.load();
         // Initialize logger
         Log.init();
         await runAppCallback();
@@ -46,6 +42,7 @@ Future<void> bootstrap(AppRunner runAppCallback) async {
       await runZonedGuarded(
         () async {
           WidgetsFlutterBinding.ensureInitialized();
+          await AppEnv.load();
           // Initialize logger
           Log.init();
           await runAppCallback();

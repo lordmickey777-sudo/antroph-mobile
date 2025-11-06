@@ -4,24 +4,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'features/home/presentation/home_page.dart';
 import 'features/splash/presentation/splash_page.dart';
 import 'features/onboarding/presentation/onboarding_page.dart';
+import 'features/auth/pages/login_page.dart';
+import 'features/auth/pages/signup_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     routes: <RouteBase>[
-      GoRoute(
-        path: '/',
-        name: 'splash',
-        builder: (context, state) => const SplashPage(),
-      ),
+      GoRoute(path: '/', name: 'splash', builder: (context, state) => const SplashPage()),
       GoRoute(
         path: '/onboarding',
         name: 'onboarding',
         builder: (context, state) => const OnboardingPage(),
       ),
+      GoRoute(path: '/home', name: 'home', builder: (context, state) => const HomePage()),
+      GoRoute(path: '/auth/login', name: 'login', builder: (context, state) => const LoginPage()),
       GoRoute(
-        path: '/home',
-        name: 'home',
-        builder: (context, state) => const HomePage(),
+        path: '/auth/signup',
+        name: 'signup',
+        builder: (context, state) => const SignUpPage(),
       ),
     ],
   );

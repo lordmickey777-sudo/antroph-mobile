@@ -1,4 +1,52 @@
-# Miscellaneous
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub/
+build/
+
+# IDEs & editor settings
+.vscode/
+.idea/
+*.iml
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Android
+android/.gradle/
+android/local.properties
+android/key.properties
+android/app/**/*.keystore
+android/app/**/*.jks
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/ephemeral/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/Debug.xcconfig
+ios/Flutter/Release.xcconfig
+ios/Runner.xcworkspace/
+**/*.xcuserstate
+**/*.xcuserdatad/
+DerivedData/
+
+# Build artifacts
+*.ipa
+*.apk
+*.aab
+.dSYM/
+
+# Coverage
+coverage/
+
+# Sentry/others
+.sentryclirc# Miscellaneous
 *.class
 *.log
 *.pyc
