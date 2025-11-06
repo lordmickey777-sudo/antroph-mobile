@@ -201,7 +201,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       );
     }
     return Image.asset(
-      'assets/images/eye_logo.png',
+      'assets/images/app_logo.png',
       height: MediaQuery.of(context).size.height * 0.42,
       fit: BoxFit.cover,
       alignment: Alignment.topLeft,

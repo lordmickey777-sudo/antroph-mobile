@@ -18,31 +18,33 @@ void main() {
     const b64 =
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+WQGkAAAAASUVORK5CYII=';
     const strCodec = StringCodec();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMessageHandler('flutter/assets', (ByteData? message) async {
-          final key = strCodec.decodeMessage(message);
-          if (key == null) return null;
-          if (key == 'AssetManifest.bin') {
-            // Let framework fall back to JSON
-            return null;
-          }
-          if (key == 'AssetManifest.json') {
-            // Minimal manifest referencing the images used by tests.
-            const json =
-                '{"assets/images/app_logo.png":["assets/images/app_logo.png"],"assets/images/eye_logo.png":["assets/images/eye_logo.png"]}';
-            final bytes = utf8.encode(json);
-            return ByteData.view(Uint8List.fromList(bytes).buffer);
-          }
-          if (key == 'FontManifest.json') {
-            final bytes = utf8.encode('[]');
-            return ByteData.view(Uint8List.fromList(bytes).buffer);
-          }
-          if (key.endsWith('app_logo.png') || key.endsWith('eye_logo.png')) {
-            final bytes = base64Decode(b64);
-            return ByteData.view(bytes.buffer);
-          }
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
+      'flutter/assets',
+      (ByteData? message) async {
+        final key = strCodec.decodeMessage(message);
+        if (key == null) return null;
+        if (key == 'AssetManifest.bin') {
+          // Let framework fall back to JSON
           return null;
-        });
+        }
+        if (key == 'AssetManifest.json') {
+          // Minimal manifest referencing the images used by tests.
+          const json =
+              '{"assets/images/app_logo.png":["assets/images/app_logo.png"],"assets/images/eye_logo.png":["assets/images/eye_logo.png"]}';
+          final bytes = utf8.encode(json);
+          return ByteData.view(Uint8List.fromList(bytes).buffer);
+        }
+        if (key == 'FontManifest.json') {
+          final bytes = utf8.encode('[]');
+          return ByteData.view(Uint8List.fromList(bytes).buffer);
+        }
+        if (key.endsWith('app_logo.png') || key.endsWith('eye_logo.png')) {
+          final bytes = base64Decode(b64);
+          return ByteData.view(bytes.buffer);
+        }
+        return null;
+      },
+    );
   });
 
   testWidgets('App shows splash screen', (tester) async {

@@ -46,6 +46,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
+    // Pre-fill last email from a simple in-memory/static store.
+    // For now we use a static variable on a private class; could be replaced by SharedPreferences.
+    if (_emailCtrl.text.isEmpty && _LastEmailStore.lastEmail != null) {
+      _emailCtrl.text = _LastEmailStore.lastEmail!;
+    }
     ref.listen(authControllerProvider, (previous, next) {
       if (next.hasError && mounted) {
         final msg = next.error?.toString() ?? 'Unexpected error';
@@ -55,6 +60,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       final user = next.value;
       final prevUser = previous?.value;
       if (mounted && user != null && user != prevUser) {
+        // Remember last successful email
+        _LastEmailStore.lastEmail = user.email;
         showToast(context, 'Welcome back!', success: true);
         context.go('/home');
       }
@@ -161,4 +168,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     _passwordCtrl.dispose();
     super.dispose();
   }
+}
+
+/// Simple static holder for last successful login email.
+/// Replace with persistent storage (SharedPreferences / secure storage) if needed.
+class _LastEmailStore {
+  static String? lastEmail;
 }

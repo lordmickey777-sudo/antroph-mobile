@@ -78,9 +78,10 @@ class _ProfileMenu extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     const items = [
       (Icons.settings_outlined, 'Customization', true),
+      (Icons.qr_code_scanner, 'Scan', true),
+      (Icons.attach_money_outlined, 'Subscription', true),
       (Icons.lock_outline, 'Security', true),
       (Icons.help_outline, 'Support', true),
-      (Icons.attach_money_outlined, 'Subscription', true),
       (Icons.logout, 'Logout', false),
     ];
 
@@ -88,16 +89,33 @@ class _ProfileMenu extends ConsumerWidget {
       children: [
         for (int i = 0; i < items.length; i++) ...[
           InkWell(
-            onTap: items[i].$2 == 'Logout'
-                ? () async {
-                    final controller = ref.read(authControllerProvider.notifier);
-                    await controller.logout();
-                    if (context.mounted) {
-                      showToast(context, 'Logged out', success: true);
-                      context.goNamed('login');
-                    }
+            onTap: () async {
+              final title = items[i].$2;
+              switch (title) {
+                case 'Customization':
+                  showToast(context, 'Opening customization…');
+                  context.pushNamed('customization');
+                  break;
+                case 'Subscription':
+                  showToast(context, 'Opening subscription…');
+                  context.pushNamed('subscription');
+                  break;
+                case 'Scan':
+                  showToast(context, 'Opening scanner…');
+                  context.pushNamed('scan');
+                  break;
+                case 'Logout':
+                  final controller = ref.read(authControllerProvider.notifier);
+                  await controller.logout();
+                  if (context.mounted) {
+                    showToast(context, 'Logged out', success: true);
+                    context.goNamed('login');
                   }
-                : null,
+                  break;
+                default:
+                  showToast(context, '$title coming soon');
+              }
+            },
             child: _ProfileMenuItem(
               icon: items[i].$1,
               title: items[i].$2,
