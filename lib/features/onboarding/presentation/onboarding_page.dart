@@ -17,15 +17,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
   static const _slides = [
     (
       title: 'Chat With Your\nFavourite Ai',
-      subtitle:
-          'Chat with the smartest ArI Future\nExperience power of AI with us',
+      subtitle: 'Chat with the smartest AI Future\nExperience power of AI with us',
       kind: 'eye',
       asset: 'assets/images/onboarding_3.png',
     ),
     (
       title: 'Chat With Your\nFavourite Ai',
-      subtitle:
-          'Chat with the smartest AI Future\nExperience power of AI with us',
+      subtitle: 'Chat with the smartest AI Future\nExperience power of AI with us',
       kind: 'eye',
       asset: 'assets/images/onboarding_3.png',
     ),
@@ -74,9 +72,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: selected ? Colors.transparent : Colors.white24,
-                          border: selected
-                              ? Border.all(color: Colors.white, width: 0.7)
-                              : null,
+                          border: selected ? Border.all(color: Colors.white, width: 0.7) : null,
                         ),
                         child: selected
                             ? Center(
@@ -160,10 +156,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                 ),
                               ),
                               Padding(
-                                padding: const EdgeInsets.only(
-                                  right: 12.0,
-                                  top: 4.0,
-                                ),
+                                padding: const EdgeInsets.only(right: 12.0, top: 4.0),
                                 child: const Icon(Icons.double_arrow),
                               ),
                             ],
@@ -201,12 +194,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
             alignment: Alignment.center,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(28),
-              child: Image.asset(
-                slide.asset,
-                width: 300,
-                height: 380,
-                fit: BoxFit.cover,
-              ),
+              child: Image.asset(slide.asset, width: 300, height: 380, fit: BoxFit.cover),
             ),
           ),
         ],

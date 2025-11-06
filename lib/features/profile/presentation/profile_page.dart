@@ -39,15 +39,12 @@ class _ProfileHeader extends StatelessWidget {
               ),
             ),
             Positioned(
-              right: 6,
-              bottom: 6,
+              right: 9,
+              bottom: 9,
               child: Container(
                 width: 14,
                 height: 14,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF23D18B),
-                  shape: BoxShape.circle,
-                ),
+                decoration: const BoxDecoration(color: Color(0xFF23D18B), shape: BoxShape.circle),
               ),
             ),
           ],
@@ -86,12 +83,8 @@ class _ProfileMenu extends StatelessWidget {
     return Column(
       children: [
         for (int i = 0; i < items.length; i++) ...[
-          _ProfileMenuItem(
-            icon: items[i].$1,
-            title: items[i].$2,
-            showChevron: items[i].$3,
-          ),
-          if (i != items.length - 1) const _DividerInset(),
+          _ProfileMenuItem(icon: items[i].$1, title: items[i].$2, showChevron: items[i].$3),
+          // if (i != items.length - 1) const _DividerInset(),
         ],
       ],
     );
@@ -99,11 +92,7 @@ class _ProfileMenu extends StatelessWidget {
 }
 
 class _ProfileMenuItem extends StatelessWidget {
-  const _ProfileMenuItem({
-    required this.icon,
-    required this.title,
-    this.showChevron = true,
-  });
+  const _ProfileMenuItem({required this.icon, required this.title, this.showChevron = true});
 
   final IconData icon;
   final String title;
@@ -118,27 +107,22 @@ class _ProfileMenuItem extends StatelessWidget {
           Icon(icon, color: Colors.white, size: 26),
           const SizedBox(width: 18),
           Expanded(
-            child: TypographyText(
-              title,
-              variant: TypographyVariant.body1,
-              color: Colors.white,
-            ),
+            child: TypographyText(title, variant: TypographyVariant.body1, color: Colors.white),
           ),
-          if (showChevron)
-            const Icon(Icons.chevron_right, color: Colors.white70),
+          if (showChevron) const Icon(Icons.chevron_right, color: Colors.white70),
         ],
       ),
     );
   }
 }
 
-class _DividerInset extends StatelessWidget {
-  const _DividerInset();
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(height: 1, color: Colors.white12),
-    );
-  }
-}
+// class _DividerInset extends StatelessWidget {
+//   const _DividerInset();
+//   @override
+//   Widget build(BuildContext context) {
+//     return Padding(
+//       padding: const EdgeInsets.symmetric(horizontal: 20),
+//       child: Container(height: 1, color: Colors.white12),
+//     );
+//   }
+// }

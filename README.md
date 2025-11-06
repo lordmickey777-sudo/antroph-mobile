@@ -97,4 +97,13 @@ Note: Building iOS requires macOS and code signing. Consider Fastlane + a macOS 
 - Add Sentry user context and breadcrumbs
 - Add permissions requests and UX for Bluetooth/Wi‑Fi
 
+## Notes on Cupertino-style sheets
+
+This app uses a lightweight custom `CupertinoSheetRoute` (`lib/widgets/cupertino_sheet_route.dart`) to present a full-height bottom sheet for the Story flow. When opening and closing the sheet from `HomePage`, we push/pop on the root navigator to avoid issues with nested navigators (e.g., when using `go_router`). If you open or close the sheet elsewhere, prefer:
+
+- Open: `Navigator.of(context, rootNavigator: true).push(CupertinoSheetRoute(...))`
+- Close: `Navigator.of(context, rootNavigator: true).pop()`
+
+This ensures the sheet always dismisses correctly regardless of the current tab or nesting.
+
 # antroph-mobile

@@ -45,6 +45,7 @@ dependencies:
   sentry_flutter: ^9.7.0
   flutter_blue_plus: ^2.0.0
   wifi_iot: ^0.3.19+2
+  modal_bottom_sheet: ^3.0.0
 
 dev_dependencies:
   flutter_test:

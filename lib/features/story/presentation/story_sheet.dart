@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
 class StorySheet extends StatelessWidget {
@@ -20,6 +21,9 @@ class StorySheet extends StatelessWidget {
         top: false,
         bottom: false,
         child: CustomScrollView(
+          // Hand control to the modal sheet so drag-to-dismiss
+          // only kicks in when the scroll is at the top.
+          controller: ModalScrollController.of(context),
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
@@ -44,9 +48,7 @@ class StorySheet extends StatelessWidget {
                       color: Colors.white70,
                       height: 1.35,
                     ),
-                    SizedBox(
-                      height: bottom + 120,
-                    ), // space for floating nav overlay
+                    SizedBox(height: bottom + 120), // space for floating nav overlay
                   ],
                 ),
               ),
@@ -110,10 +112,7 @@ class _HeroCard extends StatelessWidget {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(cardRadius),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.08),
-                    width: 1,
-                  ),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
                 ),
               ),
             ),
@@ -129,11 +128,7 @@ class _HeroCard extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0x00000000),
-                      Color(0x99000000),
-                      Color(0xCC000000),
-                    ],
+                    colors: [Color(0x00000000), Color(0x99000000), Color(0xCC000000)],
                   ),
                 ),
               ),
@@ -171,7 +166,8 @@ class _HeroCard extends StatelessWidget {
                       const SizedBox(width: 12),
                       _PrimaryPillButton(
                         label: 'Leave story',
-                        onPressed: () => Navigator.of(context).maybePop(),
+                        // Pop using the root navigator to reliably close the sheet even with nested navigators
+                        onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
                       ),
                     ],
                   ),

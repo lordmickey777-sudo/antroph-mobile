@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/bottom_nav.dart';
 import 'package:antroph_mobile/features/profile/presentation/profile_page.dart';
@@ -60,9 +61,17 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openStorySheet(BuildContext context) async {
-    await Navigator.of(
-      context,
-    ).push(CupertinoSheetRoute(builder: (context) => const StorySheet()));
+    // Present a Cupertino-style modal bottom sheet that properly
+    // coordinates drag-to-dismiss with inner scrollables.
+    await showCupertinoModalBottomSheet(
+      context: context,
+      // Expand to full height while still allowing swipe-to-dismiss
+      // when the inner scroll is at the top.
+      expand: true,
+      // Transparent to let the sheet widget control its own background.
+      backgroundColor: Colors.transparent,
+      builder: (_) => const StorySheet(),
+    );
   }
 }
 
@@ -97,11 +106,7 @@ class _TopChips extends StatelessWidget {
         border: Border.all(color: Colors.white24),
         borderRadius: BorderRadius.circular(50),
       ),
-      child: TypographyText(
-        label,
-        variant: TypographyVariant.body2,
-        color: Colors.white,
-      ),
+      child: TypographyText(label, variant: TypographyVariant.body2, color: Colors.white),
     );
   }
 }
@@ -122,11 +127,7 @@ class _InteractContent extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               boxShadow: [
-                BoxShadow(
-                  color: Colors.white.withOpacity(0.05),
-                  blurRadius: 40,
-                  spreadRadius: 8,
-                ),
+                BoxShadow(color: Colors.white.withOpacity(0.05), blurRadius: 40, spreadRadius: 8),
               ],
             ),
             child: Image.asset(
@@ -152,10 +153,7 @@ class _InteractContent extends StatelessWidget {
           child: Container(
             width: 75,
             height: 75,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
+            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
           ),
         ),
         SizedBox(height: size.height * 0.15),
