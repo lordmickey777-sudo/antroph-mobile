@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
+import 'package:antroph_mobile/widgets/app_button.dart';
 
 class StorySheet extends StatelessWidget {
   const StorySheet({
@@ -204,8 +205,8 @@ class _GlassButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(28),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: TextButton.icon(
-          style: TextButton.styleFrom(
+        child: AppButton(
+          style: ElevatedButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             backgroundColor: Colors.white.withValues(alpha: 0.18),
             foregroundColor: Colors.black,
@@ -213,14 +214,22 @@ class _GlassButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(28),
               side: BorderSide(color: Colors.white.withValues(alpha: 0.30)),
             ),
+            elevation: 0,
+            shadowColor: Colors.transparent,
           ),
           onPressed: onPressed,
-          icon: const Icon(CupertinoIcons.play_fill, color: Colors.black),
-          label: const TypographyText(
-            'Play',
-            variant: TypographyVariant.body2,
-            color: Colors.black,
-            fontWeight: FontWeight.w600,
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(CupertinoIcons.play_fill, color: Colors.black),
+              SizedBox(width: 8),
+              TypographyText(
+                'Play',
+                variant: TypographyVariant.body2,
+                color: Colors.black,
+                fontWeight: FontWeight.w600,
+              ),
+            ],
           ),
         ),
       ),
@@ -236,12 +245,12 @@ class _PrimaryPillButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextButton(
-      style: TextButton.styleFrom(
+    return AppButton(
+      style: ElevatedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         backgroundColor: const Color(0xFFFF6B7D),
         foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        elevation: 0,
       ),
       onPressed: onPressed,
       child: const TypographyText(

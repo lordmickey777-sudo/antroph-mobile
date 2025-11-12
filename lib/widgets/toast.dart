@@ -11,7 +11,6 @@ void showToast(BuildContext context, String message, {bool success = false}) {
         behavior: SnackBarBehavior.floating,
         backgroundColor: bg,
         content: Text(message, style: theme.textTheme.bodyMedium?.copyWith(color: fg)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 3),
       ),
     );

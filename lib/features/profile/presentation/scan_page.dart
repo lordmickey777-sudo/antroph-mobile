@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
+import 'package:antroph_mobile/widgets/app_button.dart';
 
 class ScanPage extends StatelessWidget {
   const ScanPage({super.key});
@@ -40,15 +41,21 @@ class ScanPage extends StatelessWidget {
             child: SizedBox(
               height: 56,
               width: double.infinity,
-              child: ElevatedButton.icon(
+              child: AppButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF00C26F),
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(60)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                 ),
                 onPressed: () => showToast(context, 'Launching scanner...', success: true),
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('Scan QR Code'),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.qr_code_scanner),
+                    SizedBox(width: 10),
+                    Text('Scan QR Code'),
+                  ],
+                ),
               ),
             ),
           ),

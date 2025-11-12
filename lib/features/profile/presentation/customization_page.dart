@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
+import 'package:antroph_mobile/widgets/app_button.dart';
 
 class CustomizationPage extends StatefulWidget {
   const CustomizationPage({super.key});
@@ -61,11 +62,10 @@ class _CustomizationPageState extends State<CustomizationPage> {
           const SizedBox(height: 24),
           SizedBox(
             height: 56,
-            child: ElevatedButton(
+            child: AppButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1F2223),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
               onPressed: () {
                 showToast(context, 'Preferences saved', success: true);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
+import 'package:antroph_mobile/widgets/app_button.dart';
 
 class SubscriptionPage extends StatelessWidget {
   const SubscriptionPage({super.key});
@@ -21,11 +22,10 @@ class SubscriptionPage extends StatelessWidget {
           const SizedBox(height: 24),
           SizedBox(
             height: 56,
-            child: ElevatedButton(
+            child: AppButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1F2223),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
               onPressed: () => showToast(context, 'Subscription flow coming soon'),
               child: const Text('Subscribe'),
