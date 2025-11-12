@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../widgets/typography_text.dart';
 import '../widgets/auth_input.dart';
 import '../../../core/auth/state/auth_state.dart';
+import '../../../core/auth/services/email_storage_service.dart';
 import '../../../widgets/toast.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -19,6 +20,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _passwordCtrl = TextEditingController();
   bool _obscure = true;
   final _formKey = GlobalKey<FormState>();
+  bool _hasLoadedEmail = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLastEmail();
+  }
+
+  /// Load the last successfully used email for prefilling the form
+  Future<void> _loadLastEmail() async {
+    if (!_hasLoadedEmail) {
+      final lastEmail = await EmailStorageService.getLastEmail();
+      if (lastEmail != null && lastEmail.isNotEmpty && mounted) {
+        setState(() {
+          _emailCtrl.text = lastEmail;
+          _hasLoadedEmail = true;
+        });
+      } else {
+        _hasLoadedEmail = true;
+      }
+    }
+  }
 
   String? _validateEmail(String? v) {
     if (v == null || v.isEmpty) return 'Email required';
@@ -46,11 +69,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
-    // Pre-fill last email from a simple in-memory/static store.
-    // For now we use a static variable on a private class; could be replaced by SharedPreferences.
-    if (_emailCtrl.text.isEmpty && _LastEmailStore.lastEmail != null) {
-      _emailCtrl.text = _LastEmailStore.lastEmail!;
-    }
+
     ref.listen(authControllerProvider, (previous, next) {
       if (next.hasError && mounted) {
         final msg = next.error?.toString() ?? 'Unexpected error';
@@ -60,8 +79,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       final user = next.value;
       final prevUser = previous?.value;
       if (mounted && user != null && user != prevUser) {
-        // Remember last successful email
-        _LastEmailStore.lastEmail = user.email;
+        // Remember last successful email for next time
+        EmailStorageService.saveLastEmail(user.email);
         showToast(context, 'Welcome back!', success: true);
         context.go('/home');
       }
@@ -171,10 +190,4 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     _passwordCtrl.dispose();
     super.dispose();
   }
-}
-
-/// Simple static holder for last successful login email.
-/// Replace with persistent storage (SharedPreferences / secure storage) if needed.
-class _LastEmailStore {
-  static String? lastEmail;
 }

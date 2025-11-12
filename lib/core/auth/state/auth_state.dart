@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../models/user.dart';
 import '../repository/auth_repository.dart';
+import '../services/email_storage_service.dart';
 import '../../network/error_formatter.dart';
 import '../../network/api_client.dart';
 
@@ -115,6 +116,8 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     } finally {
       _tokens = null;
       ApiClient.I.clearAuthTokens();
+      // Clear the stored email for privacy
+      EmailStorageService.clearLastEmail();
       // Clear the authenticated user
       state = const AsyncValue.data(null);
     }
