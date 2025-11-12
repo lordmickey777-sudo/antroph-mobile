@@ -7,7 +7,7 @@ import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 import 'package:antroph_mobile/features/story/models/story_models.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/core/network/error_formatter.dart';
-import 'package:antroph_mobile/widgets/shimmer.dart';
+import 'package:antroph_mobile/features/story/presentation/story_page_shimmer.dart';
 
 class StoryPage extends ConsumerWidget {
   const StoryPage({super.key});
@@ -21,7 +21,7 @@ class StoryPage extends ConsumerWidget {
       backgroundColor: _bg,
       body: SafeArea(
         child: asyncHome.when(
-          loading: () => const _LoadingView(),
+          loading: () => const StoryPageShimmer(),
           error: (err, st) {
             final msg = err is ApiError ? err.message : 'Failed to load stories.';
             return _ErrorView(
@@ -243,129 +243,6 @@ class _StoryImage extends StatelessWidget {
       errorBuilder: (context, error, stackTrace) {
         return Image.asset('assets/images/default.png', fit: BoxFit.cover);
       },
-    );
-  }
-}
-
-class _LoadingView extends StatelessWidget {
-  const _LoadingView();
-  @override
-  Widget build(BuildContext context) {
-    // Build a skeleton that mirrors the story layout: header + a couple sections
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
-      slivers: [
-        const SliverToBoxAdapter(child: SizedBox(height: 12)),
-        const SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
-            child: ShimmerBox(width: 180, height: 28, radius: 6),
-          ),
-        ),
-        // Render 2 placeholder sections
-        for (int s = 0; s < 2; s++)
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 340,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(width: 8),
-                  // Side label skeleton (rotated text area)
-                  const _SideLabelSkeleton(),
-                  const SizedBox(width: 8),
-                  // Horizontal list of skeleton cards
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.only(right: 20),
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      itemBuilder: (context, index) => const _StoryCardSkeleton(),
-                      separatorBuilder: (_, __) => const SizedBox(width: 16),
-                      itemCount: 4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        const SliverToBoxAdapter(child: SizedBox(height: 120)),
-      ],
-    );
-  }
-}
-
-class _SideLabelSkeleton extends StatelessWidget {
-  const _SideLabelSkeleton();
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 28,
-      child: Center(
-        child: Transform.rotate(
-          angle: -1.5708, // ~ -90 degrees
-          child: const ShimmerBox(width: 120, height: 16, radius: 4),
-        ),
-      ),
-    );
-  }
-}
-
-class _StoryCardSkeleton extends StatelessWidget {
-  const _StoryCardSkeleton();
-  @override
-  Widget build(BuildContext context) {
-    const cardRadius = 20.0;
-    return SizedBox(
-      width: 220,
-      child: Column(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1B1E20),
-              borderRadius: BorderRadius.circular(cardRadius),
-            ),
-            child: const Padding(
-              padding: EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // image
-                  ClipRRect(
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(8),
-                      topRight: Radius.circular(8),
-                    ),
-                    child: AspectRatio(aspectRatio: 1.2, child: ShimmerBox()),
-                  ),
-                  SizedBox(height: 10),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ShimmerBox(width: 140, height: 14, radius: 4),
-                        SizedBox(height: 6),
-                        ShimmerBox(width: 100, height: 12, radius: 4),
-                        SizedBox(height: 10),
-                        Row(
-                          children: [
-                            ShimmerBox(width: 60, height: 12, radius: 4),
-                            SizedBox(width: 14),
-                            ShimmerBox(width: 60, height: 12, radius: 4),
-                          ],
-                        ),
-                        SizedBox(height: 12),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SizedBox(height: 8),
-        ],
-      ),
     );
   }
 }
