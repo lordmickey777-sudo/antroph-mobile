@@ -11,6 +11,7 @@ import 'features/profile/presentation/customization_page.dart';
 import 'features/profile/presentation/subscription_page.dart';
 import 'features/profile/presentation/scan_page.dart';
 import 'features/support/presentation/support_page.dart';
+import 'features/profile/presentation/edit_profile_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -48,6 +49,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/profile/support',
         name: 'support',
         builder: (context, state) => const SupportPage(),
+      ),
+      GoRoute(
+        path: '/profile/edit',
+        name: 'edit-profile',
+        builder: (context, state) => const EditProfilePage(),
       ),
     ],
   );
