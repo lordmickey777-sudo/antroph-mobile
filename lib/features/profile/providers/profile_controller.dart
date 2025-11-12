@@ -18,6 +18,8 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
   Timer? _debounce;
   UsernameAvailability? _usernameAvailability;
   UsernameAvailability? get usernameAvailability => _usernameAvailability;
+  bool _isCheckingUsername = false;
+  bool get isCheckingUsername => _isCheckingUsername;
 
   @override
   Future<UserProfile?> build() async {
@@ -105,16 +107,25 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
     _debounce?.cancel();
     if (username.isEmpty) {
       _usernameAvailability = null;
+      _isCheckingUsername = false;
+      // trigger rebuild to clear indicators
+      state = AsyncValue.data(state.value);
       return;
     }
+    // immediately reflect checking state for instant feedback
+    _isCheckingUsername = true;
+    state = AsyncValue.data(state.value);
     _debounce = Timer(const Duration(milliseconds: 450), () async {
       try {
         final result = await _repo.checkUsernameAvailability(username);
         _usernameAvailability = result;
+        _isCheckingUsername = false;
         // Force a rebuild by assigning same state
         state = AsyncValue.data(state.value);
       } catch (_) {
+        _isCheckingUsername = false;
         // swallow errors for availability (keep UX smooth)
+        state = AsyncValue.data(state.value);
       }
     });
   }

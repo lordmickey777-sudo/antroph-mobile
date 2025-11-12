@@ -21,6 +21,7 @@ class AppInput extends StatelessWidget {
     this.readOnly = false,
     this.onChanged,
     this.maxLines = 1,
+    this.trailing,
   });
 
   final TextEditingController controller;
@@ -33,6 +34,7 @@ class AppInput extends StatelessWidget {
   final bool readOnly;
   final void Function(String)? onChanged;
   final int maxLines;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -89,6 +91,13 @@ class AppInput extends StatelessWidget {
                 ),
               ),
             ),
+          if (trailing != null) ...[
+            const SizedBox(width: 8),
+            Padding(
+              padding: EdgeInsets.only(top: isMultiline ? 12 : 0),
+              child: trailing!,
+            ),
+          ],
         ],
       ),
     );

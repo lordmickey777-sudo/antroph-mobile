@@ -31,8 +31,8 @@ class _ProfileHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider).value;
     final profile = ref.watch(profileControllerProvider).value;
-    final displayName = profile?.displayName ?? auth?.displayName ?? 'Your Name';
     final email = auth?.email ?? '';
+    final displayName = profile?.displayName ?? auth?.displayName ?? email.trim().split('@').first;
     final avatarUrl = profile?.avatarUrl;
     return Column(
       children: [
@@ -183,9 +183,9 @@ class _ProfileNudge extends ConsumerWidget {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.orange.withOpacity(0.12),
+            color: Colors.grey.withOpacity(0.12),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.orange.withOpacity(0.4)),
+            border: Border.all(color: Colors.grey.withOpacity(0.4)),
           ),
           child: Row(
             children: [
@@ -193,7 +193,9 @@ class _ProfileNudge extends ConsumerWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: TypographyText(
-                  'Complete your profile: ${missing.join(', ')}',
+                  'Complete your profile',
+
+                  // 'Complete your profile: ${missing.join(', ')}',
                   variant: TypographyVariant.body2,
                   color: Colors.white,
                 ),

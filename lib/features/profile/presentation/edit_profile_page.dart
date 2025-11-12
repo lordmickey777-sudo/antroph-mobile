@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../providers/profile_controller.dart';
 import '../../../widgets/toast.dart';
 import 'package:antroph_mobile/widgets/app_input.dart';
+import 'package:antroph_mobile/widgets/app_date_input.dart';
 
 class EditProfilePage extends ConsumerStatefulWidget {
   const EditProfilePage({super.key});
@@ -49,7 +50,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Profile'),
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFF121516),
         foregroundColor: Colors.white,
       ),
       backgroundColor: const Color(0xFF121516),
@@ -102,11 +103,8 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                         validator: (v) =>
                             v == null || v.trim().isEmpty ? 'Username is required' : null,
                         onChanged: (v) => controller.checkUsernameDebounced(v.trim()),
+                        trailing: _usernameStatusInline(ref),
                       ),
-                      if (_usernameHelper(ref) != null) ...[
-                        const SizedBox(height: 6),
-                        _usernameHelper(ref)!,
-                      ],
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -122,10 +120,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                   // Bio (multiline)
                   AppInput(controller: _bioCtrl, hint: 'Bio', maxLines: 3),
                   const SizedBox(height: 16),
-                  _DateField(
-                    label: 'Date of birth',
-                    initial: profile?.dateOfBirth,
-                    onPicked: (d) => _dob = d,
+                  AppDateInput(
+                    hint: 'Date of birth',
+                    value: profile?.dateOfBirth ?? _dob,
+                    onChanged: (d) => setState(() => _dob = d),
                   ),
                   const SizedBox(height: 16),
                   AppInput(controller: _languageCtrl, hint: 'Language', icon: Icons.language),
@@ -161,7 +159,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                       style: FilledButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 18),
                       ),
                       child: profileAsync.isLoading
                           ? const SizedBox(
@@ -182,95 +180,31 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   }
 
   Widget? _usernameHelper(WidgetRef ref) {
-    final a = ref.watch(profileControllerProvider.notifier).usernameAvailability;
+    // Removed usage; keeping commented placeholder for potential future extended status text.
+    return null; // TODO: Remove method entirely if not reinstated.
+  }
+
+  /// Inline compact status for username availability.
+  Widget? _usernameStatusInline(WidgetRef ref) {
+    final controller = ref.watch(profileControllerProvider.notifier);
+    if (controller.isCheckingUsername) {
+      return const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation(Colors.white70),
+        ),
+      );
+    }
+    final a = controller.usernameAvailability;
     if (a == null) return null;
-    final ok = a.available;
-    return Row(
-      children: [
-        Icon(
-          ok ? Icons.check_circle : Icons.error_outline,
-          size: 16,
-          color: ok ? Colors.green : Colors.redAccent,
-        ),
-        const SizedBox(width: 6),
-        Text(
-          ok ? 'Username is available' : 'Username is taken',
-          style: TextStyle(color: ok ? Colors.green : Colors.redAccent),
-        ),
-      ],
+    return Icon(
+      a.available ? Icons.check_circle : Icons.error_outline,
+      size: 20,
+      color: a.available ? Colors.green : Colors.redAccent,
     );
   }
 }
 
-class _DateField extends StatefulWidget {
-  const _DateField({required this.label, this.initial, required this.onPicked});
-  final String label;
-  final DateTime? initial;
-  final ValueChanged<DateTime> onPicked;
-
-  @override
-  State<_DateField> createState() => _DateFieldState();
-}
-
-class _DateFieldState extends State<_DateField> {
-  DateTime? _selected;
-
-  @override
-  void initState() {
-    super.initState();
-    _selected = widget.initial;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () async {
-        final now = DateTime.now();
-        final initial = _selected ?? DateTime(now.year - 18, now.month, now.day);
-        final picked = await showDatePicker(
-          context: context,
-          firstDate: DateTime(1900),
-          lastDate: now,
-          initialDate: initial,
-          helpText: widget.label,
-          builder: (context, child) => Theme(
-            data: Theme.of(context).copyWith(
-              colorScheme: const ColorScheme.dark(
-                primary: Colors.white,
-                onPrimary: Colors.black,
-                surface: Color(0xFF222629),
-                onSurface: Colors.white,
-              ),
-            ),
-            child: child!,
-          ),
-        );
-        if (picked != null) {
-          setState(() => _selected = picked);
-          widget.onPicked(picked);
-        }
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withOpacity(0.2)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.cake_outlined, color: Colors.white70),
-            const SizedBox(width: 12),
-            Text(
-              _selected != null
-                  ? '${_selected!.year}-${_selected!.month.toString().padLeft(2, '0')}-${_selected!.day.toString().padLeft(2, '0')}'
-                  : widget.label,
-              style: TextStyle(color: _selected != null ? Colors.white : Colors.white70),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// Removed legacy _DateField in favor of reusable AppDateInput.
