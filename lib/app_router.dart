@@ -10,6 +10,7 @@ import 'features/auth/pages/signup_page.dart';
 import 'features/profile/presentation/customization_page.dart';
 import 'features/profile/presentation/subscription_page.dart';
 import 'features/profile/presentation/scan_page.dart';
+import 'features/support/presentation/support_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -43,6 +44,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SubscriptionPage(),
       ),
       GoRoute(path: '/profile/scan', name: 'scan', builder: (context, state) => const ScanPage()),
+      GoRoute(
+        path: '/profile/support',
+        name: 'support',
+        builder: (context, state) => const SupportPage(),
+      ),
     ],
   );
 });

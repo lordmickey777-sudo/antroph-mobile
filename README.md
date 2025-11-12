@@ -70,6 +70,13 @@ Bluetooth and Wi‑Fi permissions/descriptions have been added in:
 - Android: `android/app/src/main/AndroidManifest.xml`
 - iOS: `ios/Runner/Info.plist`
 
+Camera scanning (QR/barcode) requires:
+
+- Android: `<uses-permission android:name="android.permission.CAMERA" />`
+- iOS: `NSCameraUsageDescription` with a user-facing reason string
+
+The Scan page uses the `mobile_scanner` package and will prompt for camera permission on first use.
+
 On iOS, connecting to specific Wi‑Fi networks may require the HotspotConfiguration entitlement in your provisioning profile.
 
 ## CI with Coolify (Docker)

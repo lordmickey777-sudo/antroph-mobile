@@ -1,91 +1,61 @@
-import 'dart:convert';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
+import 'package:antroph_mobile/features/story/models/story_models.dart';
+import 'package:antroph_mobile/features/story/providers/story_providers.dart';
+import 'package:antroph_mobile/core/network/error_formatter.dart';
 
-class StoryPage extends StatefulWidget {
+class StoryPage extends ConsumerWidget {
   const StoryPage({super.key});
-
-  @override
-  State<StoryPage> createState() => _StoryPageState();
-}
-
-class _StoryPageState extends State<StoryPage> {
-  late final List<StorySection> sections;
 
   static const _bg = Color(0xFF121516);
 
   @override
-  void initState() {
-    super.initState();
-    // Temporary JSON data for sections and cards. Replace with API later.
-    const tempJson = '''
-    {
-      "sections": [
-        {
-          "title": "Recommended",
-          "items": [
-            {"title": "Cute pet vibes", "subtitle": "Chat with the smartest AI Future", "image": "assets/images/s1.png", "users": 312, "views": 48},
-            {"title": "Normal Convo", "subtitle": "Chat with the smartest AI Future", "image": "assets/images/s2.png", "users": 312, "views": 48},
-            {"title": "Mindful Coach", "subtitle": "Chat with the smartest AI Future", "image": "assets/images/s3.png", "users": 312, "views": 48}
-          ]
-        },
-        {
-          "title": "Learn Something",
-          "items": [
-            {"title": "Frenchie Croissant", "subtitle": "Chat with the smartest AI Future", "image": "assets/images/s1.png", "users": 312, "views": 48},
-            {"title": "Guitar Buddy", "subtitle": "Chat with the smartest AI Future", "image": "assets/images/s2.png", "users": 312, "views": 48},
-            {"title": "Math Sensei", "subtitle": "Chat with the smartest AI Future", "image": "assets/images/s3.png", "users": 312, "views": 48}
-          ]
-        },
-        {
-          "title": "Learn Something",
-          "items": [
-            {"title": "Frenchie Croissant", "subtitle": "Chat with the smartest AI Future", "image": "assets/images/s1.png", "users": 312, "views": 48},
-            {"title": "Guitar Buddy", "subtitle": "Chat with the smartest AI Future", "image": "assets/images/s2.png", "users": 312, "views": 48},
-            {"title": "Math Sensei", "subtitle": "Chat with the smartest AI Future", "image": "assets/images/s3.png", "users": 312, "views": 48}
-          ]
-        }
-      ]
-    }
-    ''';
-
-    final map = jsonDecode(tempJson) as Map<String, dynamic>;
-    sections = (map['sections'] as List)
-        .map((e) => StorySection.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncHome = ref.watch(storiesHomeSectionsProvider);
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                child: const TypographyText(
-                  'Story Mode',
-                  variant: TypographyVariant.h1,
-                  color: Colors.white,
+        child: asyncHome.when(
+          loading: () => const _LoadingView(),
+          error: (err, st) {
+            final msg = err is ApiError ? err.message : 'Failed to load stories.';
+            return _ErrorView(
+              message: msg,
+              onRetry: () => ref.refresh(storiesHomeSectionsProvider.future),
+            );
+          },
+          data: (data) {
+            final sections = data.sections;
+            if (sections.isEmpty) return const _EmptyView();
+            return CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
+                    child: TypographyText(
+                      'Story Mode',
+                      variant: TypographyVariant.h1,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            for (final section in sections) _SectionSliver(section: section, onTap: _openStory),
-            const SliverToBoxAdapter(child: SizedBox(height: 120)),
-          ],
+                for (final section in sections)
+                  _SectionSliver(section: section, onTap: (card) => _openStory(context, card)),
+                const SliverToBoxAdapter(child: SizedBox(height: 120)),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Future<void> _openStory(StoryCardData card) async {
+  Future<void> _openStory(BuildContext context, StoryCardDto card) async {
     await showCupertinoModalBottomSheet(
       context: context,
       expand: true,
@@ -104,8 +74,8 @@ class _StoryPageState extends State<StoryPage> {
 class _SectionSliver extends StatelessWidget {
   const _SectionSliver({required this.section, required this.onTap});
 
-  final StorySection section;
-  final Future<void> Function(StoryCardData) onTap;
+  final StorySectionDto section;
+  final Future<void> Function(StoryCardDto) onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -163,7 +133,7 @@ class _SideLabel extends StatelessWidget {
 class _StoryCard extends StatelessWidget {
   const _StoryCard({required this.item, required this.onTap});
 
-  final StoryCardData item;
+  final StoryCardDto item;
   final VoidCallback onTap;
 
   @override
@@ -191,10 +161,7 @@ class _StoryCard extends StatelessWidget {
                         topLeft: Radius.circular(cardRadius),
                         topRight: Radius.circular(cardRadius),
                       ),
-                      child: AspectRatio(
-                        aspectRatio: 1.2,
-                        child: Image.asset(item.image, fit: BoxFit.cover),
-                      ),
+                      child: AspectRatio(aspectRatio: 1.2, child: _StoryImage(image: item.image)),
                     ),
                     const SizedBox(height: 10),
                     Padding(
@@ -251,39 +218,60 @@ class _StoryCard extends StatelessWidget {
   }
 }
 
-// Data models
-class StorySection {
-  StorySection({required this.title, required this.items});
-  final String title;
-  final List<StoryCardData> items;
+class _StoryImage extends StatelessWidget {
+  const _StoryImage({required this.image});
+  final String image;
+  bool get _isNetwork => image.startsWith('http');
 
-  factory StorySection.fromJson(Map<String, dynamic> json) => StorySection(
-    title: json['title'] as String,
-    items: (json['items'] as List)
-        .map((e) => StoryCardData.fromJson(e as Map<String, dynamic>))
-        .toList(),
-  );
+  @override
+  Widget build(BuildContext context) {
+    if (_isNetwork) {
+      return Image.network(image, fit: BoxFit.cover);
+    }
+    // Fallback to asset path from API examples or local assets
+    return Image.asset(image.isNotEmpty ? image : 'assets/images/default.png', fit: BoxFit.cover);
+  }
 }
 
-class StoryCardData {
-  StoryCardData({
-    required this.title,
-    required this.subtitle,
-    required this.image,
-    required this.users,
-    required this.views,
-  });
-  final String title;
-  final String subtitle;
-  final String image;
-  final int users;
-  final int views;
+class _LoadingView extends StatelessWidget {
+  const _LoadingView();
+  @override
+  Widget build(BuildContext context) {
+    return const Center(child: CircularProgressIndicator());
+  }
+}
 
-  factory StoryCardData.fromJson(Map<String, dynamic> json) => StoryCardData(
-    title: json['title'] as String,
-    subtitle: json['subtitle'] as String,
-    image: json['image'] as String,
-    users: (json['users'] as num).toInt(),
-    views: (json['views'] as num).toInt(),
-  );
+class _EmptyView extends StatelessWidget {
+  const _EmptyView();
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(24.0),
+        child: TypographyText('No stories available yet', color: Colors.white70),
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message, required this.onRetry});
+  final String message;
+  final Future<void> Function() onRetry;
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TypographyText(message, color: Colors.white70),
+            const SizedBox(height: 12),
+            ElevatedButton(onPressed: () => onRetry(), child: const Text('Retry')),
+          ],
+        ),
+      ),
+    );
+  }
 }

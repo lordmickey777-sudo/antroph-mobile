@@ -48,6 +48,8 @@ dependencies:
   modal_bottom_sheet: ^3.0.0
   flutter_dotenv: ^5.1.0
   shared_preferences: ^2.2.2
+  mobile_scanner: ^6.0.2
+  webview_flutter: ^4.7.0
 
 dev_dependencies:
   flutter_test:
