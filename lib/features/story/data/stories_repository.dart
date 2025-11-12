@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/error_formatter.dart';
 import '../models/story_models.dart';
+import '../models/story_detail.dart';
 
 class StoriesRepository {
   StoriesRepository({Dio? dio}) : _dio = dio ?? ApiClient.I.dio;
@@ -27,6 +28,21 @@ class StoriesRepository {
       );
       final data = res.data as Map<String, dynamic>;
       return StoriesHomeResponse.fromJson(data);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  /// Fetch detailed story information by ID.
+  /// Public endpoint; no auth required.
+  Future<StoryDetailDto> fetchStoryDetail(String storyId) async {
+    try {
+      final res = await _dio.get(
+        '/stories/$storyId',
+        options: Options(extra: const {'skipAuth': true}),
+      );
+      final data = res.data as Map<String, dynamic>;
+      return StoryDetailDto.fromJson(data);
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }

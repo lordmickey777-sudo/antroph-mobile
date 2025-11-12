@@ -123,8 +123,8 @@ class _HeroCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(cardRadius),
         child: Stack(
           children: [
-            // Background image
-            AspectRatio(aspectRatio: 1.0, child: Image.asset(imageAsset, fit: BoxFit.cover)),
+            // Background image with network/asset handling and fallback
+            AspectRatio(aspectRatio: 1.0, child: _HeroImage(image: imageAsset)),
 
             // Top subtle inner glass border
             Positioned.fill(
@@ -188,6 +188,31 @@ class _HeroCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _HeroImage extends StatelessWidget {
+  const _HeroImage({required this.image});
+  final String image;
+  bool get _isNetwork => image.startsWith('http');
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isNetwork) {
+      return Image.network(
+        image,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) =>
+            Image.asset('assets/images/default.png', fit: BoxFit.cover),
+      );
+    }
+    final assetPath = image.isNotEmpty ? image : 'assets/images/default.png';
+    return Image.asset(
+      assetPath,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) =>
+          Image.asset('assets/images/default.png', fit: BoxFit.cover),
     );
   }
 }

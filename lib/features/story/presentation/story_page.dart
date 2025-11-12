@@ -226,10 +226,23 @@ class _StoryImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (_isNetwork) {
-      return Image.network(image, fit: BoxFit.cover);
+      return Image.network(
+        image,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Image.asset('assets/images/default.png', fit: BoxFit.cover);
+        },
+      );
     }
     // Fallback to asset path from API examples or local assets
-    return Image.asset(image.isNotEmpty ? image : 'assets/images/default.png', fit: BoxFit.cover);
+    final assetPath = image.isNotEmpty ? image : 'assets/images/default.png';
+    return Image.asset(
+      assetPath,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        return Image.asset('assets/images/default.png', fit: BoxFit.cover);
+      },
+    );
   }
 }
 
