@@ -1,0 +1,96 @@
+import 'package:flutter/material.dart';
+
+/// A reusable, app-wide text input styled like the login fields.
+///
+/// Features:
+/// - Leading icon
+/// - Obscure text with visibility toggle
+/// - Validation, read-only, keyboard type
+/// - onChanged callback
+/// - Multiline support (bio, etc.)
+class AppInput extends StatelessWidget {
+  const AppInput({
+    super.key,
+    required this.controller,
+    required this.hint,
+    this.icon,
+    this.obscure = false,
+    this.onToggleObscure,
+    this.keyboardType,
+    this.validator,
+    this.readOnly = false,
+    this.onChanged,
+    this.maxLines = 1,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final IconData? icon;
+  final bool obscure;
+  final VoidCallback? onToggleObscure;
+  final TextInputType? keyboardType;
+  final String? Function(String?)? validator;
+  final bool readOnly;
+  final void Function(String)? onChanged;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final isMultiline = (maxLines != 1);
+    final radius = BorderRadius.circular(isMultiline ? 16 : 40);
+
+    final input = TextFormField(
+      controller: controller,
+      style: const TextStyle(color: Colors.white, fontSize: 15),
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      validator: validator,
+      readOnly: readOnly,
+      onChanged: onChanged,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        isCollapsed: true,
+        border: InputBorder.none,
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white38, fontSize: 15),
+        contentPadding: const EdgeInsets.symmetric(vertical: 4),
+      ),
+    );
+
+    return Container(
+      constraints: isMultiline ? null : const BoxConstraints(minHeight: 64),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(color: const Color(0xFF1F2223), borderRadius: radius),
+      child: Row(
+        crossAxisAlignment: isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        children: [
+          if (icon != null) ...[
+            Padding(
+              padding: EdgeInsets.only(top: isMultiline ? 14 : 0),
+              child: Icon(icon, color: Colors.white70, size: 22),
+            ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: isMultiline ? 14 : 0),
+              child: input,
+            ),
+          ),
+          if (onToggleObscure != null)
+            GestureDetector(
+              onTap: onToggleObscure,
+              child: Padding(
+                padding: EdgeInsets.only(top: isMultiline ? 12 : 0),
+                child: Icon(
+                  obscure ? Icons.visibility_off : Icons.visibility,
+                  color: Colors.white70,
+                  size: 22,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}

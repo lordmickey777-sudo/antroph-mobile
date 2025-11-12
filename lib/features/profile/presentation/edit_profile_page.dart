@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../providers/profile_controller.dart';
 import '../../../widgets/toast.dart';
+import 'package:antroph_mobile/widgets/app_input.dart';
 
 class EditProfilePage extends ConsumerStatefulWidget {
   const EditProfilePage({super.key});
@@ -90,24 +91,36 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
               key: _formKey,
               child: Column(
                 children: [
-                  _TextField(
-                    controller: _usernameCtrl,
-                    label: 'Username',
-                    prefix: const Icon(Icons.alternate_email, color: Colors.white70),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'Username is required' : null,
-                    onChanged: (v) => controller.checkUsernameDebounced(v.trim()),
-                    helper: _usernameHelper(ref),
+                  // Username
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AppInput(
+                        controller: _usernameCtrl,
+                        hint: 'Username',
+                        icon: Icons.alternate_email,
+                        validator: (v) =>
+                            v == null || v.trim().isEmpty ? 'Username is required' : null,
+                        onChanged: (v) => controller.checkUsernameDebounced(v.trim()),
+                      ),
+                      if (_usernameHelper(ref) != null) ...[
+                        const SizedBox(height: 6),
+                        _usernameHelper(ref)!,
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 16),
-                  _TextField(
+                  // Display name
+                  AppInput(
                     controller: _displayNameCtrl,
-                    label: 'Display name',
-                    prefix: const Icon(Icons.person_outline, color: Colors.white70),
+                    hint: 'Display name',
+                    icon: Icons.person_outline,
                     validator: (v) =>
                         v == null || v.trim().isEmpty ? 'Display name is required' : null,
                   ),
                   const SizedBox(height: 16),
-                  _TextField(controller: _bioCtrl, label: 'Bio', maxLines: 3),
+                  // Bio (multiline)
+                  AppInput(controller: _bioCtrl, hint: 'Bio', maxLines: 3),
                   const SizedBox(height: 16),
                   _DateField(
                     label: 'Date of birth',
@@ -115,9 +128,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                     onPicked: (d) => _dob = d,
                   ),
                   const SizedBox(height: 16),
-                  _TextField(controller: _languageCtrl, label: 'Language'),
+                  AppInput(controller: _languageCtrl, hint: 'Language', icon: Icons.language),
                   const SizedBox(height: 16),
-                  _TextField(controller: _timezoneCtrl, label: 'Timezone'),
+                  AppInput(controller: _timezoneCtrl, hint: 'Timezone', icon: Icons.public),
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
@@ -184,58 +197,6 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
           ok ? 'Username is available' : 'Username is taken',
           style: TextStyle(color: ok ? Colors.green : Colors.redAccent),
         ),
-      ],
-    );
-  }
-}
-
-class _TextField extends StatelessWidget {
-  const _TextField({
-    required this.controller,
-    required this.label,
-    this.prefix,
-    this.validator,
-    this.onChanged,
-    this.maxLines = 1,
-    this.helper,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final Widget? prefix;
-  final String? Function(String?)? validator;
-  final void Function(String)? onChanged;
-  final int maxLines;
-  final Widget? helper;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextFormField(
-          controller: controller,
-          onChanged: onChanged,
-          validator: validator,
-          maxLines: maxLines,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            prefixIcon: prefix,
-            labelText: label,
-            labelStyle: const TextStyle(color: Colors.white70),
-            filled: true,
-            fillColor: Colors.white.withOpacity(0.06),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.white),
-            ),
-          ),
-        ),
-        if (helper != null) ...[const SizedBox(height: 6), helper!],
       ],
     );
   }

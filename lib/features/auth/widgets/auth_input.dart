@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:flutter/services.dart';
+import 'package:antroph_mobile/widgets/app_input.dart';
 
+/// Deprecated: Use [AppInput] from `lib/widgets/app_input.dart` instead.
+/// Kept temporarily for backwards compatibility; will be removed after migration.
 class AuthInput extends StatelessWidget {
   const AuthInput({
     super.key,
@@ -26,45 +29,15 @@ class AuthInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F2223),
-        borderRadius: BorderRadius.circular(40),
-      ),
-      child: Row(
-        children: [
-          if (icon != null) Icon(icon, color: Colors.white70, size: 22),
-          if (icon != null) const SizedBox(width: 12),
-          Expanded(
-            child: TextFormField(
-              controller: controller,
-              style: const TextStyle(color: Colors.white, fontSize: 15),
-              obscureText: obscure,
-              keyboardType: keyboardType,
-              validator: validator,
-              readOnly: readOnly,
-              decoration: InputDecoration(
-                isCollapsed: true,
-                border: InputBorder.none,
-                hintText: hint,
-                hintStyle: const TextStyle(color: Colors.white38, fontSize: 15),
-                contentPadding: const EdgeInsets.symmetric(vertical: 4),
-              ),
-            ),
-          ),
-          if (onToggleObscure != null)
-            GestureDetector(
-              onTap: onToggleObscure,
-              child: Icon(
-                obscure ? Icons.visibility_off : Icons.visibility,
-                color: Colors.white70,
-                size: 22,
-              ),
-            ),
-        ],
-      ),
+    return AppInput(
+      controller: controller,
+      hint: hint,
+      icon: icon,
+      obscure: obscure,
+      onToggleObscure: onToggleObscure,
+      keyboardType: keyboardType,
+      validator: validator,
+      readOnly: readOnly,
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../widgets/typography_text.dart';
 import '../widgets/auth_input.dart';
+import 'package:antroph_mobile/widgets/app_input.dart';
 import '../../../core/auth/state/auth_state.dart';
 import '../../../core/auth/services/email_storage_service.dart';
 import '../../../widgets/toast.dart';
@@ -110,7 +111,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   fontWeight: FontWeight.w600,
                 ),
                 const SizedBox(height: 36),
-                AuthInput(
+                AppInput(
                   controller: _emailCtrl,
                   hint: 'Enter Your Email',
                   icon: Icons.email_outlined,
@@ -118,7 +119,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   validator: _validateEmail,
                 ),
                 const SizedBox(height: 20),
-                AuthInput(
+                AppInput(
                   controller: _passwordCtrl,
                   hint: 'Password',
                   icon: Icons.lock_outline,
