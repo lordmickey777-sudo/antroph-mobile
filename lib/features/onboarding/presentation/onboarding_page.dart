@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
 class OnboardingPage extends StatefulWidget {
@@ -114,7 +115,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       SizedBox(
                         height: 76,
                         width: 200,
-                        child: ElevatedButton(
+                        child: AppButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF2A2D2F),
                             foregroundColor: Colors.white,

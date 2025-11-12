@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
+import 'package:flutter/services.dart';
 
 class AuthInput extends StatelessWidget {
   const AuthInput({
@@ -11,6 +12,7 @@ class AuthInput extends StatelessWidget {
     this.onToggleObscure,
     this.keyboardType,
     this.validator,
+    this.readOnly = false,
   });
 
   final TextEditingController controller;
@@ -20,6 +22,7 @@ class AuthInput extends StatelessWidget {
   final VoidCallback? onToggleObscure;
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +44,7 @@ class AuthInput extends StatelessWidget {
               obscureText: obscure,
               keyboardType: keyboardType,
               validator: validator,
+              readOnly: readOnly,
               decoration: InputDecoration(
                 isCollapsed: true,
                 border: InputBorder.none,
@@ -78,7 +82,12 @@ class AuthButton extends StatelessWidget {
         color: const Color(0xFF1F2223),
         borderRadius: BorderRadius.circular(40),
         child: InkWell(
-          onTap: loading ? null : onTap,
+          onTap: loading
+              ? null
+              : () {
+                  HapticFeedback.lightImpact();
+                  onTap();
+                },
           borderRadius: BorderRadius.circular(40),
           child: Center(
             child: loading

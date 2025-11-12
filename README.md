@@ -89,6 +89,23 @@ docker run --rm antroph-mobile:build
 
 Note: Building iOS requires macOS and code signing. Consider Fastlane + a macOS runner for iOS CI.
 
+## Custom Button Widget
+
+The app includes a general-purpose `AppButton` at `lib/widgets/app_button.dart` that provides subtle haptic and tap feedback when pressed. It wraps `ElevatedButton` and triggers `HapticFeedback.selectionClick()` plus `Feedback.forTap()` by default.
+
+Usage:
+
+```dart
+AppButton(
+  onPressed: () => print('Pressed!'),
+  child: Text('Click me'),
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Colors.blue,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  ),
+)
+```
+
 ## Next steps
 
 - Add API base URL and auth to `dio` client

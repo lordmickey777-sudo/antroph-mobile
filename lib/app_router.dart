@@ -5,6 +5,7 @@ import 'features/home/presentation/home_page.dart';
 import 'features/splash/presentation/splash_page.dart';
 import 'features/onboarding/presentation/onboarding_page.dart';
 import 'features/auth/pages/login_page.dart';
+import 'features/auth/pages/forgot_password_page.dart';
 import 'features/auth/pages/signup_page.dart';
 import 'features/profile/presentation/customization_page.dart';
 import 'features/profile/presentation/subscription_page.dart';
@@ -21,6 +22,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/home', name: 'home', builder: (context, state) => const HomePage()),
       GoRoute(path: '/auth/login', name: 'login', builder: (context, state) => const LoginPage()),
+      GoRoute(
+        path: '/auth/forgot-password',
+        name: 'forgot-password',
+        builder: (context, state) => const ForgotPasswordPage(),
+      ),
       GoRoute(
         path: '/auth/signup',
         name: 'signup',

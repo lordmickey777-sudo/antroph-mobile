@@ -119,6 +119,32 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       state = const AsyncValue.data(null);
     }
   }
+
+  /// Request a password reset code to be sent to the given email.
+  /// Returns the success message from the server (generic to prevent enumeration).
+  Future<String> sendResetCode({required String email}) async {
+    try {
+      return await _repo.requestPasswordReset(email: email);
+    } on DioException catch (e) {
+      final apiError = ErrorFormatter.fromDio(e);
+      throw apiError;
+    }
+  }
+
+  /// Perform password reset using the 6-digit token.
+  /// Returns the success message from the server.
+  Future<String> resetPassword({
+    required String email,
+    required String token,
+    required String newPassword,
+  }) async {
+    try {
+      return await _repo.resetPassword(email: email, token: token, newPassword: newPassword);
+    } on DioException catch (e) {
+      final apiError = ErrorFormatter.fromDio(e);
+      throw apiError;
+    }
+  }
 }
 
 final authControllerProvider = AsyncNotifierProvider<AuthController, AuthUser?>(AuthController.new);

@@ -3,7 +3,8 @@ import '../../network/api_client.dart';
 import '../models/user.dart';
 
 class AuthRepository {
-  final Dio _dio = ApiClient.I.dio;
+  AuthRepository({Dio? dio}) : _dio = dio ?? ApiClient.I.dio;
+  final Dio _dio;
 
   Future<AuthUser> register({
     required String email,
@@ -82,5 +83,49 @@ class AuthRepository {
             status != null && status >= 200 && status < 300 || status == 204,
       ),
     );
+  }
+
+  /// Request a 6-digit reset code to be sent to the user's email.
+  ///
+  /// API: POST /auth/forgot-password
+  /// Body: { "email": "string" }
+  /// Response: { "message": "string" }
+  /// Always returns 200 with a generic success message to prevent email enumeration.
+  Future<String> requestPasswordReset({required String email}) async {
+    final res = await _dio.post(
+      '/auth/forgot-password',
+      data: {'email': email},
+      options: Options(extra: const {'skipAuth': true}),
+    );
+    final data = res.data;
+    if (data is Map<String, dynamic> && data['message'] is String) {
+      return data['message'] as String;
+    }
+    return 'If an account exists for this email, a reset code has been sent.';
+  }
+
+  /// Reset password using a 6-digit code sent to the user's email.
+  ///
+  /// API: POST /auth/reset-password
+  /// Body: { "email": "string", "token": "string", "new_password": "string" }
+  /// Response: { "message": "string" }
+  /// Validations (server-side):
+  /// - Code must be exactly 6 digits, single-use, not expired
+  /// - Password must meet security requirements
+  Future<String> resetPassword({
+    required String email,
+    required String token,
+    required String newPassword,
+  }) async {
+    final res = await _dio.post(
+      '/auth/reset-password',
+      data: {'email': email, 'token': token, 'new_password': newPassword},
+      options: Options(extra: const {'skipAuth': true}),
+    );
+    final data = res.data;
+    if (data is Map<String, dynamic> && data['message'] is String) {
+      return data['message'] as String;
+    }
+    return 'Password has been reset successfully.';
   }
 }
