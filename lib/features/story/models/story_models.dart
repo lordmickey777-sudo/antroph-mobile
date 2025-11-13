@@ -9,6 +9,8 @@ class StorySectionDto {
         .map((e) => StoryCardDto.fromJson(e as Map<String, dynamic>))
         .toList(),
   );
+
+  Map<String, dynamic> toJson() => {'title': title, 'items': items.map((e) => e.toJson()).toList()};
 }
 
 class StoryCardDto {
@@ -34,6 +36,14 @@ class StoryCardDto {
     users: (json['users'] as num?)?.toInt() ?? 0,
     views: (json['views'] as num?)?.toInt() ?? 0,
   );
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'subtitle': subtitle,
+    'image': image,
+    'users': users,
+    'views': views,
+  };
 }
 
 class StoriesHomeResponse {
@@ -45,4 +55,6 @@ class StoriesHomeResponse {
         .map((e) => StorySectionDto.fromJson(e as Map<String, dynamic>))
         .toList(),
   );
+
+  Map<String, dynamic> toJson() => {'sections': sections.map((e) => e.toJson()).toList()};
 }

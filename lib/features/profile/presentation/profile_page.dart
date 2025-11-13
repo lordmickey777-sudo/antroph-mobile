@@ -109,15 +109,15 @@ class _ProfileMenu extends ConsumerWidget {
                   context.pushNamed('edit-profile');
                   break;
                 case 'Customization':
-                  showToast(context, 'Opening customization…');
+                  // showToast(context, 'Opening customization…');
                   context.pushNamed('customization');
                   break;
                 case 'Subscription':
-                  showToast(context, 'Opening subscription…');
+                  // showToast(context, 'Opening subscription…');
                   context.pushNamed('subscription');
                   break;
                 case 'Scan':
-                  showToast(context, 'Opening scanner…');
+                  // showToast(context, 'Opening scanner…');
                   context.pushNamed('scan');
                   break;
                 case 'Logout':
