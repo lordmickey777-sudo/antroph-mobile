@@ -36,6 +36,31 @@ void main() {
       repo = ProfileRepository(dio: dio);
     });
 
+    test('getMyProfile parses response into UserProfile', () async {
+      reg.when(
+        method: 'GET',
+        path: '/users/me',
+        json: {
+          'id': 'u-1',
+          'email': 'me@example.com',
+          'username': 'me',
+          'display_name': 'It\'s Me',
+          'avatar_url': 'https://cdn/avatar.png',
+          'bio': 'bio',
+          'date_of_birth': '1990-05-10T00:00:00Z',
+          'timezone': 'UTC',
+          'language': 'en',
+        },
+      );
+
+      final result = await repo.getMyProfile();
+      expect(result.id, 'u-1');
+      expect(result.email, 'me@example.com');
+      expect(result.username, 'me');
+      expect(result.displayName, "It's Me");
+      expect(result.avatarUrl, isNotNull);
+    });
+
     test('updateProfile parses response into UserProfile', () async {
       reg.when(
         method: 'PUT',

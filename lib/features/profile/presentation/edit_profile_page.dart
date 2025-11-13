@@ -102,7 +102,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                         icon: Icons.alternate_email,
                         validator: (v) =>
                             v == null || v.trim().isEmpty ? 'Username is required' : null,
-                        onChanged: (v) => controller.checkUsernameDebounced(v.trim()),
+                        onChanged: (v) => controller.checkUsernameImmediate(v.trim()),
                         trailing: _usernameStatusInline(ref),
                       ),
                     ],

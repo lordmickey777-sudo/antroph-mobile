@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:dio/dio.dart';
 
 import '../data/profile_repository.dart';
 import '../models/user_profile.dart';
@@ -14,8 +15,9 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
   late final ProfileRepository _repo;
   final _picker = ImagePicker();
 
-  // Debounce timer for username availability check
+  // Previously debounced; now we perform immediate checks and cancel in-flight requests.
   Timer? _debounce;
+  CancelToken? _usernameCancelToken;
   UsernameAvailability? _usernameAvailability;
   UsernameAvailability? get usernameAvailability => _usernameAvailability;
   bool _isCheckingUsername = false;
@@ -24,20 +26,26 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
   @override
   Future<UserProfile?> build() async {
     _repo = ProfileRepository();
-    // We don't have a GET /users/me documented; derive initial profile from auth state where possible.
+    // Load full profile from backend when authenticated; fall back to auth state minimal info.
     final authUser = ref.watch(authControllerProvider).value;
     if (authUser == null) return null;
-    return UserProfile(
-      id: authUser.id,
-      email: authUser.email,
-      username: authUser.username,
-      displayName: authUser.displayName,
-      avatarUrl: null, // unknown until user updates
-      bio: null,
-      dateOfBirth: null,
-      timezone: null,
-      language: null,
-    );
+    try {
+      final p = await _repo.getMyProfile();
+      return p;
+    } catch (_) {
+      // Fallback: synthesize minimal profile from auth state so UI can still prefill some fields.
+      return UserProfile(
+        id: authUser.id,
+        email: authUser.email,
+        username: authUser.username,
+        displayName: authUser.displayName,
+        avatarUrl: null,
+        bio: null,
+        dateOfBirth: null,
+        timezone: null,
+        language: null,
+      );
+    }
   }
 
   /// Upload a new avatar picked from gallery or camera.
@@ -102,32 +110,41 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
     }
   }
 
-  /// Debounced username availability check.
-  void checkUsernameDebounced(String username) {
+  /// Immediately check username availability on each change (cancels previous request).
+  void checkUsernameImmediate(String username) {
+    // Cancel any pending debounce or in-flight request
     _debounce?.cancel();
+    _usernameCancelToken?.cancel('replaced');
+
     if (username.isEmpty) {
       _usernameAvailability = null;
       _isCheckingUsername = false;
-      // trigger rebuild to clear indicators
       state = AsyncValue.data(state.value);
       return;
     }
-    // immediately reflect checking state for instant feedback
+
+    // Reflect checking state instantly for responsive UX
     _isCheckingUsername = true;
     state = AsyncValue.data(state.value);
-    _debounce = Timer(const Duration(milliseconds: 450), () async {
+
+    final token = CancelToken();
+    _usernameCancelToken = token;
+
+    () async {
       try {
-        final result = await _repo.checkUsernameAvailability(username);
+        final result = await _repo.checkUsernameAvailability(username, cancelToken: token);
+        // If another request has started since, ignore this result
+        if (_usernameCancelToken != token) return;
         _usernameAvailability = result;
-        _isCheckingUsername = false;
-        // Force a rebuild by assigning same state
-        state = AsyncValue.data(state.value);
-      } catch (_) {
-        _isCheckingUsername = false;
-        // swallow errors for availability (keep UX smooth)
-        state = AsyncValue.data(state.value);
+      } catch (e) {
+        // Ignore cancellations, swallow other errors to keep UX smooth
+      } finally {
+        if (_usernameCancelToken == token) {
+          _isCheckingUsername = false;
+          state = AsyncValue.data(state.value);
+        }
       }
-    });
+    }();
   }
 
   List<String> missingFields(UserProfile? profile) {

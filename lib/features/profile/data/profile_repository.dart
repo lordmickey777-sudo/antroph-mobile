@@ -8,6 +8,16 @@ class ProfileRepository {
   ProfileRepository({Dio? dio}) : _dio = dio ?? ApiClient.I.dio;
   final Dio _dio;
 
+  /// GET /users/me to retrieve the current user's full profile
+  Future<UserProfile> getMyProfile() async {
+    try {
+      final res = await _dio.get('/users/me');
+      return UserProfile.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
   /// Upload avatar image as base64 string to /users/me/avatar
   /// Returns the avatar URL or opaque response string depending on backend.
   Future<String> uploadAvatar({required String avatarBase64}) async {
@@ -48,9 +58,15 @@ class ProfileRepository {
   }
 
   /// GET /users/username/{username}/available to check username availability
-  Future<UsernameAvailability> checkUsernameAvailability(String username) async {
+  Future<UsernameAvailability> checkUsernameAvailability(
+    String username, {
+    CancelToken? cancelToken,
+  }) async {
     try {
-      final res = await _dio.get('/users/username/${Uri.encodeComponent(username)}/available');
+      final res = await _dio.get(
+        '/users/username/${Uri.encodeComponent(username)}/available',
+        cancelToken: cancelToken,
+      );
       return UsernameAvailability.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
