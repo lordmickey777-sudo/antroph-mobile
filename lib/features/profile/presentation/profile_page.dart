@@ -120,6 +120,10 @@ class _ProfileMenu extends ConsumerWidget {
                   // showToast(context, 'Opening scanner…');
                   context.pushNamed('scan');
                   break;
+                case 'Support':
+                  // showToast(context, 'Opening support…');
+                  context.pushNamed('support');
+                  break;
                 case 'Logout':
                   final controller = ref.read(authControllerProvider.notifier);
                   await controller.logout();

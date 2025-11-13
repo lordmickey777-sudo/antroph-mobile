@@ -82,7 +82,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       if (mounted && user != null && user != prevUser) {
         // Remember last successful email for next time
         EmailStorageService.saveLastEmail(user.email);
-        showToast(context, 'Welcome back!', success: true);
+        // showToast(context, 'Welcome back!', success: true);
         context.go('/home');
       }
     });
