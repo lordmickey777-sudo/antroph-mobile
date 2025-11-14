@@ -8,6 +8,9 @@ import 'package:antroph_mobile/features/story/presentation/story_page.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/features/auth/pages/login_page.dart';
 import 'package:antroph_mobile/features/auth/pages/signup_page.dart';
+import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
+import 'package:antroph_mobile/features/home/widgets/expression_widgets.dart';
+import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -166,53 +169,194 @@ class _TopChips extends StatelessWidget {
   }
 }
 
-class _InteractContent extends StatelessWidget {
+class _InteractContent extends ConsumerStatefulWidget {
   const _InteractContent({required this.size});
   final Size size;
 
   @override
+  ConsumerState<_InteractContent> createState() => _InteractContentState();
+}
+
+class _InteractContentState extends ConsumerState<_InteractContent> {
+  @override
+  void initState() {
+    super.initState();
+    // Listen for permission modal state changes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.listenManual(voiceChatControllerProvider.select((state) => state.showPermissionModal), (
+        previous,
+        next,
+      ) {
+        if (next && mounted) {
+          _showPermissionModal();
+        }
+      });
+    });
+  }
+
+  Future<void> _showPermissionModal() async {
+    final controller = ref.read(voiceChatControllerProvider.notifier);
+    await MicrophonePermissionModal.show(context);
+    controller.dismissPermissionModal();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final voiceChatState = ref.watch(voiceChatControllerProvider);
+    final voiceChatController = ref.read(voiceChatControllerProvider.notifier);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 8),
         _TopChips(),
-        SizedBox(height: size.height * 0.06),
+        SizedBox(height: widget.size.height * 0.06),
+
+        // Expression Display with synchronized expressions
         Center(
-          child: Container(
-            decoration: BoxDecoration(
-              boxShadow: [
-                BoxShadow(color: Colors.white.withOpacity(0.05), blurRadius: 40, spreadRadius: 8),
-              ],
-            ),
-            child: Image.asset(
-              'assets/images/gif.png',
-              fit: BoxFit.cover,
-              width: size.width * 0.55,
-              height: size.width * 0.55,
-            ),
+          child: ExpressionDisplay(
+            expression: voiceChatState.currentExpression,
+            size: widget.size.width * 0.55,
+            showGlow: true,
           ),
         ),
+
         const SizedBox(height: 28),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 24),
-          child: TypographyText(
-            'Bonjour! Comment ca va?',
-            variant: TypographyVariant.h2,
-            textAlign: TextAlign.center,
-            color: Colors.white,
+
+        // AI Response or Status Text
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: TypographyText(
+              _getStatusText(voiceChatState),
+              key: ValueKey(voiceChatState.aiResponse ?? voiceChatState.isRecording),
+              variant: TypographyVariant.h2,
+              textAlign: TextAlign.center,
+              color: Colors.white,
+            ),
           ),
         ),
+
+        // Error message display
+        if (voiceChatState.errorMessage != null) ...[
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withOpacity(0.5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      voiceChatState.errorMessage!,
+                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.red, size: 18),
+                    onPressed: () => voiceChatController.clearError(),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+
         const Spacer(),
+
+        // Recording/Processing indicator
+        if (voiceChatState.isRecording)
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.red),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.fiber_manual_record, color: Colors.red, size: 16),
+                  SizedBox(width: 8),
+                  Text(
+                    'Recording...',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else if (voiceChatState.isProcessing)
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.blue),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue),
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Processing...',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        const SizedBox(height: 20),
+
+        // Voice Record Button
         Center(
-          child: Container(
-            width: 75,
-            height: 75,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+          child: VoiceRecordButton(
+            isRecording: voiceChatState.isRecording,
+            onPressed: voiceChatState.isProcessing || voiceChatState.isPlaying
+                ? null
+                : () async {
+                    if (voiceChatState.isRecording) {
+                      await voiceChatController.stopRecordingAndSend();
+                    } else {
+                      await voiceChatController.startRecording();
+                    }
+                  },
+            size: 75,
           ),
         ),
-        SizedBox(height: size.height * 0.15),
+        SizedBox(height: widget.size.height * 0.15),
       ],
     );
+  }
+
+  String _getStatusText(VoiceChatState state) {
+    if (state.isRecording) {
+      return 'Listening...';
+    } else if (state.isProcessing) {
+      return 'Thinking...';
+    } else if (state.isPlaying && state.aiResponse != null) {
+      return state.aiResponse!;
+    } else if (state.aiResponse != null) {
+      return state.aiResponse!;
+    }
+    return 'Bonjour! Comment ça va?';
   }
 }

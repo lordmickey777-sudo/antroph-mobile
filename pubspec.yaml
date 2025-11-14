@@ -51,6 +51,10 @@ dependencies:
   mobile_scanner: ^6.0.2
   webview_flutter: ^4.7.0
   image_picker: ^1.0.7
+  just_audio: ^0.9.35
+  flutter_sound: ^9.2.13
+  permission_handler: ^11.0.1
+  web_socket_channel: ^2.4.0
 
 dev_dependencies:
   flutter_test:

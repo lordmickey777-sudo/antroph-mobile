@@ -37,6 +37,7 @@ class _StorySheetState extends ConsumerState<StorySheet> {
   void dispose() {
     // Clear session when sheet is closed
     ref.read(storySessionProvider.notifier).clearSession();
+    
     super.dispose();
   }
 
