@@ -62,6 +62,7 @@ class StoryPage extends ConsumerWidget {
       expand: true,
       backgroundColor: Colors.transparent,
       builder: (_) => StorySheet(
+        storyId: card.id,
         title: card.title,
         subtitle: card.subtitle,
         imageAsset: card.image,

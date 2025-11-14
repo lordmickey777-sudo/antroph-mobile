@@ -15,12 +15,14 @@ class StorySectionDto {
 
 class StoryCardDto {
   StoryCardDto({
+    required this.id,
     required this.title,
     required this.subtitle,
     required this.image,
     required this.users,
     required this.views,
   });
+  final String id;
   final String title;
   final String subtitle;
 
@@ -30,6 +32,7 @@ class StoryCardDto {
   final int views;
 
   factory StoryCardDto.fromJson(Map<String, dynamic> json) => StoryCardDto(
+    id: (json['id'] as String?)?.trim() ?? '',
     title: (json['title'] as String?)?.trim() ?? '',
     subtitle: (json['subtitle'] as String?)?.trim() ?? '',
     image: (json['image'] as String?)?.trim() ?? '',
@@ -38,6 +41,7 @@ class StoryCardDto {
   );
 
   Map<String, dynamic> toJson() => {
+    'id': id,
     'title': title,
     'subtitle': subtitle,
     'image': image,
