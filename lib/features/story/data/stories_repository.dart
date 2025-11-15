@@ -59,7 +59,7 @@ class StoriesRepository {
     try {
       final res = await _dio.post(
         '/stories/$storyId/start',
-        data: {'device_type': deviceType, 'device_id': deviceId},
+        data: {"device_type": 'mobile', "device_id": 'null', "autoplay": true},
       );
       final data = res.data as Map<String, dynamic>;
       return StorySession.fromJson(data);
