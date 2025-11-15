@@ -1,4 +1,4 @@
-package com.pledre.antroph.antroph_mobile
+package com.antroph.aura
 
 import io.flutter.embedding.android.FlutterActivity
 
