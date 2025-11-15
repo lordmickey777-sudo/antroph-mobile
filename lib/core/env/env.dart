@@ -15,6 +15,7 @@ class AppEnv {
 
   static String get apiBaseUrl => _string('API_BASE_URL', '');
   static String get sentryDsn => _string('SENTRY_DSN', '');
+  static String get robotSerial => _string('ROBOT_SERIAL', '');
 
   static String _string(String key, String fallback) {
     // If dotenv hasn't been initialized (e.g., .env not bundled), avoid calling it.

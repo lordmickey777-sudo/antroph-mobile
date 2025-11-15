@@ -10,7 +10,7 @@ class VoiceChatService {
   static final VoiceChatService instance = VoiceChatService._();
 
   final _log = Logger();
-  static const String _voiceChatEndpoint = '/api/v1/ai/voice/chat';
+  static const String _voiceChatEndpoint = '/ai/voice/chat';
 
   /// Send voice message to backend and get AI response with expressions
   Future<VoiceChatResponse> sendVoiceMessage({
@@ -18,6 +18,8 @@ class VoiceChatService {
     String conversationType = 'general',
     String language = 'en',
     String voice = 'nova',
+    String? storySessionId,
+    String? robotSerial,
   }) async {
     try {
       _log.d('Sending voice message: ${audioFile.path}');
@@ -30,6 +32,8 @@ class VoiceChatService {
         'conversation_type': conversationType,
         'language': language,
         'voice': voice,
+        if (storySessionId != null && storySessionId.isNotEmpty) 'story_session_id': storySessionId,
+        if (robotSerial != null && robotSerial.isNotEmpty) 'robot_serial': robotSerial,
       });
 
       final response = await ApiClient.I.dio.post(

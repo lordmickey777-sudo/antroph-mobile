@@ -4,6 +4,8 @@ import 'package:logger/logger.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../../core/env/env.dart';
+import '../../story/providers/story_session_provider.dart';
 import '../models/expression_models.dart';
 import '../services/voice_chat_service.dart';
 import '../services/audio_playback_service.dart';
@@ -134,12 +136,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       // Get temporary directory for recording
       final tempDir = await getTemporaryDirectory();
-      final filePath = '${tempDir.path}/voice_input_${DateTime.now().millisecondsSinceEpoch}.aac';
+      final filePath = '${tempDir.path}/voice_input_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
       // Start recording
       await _audioRecorder!.startRecorder(
         toFile: filePath,
-        codec: Codec.aacADTS,
+        codec: Codec.aacMP4,
         bitRate: 128000,
         sampleRate: 44100,
       );
@@ -175,12 +177,17 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         throw Exception('Recording file not found');
       }
 
+      final storySessionId = _activeStorySessionId();
+      final robotSerial = _resolveRobotSerial();
+
       // Send to backend
       final response = await _voiceChatService.sendVoiceMessage(
         audioFile: audioFile,
         conversationType: 'general',
         language: 'en',
         voice: 'nova',
+        storySessionId: storySessionId,
+        robotSerial: robotSerial,
       );
 
       _log.i('Voice chat response received: ${response.text}');
@@ -270,6 +277,19 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   /// Dismiss permission modal
   void dismissPermissionModal() {
     state = state.copyWith(showPermissionModal: false);
+  }
+
+  String? _activeStorySessionId() {
+    return ref.read(storySessionProvider).session?.id;
+  }
+
+  String _resolveRobotSerial() {
+    final envSerial = AppEnv.robotSerial.trim();
+    if (envSerial.isNotEmpty) {
+      return envSerial;
+    }
+    final os = Platform.operatingSystem;
+    return '$os-mobile-app';
   }
 }
 

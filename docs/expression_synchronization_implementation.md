@@ -16,7 +16,7 @@ Real-time facial expression synchronization between AI voice responses and mobil
 
 2. **`lib/features/home/services/voice_chat_service.dart`**
 
-   - Voice chat API integration (`POST /api/v1/ai/voice/chat`)
+   - Voice chat API integration (`POST /ai/voice/chat`)
    - Multipart form data handling for audio upload
    - Error handling with custom `VoiceChatException`
 
@@ -59,7 +59,7 @@ Real-time facial expression synchronization between AI voice responses and mobil
 ### ✅ Core Functionality
 
 - [x] Voice recording with microphone permission handling
-- [x] API integration with `/api/v1/ai/voice/chat` endpoint
+- [x] API integration with `/ai/voice/chat` endpoint
 - [x] Real-time expression synchronization during audio playback
 - [x] Automatic expression timing based on backend data
 - [x] Smooth animated transitions between expressions
@@ -142,7 +142,7 @@ API_BASE_URL=https://your-backend-url.com
 The voice chat endpoint is automatically constructed as:
 
 ```
-POST {API_BASE_URL}/api/v1/ai/voice/chat
+POST {API_BASE_URL}/ai/voice/chat
 ```
 
 ### Audio Recording Settings
@@ -157,6 +157,8 @@ RecordConfig(
 )
 ```
 
+We persist the recording as an `.m4a` file (AAC in MP4 container) to match backend requirements.
+
 ### Voice Settings
 
 Default parameters (can be customized):
@@ -164,6 +166,11 @@ Default parameters (can be customized):
 - `conversation_type`: 'general'
 - `language`: 'en'
 - `voice`: 'nova'
+
+### Story Context Parameters
+
+- `story_session_id`: attaches the current story session (if active) so the backend can keep context.
+- `robot_serial`: identifies the active robot/device (configurable via the `ROBOT_SERIAL` env var, defaults to a mobile identifier).
 
 ## 🛠️ Testing Checklist
 
