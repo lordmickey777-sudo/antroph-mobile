@@ -25,6 +25,69 @@ dart run build_runner build --delete-conflicting-outputs
 flutter run
 ```
 
+## Building release (APK & iOS)
+
+Below are common Flutter commands to build Android and iOS release artifacts. Run these from the repository root. Building iOS artifacts requires a macOS machine with Xcode and proper code signing configured.
+
+### Android (APK / App Bundle)
+
+- Build a single release APK:
+
+```sh
+flutter build apk --release
+# Output: build/app/outputs/flutter-apk/app-release.apk
+```
+
+- Build APKs split per ABI (smaller, device-specific APKs):
+
+```sh
+flutter build apk --split-per-abi --release
+# Outputs: build/app/outputs/flutter-apk/app-<abi>-release.apk
+```
+
+- Build an Android App Bundle (AAB) for Play Store upload:
+
+```sh
+flutter build appbundle --release
+# Output: build/app/outputs/bundle/release/app-release.aab
+```
+
+- Install the release build to a connected Android device:
+
+```sh
+flutter install --release
+```
+
+### iOS (IPA / Archive)
+
+Prerequisites: macOS, Xcode, CocoaPods, and valid provisioning profiles / signing set up in Xcode.
+
+- Install CocoaPods dependencies (from project root):
+
+```sh
+cd ios && pod install && cd -
+```
+
+- Build an Xcode archive (opens Xcode workspace for further Archive/export steps):
+
+```sh
+flutter build ios --release
+# Then open Xcode: open ios/Runner.xcworkspace
+# Use Xcode Organizer to Archive and export, or use Xcode command line tools for automation.
+```
+
+- Build an IPA directly (choose export method: development, ad-hoc, enterprise, app-store):
+
+```sh
+flutter build ipa --export-method app-store
+# Output (example): build/ios/ipa/Runner.ipa
+```
+
+Notes:
+
+- For TestFlight/App Store uploads prefer `--export-method app-store` and ensure App Store Connect credentials are configured.
+- For local device testing use `--export-method development` or use Xcode to manage signing.
+
 Optional environment at build time:
 
 - SENTRY_DSN: Provide at compile-time to enable Sentry (otherwise it runs without Sentry)
