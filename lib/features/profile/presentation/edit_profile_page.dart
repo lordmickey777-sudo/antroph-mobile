@@ -7,6 +7,14 @@ import '../../../widgets/toast.dart';
 import 'package:antroph_mobile/widgets/app_input.dart';
 import 'package:antroph_mobile/widgets/app_date_input.dart';
 
+const Map<String, String> _languageOptions = {
+  'en': 'English',
+  'fr': 'French',
+  'es': 'Spanish',
+  'de': 'German',
+  'it': 'Italian',
+};
+
 class EditProfilePage extends ConsumerStatefulWidget {
   const EditProfilePage({super.key});
 
@@ -20,16 +28,13 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   final _displayNameCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
   DateTime? _dob;
-  final _languageCtrl = TextEditingController();
-  final _timezoneCtrl = TextEditingController();
+  String? _selectedLanguage;
 
   @override
   void dispose() {
     _usernameCtrl.dispose();
     _displayNameCtrl.dispose();
     _bioCtrl.dispose();
-    _languageCtrl.dispose();
-    _timezoneCtrl.dispose();
     super.dispose();
   }
 
@@ -43,8 +48,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       _usernameCtrl.text = profile.username ?? _usernameCtrl.text;
       _displayNameCtrl.text = profile.displayName ?? _displayNameCtrl.text;
       _bioCtrl.text = profile.bio ?? _bioCtrl.text;
-      _languageCtrl.text = profile.language ?? _languageCtrl.text;
-      _timezoneCtrl.text = profile.timezone ?? _timezoneCtrl.text;
+      if (_selectedLanguage == null && profile.language != null) {
+        if (_languageOptions.containsKey(profile.language)) {
+          _selectedLanguage = profile.language;
+        }
+      }
     }
 
     return Scaffold(
@@ -126,9 +134,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                     onChanged: (d) => setState(() => _dob = d),
                   ),
                   const SizedBox(height: 16),
-                  AppInput(controller: _languageCtrl, hint: 'Language', icon: Icons.language),
-                  const SizedBox(height: 16),
-                  AppInput(controller: _timezoneCtrl, hint: 'Timezone', icon: Icons.public),
+                  _LanguageDropdown(
+                    value: _selectedLanguage,
+                    onChanged: (value) => setState(() => _selectedLanguage = value),
+                  ),
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
@@ -142,12 +151,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                                 displayName: _displayNameCtrl.text.trim(),
                                 bio: _bioCtrl.text.trim().isEmpty ? null : _bioCtrl.text.trim(),
                                 dateOfBirth: _dob,
-                                timezone: _timezoneCtrl.text.trim().isEmpty
-                                    ? null
-                                    : _timezoneCtrl.text.trim(),
-                                language: _languageCtrl.text.trim().isEmpty
-                                    ? null
-                                    : _languageCtrl.text.trim(),
+                                language: _selectedLanguage,
                               );
                               final err = ref.read(profileControllerProvider).error;
                               if (err == null && mounted) {
@@ -208,3 +212,53 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 }
 
 // Removed legacy _DateField in favor of reusable AppDateInput.
+
+class _LanguageDropdown extends StatelessWidget {
+  const _LanguageDropdown({required this.value, required this.onChanged});
+
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 64),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2223),
+        borderRadius: BorderRadius.circular(40),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.language, color: Colors.white70, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              value: value,
+              dropdownColor: const Color(0xFF1F2223),
+              borderRadius: BorderRadius.circular(12),
+              iconEnabledColor: Colors.white70,
+              style: const TextStyle(color: Colors.white, fontSize: 15),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                isCollapsed: true,
+                hintText: 'Language',
+                hintStyle: TextStyle(color: Colors.white38, fontSize: 15),
+                contentPadding: EdgeInsets.zero,
+              ),
+              items: [
+                for (final entry in _languageOptions.entries)
+                  DropdownMenuItem<String>(
+                    value: entry.key,
+                    child: Text(entry.value),
+                  ),
+              ],
+              onChanged: onChanged,
+              validator: (value) => value == null || value.isEmpty ? 'Please select a language' : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
