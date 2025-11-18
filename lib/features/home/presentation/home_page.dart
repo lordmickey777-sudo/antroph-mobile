@@ -183,21 +183,27 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
     super.initState();
     // Listen for permission modal state changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.listenManual(voiceChatControllerProvider.select((state) => state.showPermissionModal), (
+      ref.listenManual(voiceChatControllerProvider.select((state) => state.permissionDialog), (
         previous,
         next,
       ) {
-        if (next && mounted) {
-          _showPermissionModal();
+        if (!mounted || next == PermissionDialogType.none) {
+          return;
         }
+        _showPermissionDialog(next);
       });
     });
   }
 
-  Future<void> _showPermissionModal() async {
+  Future<void> _showPermissionDialog(PermissionDialogType type) async {
     final controller = ref.read(voiceChatControllerProvider.notifier);
-    await MicrophonePermissionModal.show(context);
-    controller.dismissPermissionModal();
+    if (type == PermissionDialogType.education) {
+      final continueRequest = await MicrophoneEducationDialog.show(context) ?? false;
+      controller.handleEducationDialogResult(continueRequest);
+    } else if (type == PermissionDialogType.settings) {
+      await MicrophonePermissionModal.show(context);
+      controller.dismissPermissionDialog();
+    }
   }
 
   @override

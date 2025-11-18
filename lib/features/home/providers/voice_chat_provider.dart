@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
@@ -11,6 +12,8 @@ import '../services/voice_chat_service.dart';
 import '../services/audio_playback_service.dart';
 
 /// State for voice chat interaction
+enum PermissionDialogType { none, education, settings }
+
 class VoiceChatState {
   final RobotExpression currentExpression;
   final bool isRecording;
@@ -20,7 +23,7 @@ class VoiceChatState {
   final String? aiResponse;
   final String? errorMessage;
   final double playbackProgress;
-  final bool showPermissionModal;
+  final PermissionDialogType permissionDialog;
 
   const VoiceChatState({
     this.currentExpression = RobotExpression.neutral,
@@ -31,7 +34,7 @@ class VoiceChatState {
     this.aiResponse,
     this.errorMessage,
     this.playbackProgress = 0.0,
-    this.showPermissionModal = false,
+    this.permissionDialog = PermissionDialogType.none,
   });
 
   VoiceChatState copyWith({
@@ -43,7 +46,7 @@ class VoiceChatState {
     String? aiResponse,
     String? errorMessage,
     double? playbackProgress,
-    bool? showPermissionModal,
+    PermissionDialogType? permissionDialog,
   }) {
     return VoiceChatState(
       currentExpression: currentExpression ?? this.currentExpression,
@@ -54,7 +57,7 @@ class VoiceChatState {
       aiResponse: aiResponse ?? this.aiResponse,
       errorMessage: errorMessage,
       playbackProgress: playbackProgress ?? this.playbackProgress,
-      showPermissionModal: showPermissionModal ?? this.showPermissionModal,
+      permissionDialog: permissionDialog ?? this.permissionDialog,
     );
   }
 
@@ -67,6 +70,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   final AudioPlaybackService _audioService = AudioPlaybackService();
   FlutterSoundRecorder? _audioRecorder;
   final Logger _log = Logger();
+  bool _iosPermissionDeniedOnce = false;
+  Completer<bool>? _permissionDialogCompleter;
+  static const String _permissionError = 'Microphone permission is required for voice chat';
 
   @override
   VoiceChatState build() {
@@ -89,40 +95,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         return;
       }
 
-      // Check current permission status
-      var status = await Permission.microphone.status;
-
-      // If permission is denied, show custom modal
-      if (status.isDenied || status.isPermanentlyDenied) {
-        _log.w('Microphone permission denied - showing modal');
-        state = state.copyWith(showPermissionModal: true);
-
-        // Request permission
-        status = await Permission.microphone.request();
-
-        // If still denied after request, return
-        if (!status.isGranted) {
-          _log.e('Microphone permission denied after request');
-          state = state.copyWith(
-            showPermissionModal: false,
-            errorMessage: 'Microphone permission is required for voice chat',
-          );
-          return;
-        }
-
-        // Permission granted, hide modal
-        state = state.copyWith(showPermissionModal: false);
-      } else if (!status.isGranted) {
-        // Request permission for first time
-        status = await Permission.microphone.request();
-        if (!status.isGranted) {
-          _log.e('Microphone permission denied');
-          state = state.copyWith(
-            showPermissionModal: true,
-            errorMessage: 'Microphone permission is required for voice chat',
-          );
-          return;
-        }
+      final hasPermission = await _ensureMicrophonePermission();
+      if (!hasPermission) {
+        _log.w('Microphone permission not granted. Recording aborted.');
+        return;
       }
 
       // Initialize recorder if needed
@@ -152,6 +128,104 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _log.e('Failed to start recording', error: e, stackTrace: stackTrace);
       state = state.copyWith(isRecording: false, errorMessage: 'Failed to start recording: $e');
     }
+  }
+
+  Future<bool> _ensureMicrophonePermission() async {
+    var status = await Permission.microphone.status;
+    _log.i('Current microphone permission status: $status');
+
+    if (status.isGranted) {
+      _resetPermissionDialogState();
+      _iosPermissionDeniedOnce = false;
+      state = state.copyWith(errorMessage: null);
+      return true;
+    }
+
+    if (_shouldOpenMicrophoneSettings(status)) {
+      await _showSettingsDialog();
+      _setPermissionError();
+      return false;
+    }
+
+    final proceed = await _showEducationDialogAndWait();
+    if (!proceed) {
+      _setPermissionError();
+      return false;
+    }
+
+    final requestedStatus = await Permission.microphone.request();
+    status = requestedStatus;
+    _log.i('Microphone permission request result: $status');
+
+    if (requestedStatus.isGranted) {
+      _resetPermissionDialogState();
+      _iosPermissionDeniedOnce = false;
+      state = state.copyWith(errorMessage: null);
+      return true;
+    }
+
+    if (_isIOS && requestedStatus.isDenied) {
+      _iosPermissionDeniedOnce = true;
+    }
+
+    if (_shouldOpenMicrophoneSettings(requestedStatus)) {
+      await _showSettingsDialog();
+    } else {
+      _setPermissionError();
+    }
+    return false;
+  }
+
+  Future<bool> _showEducationDialogAndWait() async {
+    if (_permissionDialogCompleter != null && !_permissionDialogCompleter!.isCompleted) {
+      return _permissionDialogCompleter!.future;
+    }
+    final completer = Completer<bool>();
+    _permissionDialogCompleter = completer;
+    state = state.copyWith(permissionDialog: PermissionDialogType.education);
+    return completer.future;
+  }
+
+  Future<void> _showSettingsDialog() async {
+    _permissionDialogCompleter?.complete(false);
+    _permissionDialogCompleter = null;
+    state = state.copyWith(permissionDialog: PermissionDialogType.settings);
+  }
+
+  bool _shouldOpenMicrophoneSettings(PermissionStatus status) {
+    if (status.isPermanentlyDenied || status.isRestricted) {
+      return true;
+    }
+    if (_isIOS && _iosPermissionDeniedOnce && status.isDenied) {
+      return true;
+    }
+    return false;
+  }
+
+  bool get _isIOS => Platform.isIOS;
+
+  void handleEducationDialogResult(bool accepted) {
+    if (_permissionDialogCompleter != null && !_permissionDialogCompleter!.isCompleted) {
+      _permissionDialogCompleter!.complete(accepted);
+    }
+    _permissionDialogCompleter = null;
+    _resetPermissionDialogState();
+  }
+
+  void dismissPermissionDialog() {
+    if (_permissionDialogCompleter != null && !_permissionDialogCompleter!.isCompleted) {
+      _permissionDialogCompleter!.complete(false);
+    }
+    _permissionDialogCompleter = null;
+    _resetPermissionDialogState();
+  }
+
+  void _resetPermissionDialogState() {
+    state = state.copyWith(permissionDialog: PermissionDialogType.none);
+  }
+
+  void _setPermissionError() {
+    state = state.copyWith(errorMessage: _permissionError);
   }
 
   /// Stop recording and send to backend
@@ -272,11 +346,6 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   /// Clear error message
   void clearError() {
     state = state.copyWith(errorMessage: null);
-  }
-
-  /// Dismiss permission modal
-  void dismissPermissionModal() {
-    state = state.copyWith(showPermissionModal: false);
   }
 
   String? _activeStorySessionId() {

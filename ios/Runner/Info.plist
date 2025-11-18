@@ -50,7 +50,7 @@
     <string>This app uses the camera to scan QR codes and barcodes.</string>
 	<!-- Microphone access for voice chat -->
 	<key>NSMicrophoneUsageDescription</key>
-	<string>This app needs access to your microphone to record voice messages for AI conversation.</string>
+	<string>We need access to your microphone for recording audio.</string>
 	<!-- Photo library access for selecting an avatar image -->
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs access to your photo library to let you choose an avatar.</string>
