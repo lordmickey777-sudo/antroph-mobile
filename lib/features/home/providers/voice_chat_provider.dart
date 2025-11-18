@@ -134,10 +134,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     var status = await Permission.microphone.status;
     _log.i('Current microphone permission status: $status');
 
-    if (status.isGranted) {
-      _resetPermissionDialogState();
-      _iosPermissionDeniedOnce = false;
-      state = state.copyWith(errorMessage: null);
+    if (_isMicrophonePermissionUsable(status)) {
+      _handleMicrophonePermissionGranted();
       return true;
     }
 
@@ -147,32 +145,28 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       return false;
     }
 
-    final proceed = await _showEducationDialogAndWait();
-    if (!proceed) {
-      _setPermissionError();
-      return false;
+    if (status.isDenied) {
+      final proceed = await _showEducationDialogAndWait();
+      if (!proceed) {
+        _setPermissionError();
+        return false;
+      }
     }
 
-    final requestedStatus = await Permission.microphone.request();
-    status = requestedStatus;
+    status = await Permission.microphone.request();
     _log.i('Microphone permission request result: $status');
 
-    if (requestedStatus.isGranted) {
-      _resetPermissionDialogState();
-      _iosPermissionDeniedOnce = false;
-      state = state.copyWith(errorMessage: null);
+    if (_isMicrophonePermissionUsable(status)) {
+      _handleMicrophonePermissionGranted();
       return true;
     }
 
-    if (_isIOS && requestedStatus.isDenied) {
+    if (_isIOS && status.isDenied) {
       _iosPermissionDeniedOnce = true;
     }
 
-    if (_shouldOpenMicrophoneSettings(requestedStatus)) {
-      await _showSettingsDialog();
-    } else {
-      _setPermissionError();
-    }
+    await _showSettingsDialog();
+    _setPermissionError();
     return false;
   }
 
@@ -202,7 +196,17 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     return false;
   }
 
+  bool _isMicrophonePermissionUsable(PermissionStatus status) {
+    return status.isGranted || status.isLimited;
+  }
+
   bool get _isIOS => Platform.isIOS;
+
+  void _handleMicrophonePermissionGranted() {
+    _resetPermissionDialogState();
+    _iosPermissionDeniedOnce = false;
+    state = state.copyWith(errorMessage: null);
+  }
 
   void handleEducationDialogResult(bool accepted) {
     if (_permissionDialogCompleter != null && !_permissionDialogCompleter!.isCompleted) {
