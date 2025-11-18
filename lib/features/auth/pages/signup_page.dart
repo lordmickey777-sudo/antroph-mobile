@@ -22,6 +22,23 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
   final _formKey = GlobalKey<FormState>();
   bool _emailExists = false;
 
+  void _onPasswordChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  bool get _hasMinLength => _passwordCtrl.text.length >= 8;
+  bool get _hasUppercase => RegExp(r'[A-Z]').hasMatch(_passwordCtrl.text);
+  bool get _hasLowercase => RegExp(r'[a-z]').hasMatch(_passwordCtrl.text);
+  bool get _hasDigit => RegExp(r'\d').hasMatch(_passwordCtrl.text);
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordCtrl.addListener(_onPasswordChanged);
+  }
+
   String? _validatePassword(String? v) {
     if (v == null || v.isEmpty) return 'Password required';
     if (v.length < 8) return 'Min 8 chars';
@@ -119,6 +136,13 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                   onToggleObscure: () => setState(() => _obscure = !_obscure),
                   validator: _validatePassword,
                 ),
+                const SizedBox(height: 12),
+                _PasswordPolicyChecklist(
+                  hasMinLength: _hasMinLength,
+                  hasUppercase: _hasUppercase,
+                  hasLowercase: _hasLowercase,
+                  hasDigit: _hasDigit,
+                ),
                 const SizedBox(height: 28),
                 AuthButton(label: 'Register', onTap: _submit, loading: loading),
                 const SizedBox(height: 28),
@@ -167,9 +191,60 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
 
   @override
   void dispose() {
+    _passwordCtrl.removeListener(_onPasswordChanged);
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
+  }
+}
+
+class _PasswordPolicyChecklist extends StatelessWidget {
+  const _PasswordPolicyChecklist({
+    required this.hasMinLength,
+    required this.hasUppercase,
+    required this.hasLowercase,
+    required this.hasDigit,
+  });
+
+  final bool hasMinLength;
+  final bool hasUppercase;
+  final bool hasLowercase;
+  final bool hasDigit;
+
+  @override
+  Widget build(BuildContext context) {
+    final policies = <MapEntry<String, bool>>[
+      MapEntry('At least 8 characters', hasMinLength),
+      MapEntry('Contains an uppercase letter', hasUppercase),
+      MapEntry('Contains a lowercase letter', hasLowercase),
+      MapEntry('Contains a number', hasDigit),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final policy in policies)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  policy.value ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 18,
+                  color: policy.value ? Colors.greenAccent : Colors.white38,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TypographyText(
+                    policy.key,
+                    variant: TypographyVariant.body2,
+                    color: policy.value ? Colors.white : Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 }
