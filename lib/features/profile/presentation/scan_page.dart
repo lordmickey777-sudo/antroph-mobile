@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
+import 'robot_pairing_page.dart';
 
 class ScanPage extends StatefulWidget {
   const ScanPage({super.key, this.enableScanner = true});
@@ -46,10 +48,19 @@ class _ScanPageState extends State<ScanPage> {
     // Stop the camera to avoid repeated scans
     await _controller.stop();
     if (!mounted) return;
-    showToast(context, 'Scanned: $raw', success: true);
-    // Return the value to the previous screen if it expects a result
-    // ignore: use_build_context_synchronously
-    Navigator.of(context).maybePop(raw);
+    final pairingData = _extractPairingData(raw);
+    if (pairingData == null) {
+      showToast(context, 'Invalid QR code. Please scan your Antroph again.');
+      await _controller.start();
+      _processing = false;
+      return;
+    }
+    showToast(context, 'Antroph detected', success: true);
+    if (!mounted) return;
+    context.pushNamed(
+      'robot-pairing',
+      extra: RobotPairingPageArgs(pairingToken: pairingData.token, serial: pairingData.serial),
+    );
   }
 
   @override
@@ -152,6 +163,38 @@ class _ScanPageState extends State<ScanPage> {
       ),
     );
   }
+}
+
+_PairingData? _extractPairingData(String raw) {
+  Uri? uri;
+  try {
+    uri = Uri.parse(raw);
+  } catch (_) {
+    return null;
+  }
+
+  var token = uri.queryParameters['token'];
+  var serial = uri.queryParameters['serial'];
+
+  if (token == null || token.isEmpty) {
+    final match = RegExp(r'token=([^&\s]+)').firstMatch(raw);
+    if (match != null) {
+      token = match.group(1);
+    }
+  }
+  if ((serial == null || serial.isEmpty) && raw.contains('serial=')) {
+    final match = RegExp(r'serial=([^&\s]+)').firstMatch(raw);
+    if (match != null) serial = match.group(1);
+  }
+
+  if (token == null || token.isEmpty) return null;
+  return _PairingData(token: token, serial: serial);
+}
+
+class _PairingData {
+  const _PairingData({required this.token, this.serial});
+  final String token;
+  final String? serial;
 }
 
 class _ScannerOverlay extends StatelessWidget {
