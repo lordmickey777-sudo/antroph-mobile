@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
+import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 import 'package:antroph_mobile/features/story/models/story_models.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page_shimmer.dart';
+import 'package:antroph_mobile/features/story/presentation/collections_page.dart';
+import 'package:antroph_mobile/widgets/empty_state.dart';
 
 class StoryPage extends ConsumerWidget {
   const StoryPage({super.key});
@@ -20,37 +23,46 @@ class StoryPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
-        child: asyncHome.when(
-          loading: () => const StoryPageShimmer(),
-          error: (err, st) {
-            final msg = err is ApiError ? err.message : 'Failed to load stories.';
-            return _ErrorView(
-              message: msg,
-              onRetry: () => ref.refresh(storiesHomeSectionsProvider.future),
-            );
-          },
-          data: (data) {
-            final sections = data.sections;
-            if (sections.isEmpty) return const _EmptyView();
-            return CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
-                    child: TypographyText(
-                      'Story Mode',
-                      variant: TypographyVariant.h1,
-                      color: Colors.white,
+        child: Stack(
+          children: [
+            asyncHome.when(
+              loading: () => const StoryPageShimmer(),
+              error: (err, st) {
+                final msg = err is ApiError ? err.message : 'Failed to load stories.';
+                return _ErrorView(
+                  message: msg,
+                  onRetry: () => ref.refresh(storiesHomeSectionsProvider.future),
+                );
+              },
+              data: (data) {
+                final sections = data.sections;
+                if (sections.isEmpty) return const _EmptyView();
+                return CustomScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  slivers: [
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
+                        child: TypographyText(
+                          'Story Mode',
+                          variant: TypographyVariant.h1,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                for (final section in sections)
-                  _SectionSliver(section: section, onTap: (card) => _openStory(context, card)),
-                const SliverToBoxAdapter(child: SizedBox(height: 120)),
-              ],
-            );
-          },
+                    for (final section in sections)
+                      _SectionSliver(section: section, onTap: (card) => _openStory(context, card)),
+                    const SliverToBoxAdapter(child: SizedBox(height: 120)),
+                  ],
+                );
+              },
+            ),
+            Positioned(
+              top: 12,
+              right: 16,
+              child: _CollectionsAction(onPressed: () => _openCollections(context)),
+            ),
+          ],
         ),
       ),
     );
@@ -70,6 +82,10 @@ class StoryPage extends ConsumerWidget {
         views: card.views,
       ),
     );
+  }
+
+  void _openCollections(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CollectionsPage()));
   }
 }
 
@@ -250,34 +266,58 @@ class _StoryImage extends StatelessWidget {
 
 class _EmptyView extends StatelessWidget {
   const _EmptyView();
+
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(24.0),
-        child: TypographyText('No stories available yet', color: Colors.white70),
-      ),
+    return const EmptyState(
+      title: 'No stories available yet',
+      description: 'Check back later so you don\'t miss new releases.',
+      assetPath: 'assets/images/antroph_happy.png',
     );
   }
 }
 
 class _ErrorView extends StatelessWidget {
   const _ErrorView({required this.message, required this.onRetry});
+
   final String message;
   final Future<void> Function() onRetry;
+
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TypographyText(message, color: Colors.white70),
-            const SizedBox(height: 12),
-            ElevatedButton(onPressed: () => onRetry(), child: const Text('Retry')),
-          ],
-        ),
+    return EmptyState(
+      title: message,
+      description: 'Tap below to try again.',
+      assetPath: 'assets/images/antroph_surprised.png',
+      actionLabel: 'Retry',
+      onAction: () => onRetry(),
+    );
+  }
+}
+
+class _CollectionsAction extends StatelessWidget {
+  const _CollectionsAction({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        elevation: 0,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Icon(CupertinoIcons.collections, size: 18),
+          SizedBox(width: 6),
+          TypographyText('My collections', variant: TypographyVariant.body2, color: Colors.black),
+        ],
       ),
     );
   }
