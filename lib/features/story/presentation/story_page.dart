@@ -10,6 +10,7 @@ import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page_shimmer.dart';
 import 'package:antroph_mobile/features/story/presentation/collections_page.dart';
+import 'package:antroph_mobile/features/story/presentation/collections_action_button.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
 
 class StoryPage extends ConsumerWidget {
@@ -60,7 +61,7 @@ class StoryPage extends ConsumerWidget {
             Positioned(
               top: 12,
               right: 16,
-              child: _CollectionsAction(onPressed: () => _openCollections(context)),
+              child: CollectionsActionButton(onPressed: () => _openCollections(context)),
             ),
           ],
         ),
@@ -291,34 +292,6 @@ class _ErrorView extends StatelessWidget {
       assetPath: 'assets/images/antroph_surprised.png',
       actionLabel: 'Retry',
       onAction: () => onRetry(),
-    );
-  }
-}
-
-class _CollectionsAction extends StatelessWidget {
-  const _CollectionsAction({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-        elevation: 0,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(CupertinoIcons.collections, size: 18),
-          SizedBox(width: 6),
-          TypographyText('My collections', variant: TypographyVariant.body2, color: Colors.black),
-        ],
-      ),
     );
   }
 }

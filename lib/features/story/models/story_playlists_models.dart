@@ -1,81 +1,63 @@
-class StoryCollectionDto {
-  StoryCollectionDto({
+class PlaylistDto {
+  PlaylistDto({
     required this.id,
+    required this.userId,
     required this.name,
     required this.description,
-    required this.coverImageUrl,
-    required this.iconUrl,
     required this.storyIds,
     required this.storyCount,
-    required this.categoryId,
-    required this.tags,
-    required this.isPublished,
-    required this.isFeatured,
-    required this.displayOrder,
-    required this.createdBy,
+    required this.isPublic,
+    required this.coverImageUrl,
     required this.createdAt,
     required this.updatedAt,
   });
 
   final String id;
+  final String userId;
   final String name;
   final String description;
   final String coverImageUrl;
-  final String iconUrl;
   final List<String> storyIds;
   final int storyCount;
-  final String categoryId;
-  final List<String> tags;
-  final bool isPublished;
-  final bool isFeatured;
-  final int displayOrder;
-  final String createdBy;
+  final bool isPublic;
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  factory StoryCollectionDto.fromJson(Map<String, dynamic> json) {
+  factory PlaylistDto.fromJson(Map<String, dynamic> json) {
     final createdAt = DateTime.tryParse((json['created_at'] as String?) ?? '');
     final updatedAt = DateTime.tryParse((json['updated_at'] as String?) ?? '');
-    return StoryCollectionDto(
+    return PlaylistDto(
       id: (json['id'] as String?)?.trim() ?? '',
+      userId: (json['user_id'] as String?)?.trim() ?? '',
       name: (json['name'] as String?)?.trim() ?? '',
       description: (json['description'] as String?)?.trim() ?? '',
       coverImageUrl: (json['cover_image_url'] as String?)?.trim() ?? '',
-      iconUrl: (json['icon_url'] as String?)?.trim() ?? '',
       storyIds: ((json['story_ids'] as List?) ?? const [])
           .map((e) => (e as String?)?.trim() ?? '')
           .where((e) => e.isNotEmpty)
           .toList(),
       storyCount: (json['story_count'] as num?)?.toInt() ?? 0,
-      categoryId: (json['category_id'] as String?)?.trim() ?? '',
-      tags: ((json['tags'] as List?) ?? const [])
-          .map((e) => (e as String?)?.trim() ?? '')
-          .where((e) => e.isNotEmpty)
-          .toList(),
-      isPublished: (json['is_published'] as bool?) ?? false,
-      isFeatured: (json['is_featured'] as bool?) ?? false,
-      displayOrder: (json['display_order'] as num?)?.toInt() ?? 0,
-      createdBy: (json['created_by'] as String?)?.trim() ?? '',
+      isPublic: (json['is_public'] as bool?) ?? false,
       createdAt: createdAt ?? DateTime.now(),
       updatedAt: updatedAt ?? DateTime.now(),
     );
   }
 }
 
-class StoryCollectionDetailDto {
-  StoryCollectionDetailDto({required this.stories});
+class PlaylistDetailDto {
+  PlaylistDetailDto({required this.stories});
 
-  final List<StoryCollectionStoryDto> stories;
+  final List<PlaylistStoryDto> stories;
 
-  factory StoryCollectionDetailDto.fromJson(Map<String, dynamic> json) => StoryCollectionDetailDto(
+  factory PlaylistDetailDto.fromJson(Map<String, dynamic> json) => PlaylistDetailDto(
         stories: ((json['stories'] as List?) ?? const [])
-            .map((e) => StoryCollectionStoryDto.fromJson(e as Map<String, dynamic>))
+            .map((e) => PlaylistStoryDto.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
 }
 
-class StoryCollectionStoryDto {
-  StoryCollectionStoryDto({
+class PlaylistStoryDto {
+  PlaylistStoryDto({
     required this.id,
     required this.storyId,
     required this.title,
@@ -93,13 +75,13 @@ class StoryCollectionStoryDto {
   final int users;
   final int views;
 
-  factory StoryCollectionStoryDto.fromJson(Map<String, dynamic> json) {
+  factory PlaylistStoryDto.fromJson(Map<String, dynamic> json) {
     final rawImage = (json['cover_image_url'] as String?) ??
         (json['image_url'] as String?) ??
         (json['image'] as String?) ??
         (json['thumbnail_url'] as String?) ??
         '';
-    return StoryCollectionStoryDto(
+    return PlaylistStoryDto(
       id: (json['id'] as String?)?.trim() ?? '',
       storyId: (json['story_id'] as String?)?.trim() ?? (json['id'] as String?)?.trim() ?? '',
       title: (json['title'] as String?)?.trim() ?? '',

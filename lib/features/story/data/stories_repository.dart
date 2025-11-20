@@ -3,7 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/error_formatter.dart';
 import '../models/story_models.dart';
-import '../models/story_collections_models.dart';
+import '../models/story_playlists_models.dart';
 import '../models/story_detail.dart';
 import '../models/story_session.dart';
 
@@ -35,46 +35,24 @@ class StoriesRepository {
     }
   }
 
-  Future<List<StoryCollectionDto>> fetchCollections({
-    int limit = 20,
-    int offset = 0,
-    String? categoryId,
-    bool? isFeatured,
-  }) async {
+  Future<List<PlaylistDto>> fetchPlaylists() async {
     try {
-      final queryParams = <String, dynamic>{
-        'limit': limit,
-        'offset': offset,
-      };
-      if (categoryId != null) {
-        queryParams['category_id'] = categoryId;
-      }
-      if (isFeatured != null) {
-        queryParams['is_featured'] = isFeatured;
-      }
-      final res = await _dio.get(
-        '/stories/collections',
-        queryParameters: queryParams,
-        options: Options(extra: const {'skipAuth': true}),
-      );
+      final res = await _dio.get('/playlists');
       final data = res.data as List;
       return data
           .cast<Map<String, dynamic>>()
-          .map((e) => StoryCollectionDto.fromJson(e))
+          .map((e) => PlaylistDto.fromJson(e))
           .toList();
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }
   }
 
-  Future<StoryCollectionDetailDto> fetchCollectionDetail(String collectionId) async {
+  Future<PlaylistDetailDto> fetchPlaylistDetail(String playlistId) async {
     try {
-      final res = await _dio.get(
-        '/stories/collections/$collectionId',
-        options: Options(extra: const {'skipAuth': true}),
-      );
+      final res = await _dio.get('/playlists/$playlistId');
       final data = res.data as Map<String, dynamic>;
-      return StoryCollectionDetailDto.fromJson(data);
+      return PlaylistDetailDto.fromJson(data);
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }

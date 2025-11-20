@@ -7,16 +7,16 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
-import 'package:antroph_mobile/features/story/models/story_collections_models.dart';
+import 'package:antroph_mobile/features/story/models/story_playlists_models.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
-import '../providers/story_collections_provider.dart';
+import '../providers/story_playlists_provider.dart';
 
 class CollectionsPage extends ConsumerWidget {
   const CollectionsPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final collections = ref.watch(storyCollectionsProvider);
+    final collections = ref.watch(storyPlaylistsProvider);
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -33,15 +33,15 @@ class CollectionsPage extends ConsumerWidget {
         loading: () => const CollectionsPageShimmer(),
         error: (err, st) => _PageError(
           message: 'Unable to load collections.',
-          onRetry: () => ref.refresh(storyCollectionsProvider),
+          onRetry: () => ref.refresh(storyPlaylistsProvider),
         ),
         data: (items) {
           if (items.isEmpty) {
-          return const EmptyState(
-            title: 'No collections yet',
-            description: 'Keep an eye out for curated series coming your way.',
-            assetPath: 'assets/images/antroph_smile.png',
-          );
+            return const EmptyState(
+              title: 'No collections yet',
+              description: 'Keep an eye out for curated series coming your way.',
+              assetPath: 'assets/images/antroph_smile.png',
+            );
           }
           return ListView.separated(
             physics: const BouncingScrollPhysics(),
@@ -69,11 +69,11 @@ class CollectionsPage extends ConsumerWidget {
 class CollectionDetailPage extends ConsumerWidget {
   const CollectionDetailPage({super.key, required this.collection});
 
-  final StoryCollectionDto collection;
+  final PlaylistDto collection;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncDetail = ref.watch(storyCollectionDetailProvider(collection.id));
+    final asyncDetail = ref.watch(playlistDetailProvider(collection.id));
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -85,15 +85,15 @@ class CollectionDetailPage extends ConsumerWidget {
         loading: () => const Center(child: CupertinoActivityIndicator(color: Colors.white)),
         error: (err, st) => _PageError(
           message: 'Unable to load stories for this collection.',
-          onRetry: () => ref.refresh(storyCollectionDetailProvider(collection.id)),
+          onRetry: () => ref.refresh(playlistDetailProvider(collection.id)),
         ),
         data: (detail) {
           if (detail.stories.isEmpty) {
-          return const EmptyState(
-            title: 'Nothing to show yet',
-            description: 'This collection does not have stories ready for play.',
-            assetPath: 'assets/images/antroph_neutral.png',
-          );
+            return const EmptyState(
+              title: 'Nothing to show yet',
+              description: 'This collection does not have stories ready for play.',
+              assetPath: 'assets/images/antroph_neutral.png',
+            );
           }
           return ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -116,7 +116,7 @@ class CollectionDetailPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _openStory(BuildContext context, StoryCollectionStoryDto story) async {
+  Future<void> _openStory(BuildContext context, PlaylistStoryDto story) async {
     await showCupertinoModalBottomSheet(
       context: context,
       expand: true,
@@ -134,7 +134,7 @@ class CollectionDetailPage extends ConsumerWidget {
 class _CollectionCard extends StatelessWidget {
   const _CollectionCard({required this.collection, required this.onTap});
 
-  final StoryCollectionDto collection;
+  final PlaylistDto collection;
   final VoidCallback onTap;
 
   @override
@@ -193,7 +193,7 @@ class _CollectionStoryCard extends StatelessWidget {
     required this.onLeave,
   });
 
-  final StoryCollectionStoryDto story;
+  final PlaylistStoryDto story;
   final VoidCallback onPlay;
   final VoidCallback onLeave;
 

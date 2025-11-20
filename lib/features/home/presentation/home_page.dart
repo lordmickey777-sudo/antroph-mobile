@@ -4,6 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/bottom_nav.dart';
 import 'package:antroph_mobile/features/profile/presentation/profile_page.dart';
+import 'package:antroph_mobile/features/story/models/story_playlists_models.dart';
+import 'package:antroph_mobile/features/story/providers/story_playlists_provider.dart';
+import 'package:antroph_mobile/features/story/presentation/collections_page.dart';
+import 'package:antroph_mobile/features/story/presentation/collections_action_button.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/features/auth/pages/login_page.dart';
@@ -11,6 +15,7 @@ import 'package:antroph_mobile/features/auth/pages/signup_page.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/home/widgets/expression_widgets.dart';
 import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
+import 'package:antroph_mobile/widgets/shimmer.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -22,6 +27,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   HomeTab _tab = HomeTab.interact;
   late final PageController _pageController;
+  bool _chipsExpanded = true;
 
   static const _bg = Color(0xFF121516);
   // Panel color was used by the inline sheet; kept here for future use if needed.
@@ -65,10 +71,18 @@ class _HomePageState extends State<HomePage> {
                   });
                 },
                 children: [
-                  _InteractContent(size: size),
+                  _InteractContent(size: size, showCollectionsChips: _chipsExpanded),
                   _AuthGated(child: const StoryPage()),
                   _AuthGated(child: const ProfilePage()),
                 ],
+              ),
+            ),
+            Positioned(
+              top: 12,
+              right: 16,
+              child: CollectionsActionButton(
+                onPressed: _toggleChips,
+                onNavigate: _openCollections,
               ),
             ),
 
@@ -100,6 +114,14 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+  }
+
+  void _openCollections() {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CollectionsPage()));
+  }
+
+  void _toggleChips() {
+    setState(() => _chipsExpanded = !_chipsExpanded);
   }
 }
 
@@ -133,45 +155,14 @@ class _AuthGatedState extends ConsumerState<_AuthGated> {
   }
 }
 
-class _TopChips extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    const tags = [
-      'Learn French',
-      'Practice Gratitude',
-      'Be Homelander',
-      'Parenting',
-      'Workout',
-      'Mindfulness',
-    ];
-    return SizedBox(
-      height: 36,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        itemCount: tags.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, i) => _chip(tags[i]),
-      ),
-    );
-  }
-
-  Widget _chip(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.transparent,
-        border: Border.all(color: Colors.white24),
-        borderRadius: BorderRadius.circular(50),
-      ),
-      child: TypographyText(label, variant: TypographyVariant.body2, color: Colors.white),
-    );
-  }
-}
-
 class _InteractContent extends ConsumerStatefulWidget {
-  const _InteractContent({required this.size});
+  const _InteractContent({
+    required this.size,
+    required this.showCollectionsChips,
+  });
+
   final Size size;
+  final bool showCollectionsChips;
 
   @override
   ConsumerState<_InteractContent> createState() => _InteractContentState();
@@ -215,7 +206,7 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 8),
-        _TopChips(),
+        HomeCollectionsChips(expanded: widget.showCollectionsChips),
         SizedBox(height: widget.size.height * 0.06),
 
         // Expression Display with synchronized expressions
@@ -364,5 +355,130 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
       return state.aiResponse!;
     }
     return 'Bonjour! Comment ça va?';
+  }
+}
+
+class HomeCollectionsChips extends ConsumerWidget {
+  const HomeCollectionsChips({super.key, required this.expanded});
+
+  final bool expanded;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final playlistsAsync = ref.watch(storyPlaylistsProvider);
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeInOut,
+      child: expanded
+          ? playlistsAsync.when(
+              loading: () => _LoadingChips(),
+              error: (err, st) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: TypographyText(
+                  'Unable to load collections.',
+                  variant: TypographyVariant.body2,
+                  color: Colors.white54,
+                ),
+              ),
+              data: (playlists) {
+                if (playlists.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                final display = playlists.take(6).toList();
+                return SizedBox(
+                  height: 92,
+                  child: ListView.separated(
+                    key: const PageStorageKey('collections-chips'),
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    itemBuilder: (context, index) => PlaylistChip(playlist: display[index]),
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemCount: display.length,
+                  ),
+                );
+              },
+            )
+          : const SizedBox.shrink(),
+    );
+  }
+}
+
+class _LoadingChips extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 92,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemBuilder: (_, __) => Container(
+          width: 180,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1B1D1F),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ShimmerBox(width: 120, height: 14),
+              SizedBox(height: 10),
+              ShimmerBox(width: 160, height: 10),
+            ],
+          ),
+        ),
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemCount: 4,
+      ),
+    );
+  }
+}
+
+class PlaylistChip extends ConsumerWidget {
+  const PlaylistChip({super.key, required this.playlist});
+
+  final PlaylistDto playlist;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final subtitle = ref.watch(playlistDetailProvider(playlist.id)).when(
+          loading: () => 'Loading stories...',
+          error: (_, __) => '${playlist.storyCount} stories',
+          data: (detail) {
+            final titles = detail.stories
+                .map((s) => s.title)
+                .where((title) => title.isNotEmpty)
+                .take(2)
+                .toList();
+            if (titles.isEmpty) return '${playlist.storyCount} stories';
+            return titles.join(', ');
+          },
+        );
+
+    return Container(
+      constraints: const BoxConstraints(minWidth: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white10,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TypographyText(playlist.name, variant: TypographyVariant.body1, color: Colors.white),
+          const SizedBox(height: 4),
+          TypographyText(
+            subtitle,
+            variant: TypographyVariant.body2,
+            color: Colors.white70,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
   }
 }
