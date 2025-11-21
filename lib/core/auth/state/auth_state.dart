@@ -55,6 +55,7 @@ class AuthController extends AsyncNotifier<AuthUser?> {
 
   @override
   Future<AuthUser?> build() async {
+    _setupTokenRefresher();
     // Try to restore tokens from persistent storage
     final restored = await _loadTokens();
     if (restored != null && restored.isValid) {
@@ -71,7 +72,10 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       // For now, return a dummy AuthUser (customize as needed)
       return AuthUser(id: 'self', email: '', emailVerificationRequired: false);
     }
-    // Wire token refresher so the HTTP layer can refresh on 401.
+    return null;
+  }
+
+  void _setupTokenRefresher() {
     ApiClient.I.setTokenRefresher((refreshToken) async {
       try {
         final map = await _repo.refreshToken(refreshToken: refreshToken);
@@ -99,7 +103,6 @@ class AuthController extends AsyncNotifier<AuthUser?> {
         return false;
       }
     });
-    return null;
   }
 
   Future<void> register({
