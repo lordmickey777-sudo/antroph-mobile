@@ -445,15 +445,15 @@ class PlaylistChip extends ConsumerWidget {
     final subtitle = ref
         .watch(playlistDetailProvider(playlist.id))
         .when(
-          loading: () => 'Loading stories...',
-          error: (_, __) => '${playlist.storyCount} stories',
+          loading: () => _collectionSubtitleFromCount(playlist.storyCount),
+          error: (_, __) => _collectionSubtitleFromCount(playlist.storyCount),
           data: (detail) {
             final titles = detail.stories
                 .map((s) => s.title)
                 .where((title) => title.isNotEmpty)
                 .take(2)
                 .toList();
-            if (titles.isEmpty) return '${playlist.storyCount} stories';
+            if (titles.isEmpty) return _collectionSubtitleFromCount(playlist.storyCount);
             return titles.join(', ');
           },
         );
@@ -478,4 +478,10 @@ class PlaylistChip extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _collectionSubtitleFromCount(int count) {
+  if (count <= 0) return 'No stories yet';
+  final label = count == 1 ? 'story' : 'stories';
+  return '$count $label';
 }
