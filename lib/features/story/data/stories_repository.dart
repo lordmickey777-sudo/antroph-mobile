@@ -38,14 +38,29 @@ class StoriesRepository {
   Future<List<PlaylistDto>> fetchPlaylists() async {
     try {
       final res = await _dio.get('/playlists');
-      final data = res.data as List;
-      return data
-          .cast<Map<String, dynamic>>()
-          .map((e) => PlaylistDto.fromJson(e))
-          .toList();
+      final records = _extractPlaylistRecords(res.data);
+      return records.map((e) => PlaylistDto.fromJson(e)).toList();
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }
+  }
+
+  List<Map<String, dynamic>> _extractPlaylistRecords(dynamic payload) {
+    if (payload is List) {
+      return payload.whereType<Map<String, dynamic>>().toList();
+    }
+    if (payload is Map<String, dynamic>) {
+      final nestedList = (payload['data'] as List?)
+              ?? (payload['playlists'] as List?)
+              ?? (payload['collections'] as List?)
+              ?? (payload['items'] as List?)
+              ?? (payload['results'] as List?);
+      if (nestedList != null) {
+        return nestedList.whereType<Map<String, dynamic>>().toList();
+      }
+      return [payload];
+    }
+    return [];
   }
 
   Future<PlaylistDetailDto> fetchPlaylistDetail(String playlistId) async {
@@ -59,7 +74,6 @@ class StoriesRepository {
   }
 
   Future<void> addStoriesToPlaylist({
-    required String playlistId,
     required List<String> storyIds,
     int? position,
   }) async {
@@ -70,7 +84,7 @@ class StoriesRepository {
       if (position != null) {
         payload['position'] = position;
       }
-      await _dio.post('/playlists/$playlistId/stories', data: payload);
+      await _dio.post('/playlists/stories', data: payload);
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }
