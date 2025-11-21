@@ -77,14 +77,15 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
-            Positioned(
-              top: 12,
-              right: 16,
-              child: CollectionsActionButton(
-                onPressed: _toggleChips,
-                onNavigate: _openCollections,
+            if (_tab != HomeTab.profile)
+              Positioned(
+                top: 12,
+                right: 16,
+                child: CollectionsActionButton(
+                  onPressed: _toggleChips,
+                  onNavigate: _openCollections,
+                ),
               ),
-            ),
 
             // Bottom rounded navigation panel
             Positioned(
@@ -156,10 +157,7 @@ class _AuthGatedState extends ConsumerState<_AuthGated> {
 }
 
 class _InteractContent extends ConsumerStatefulWidget {
-  const _InteractContent({
-    required this.size,
-    required this.showCollectionsChips,
-  });
+  const _InteractContent({required this.size, required this.showCollectionsChips});
 
   final Size size;
   final bool showCollectionsChips;
@@ -444,7 +442,9 @@ class PlaylistChip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final subtitle = ref.watch(playlistDetailProvider(playlist.id)).when(
+    final subtitle = ref
+        .watch(playlistDetailProvider(playlist.id))
+        .when(
           loading: () => 'Loading stories...',
           error: (_, __) => '${playlist.storyCount} stories',
           data: (detail) {
@@ -461,10 +461,7 @@ class PlaylistChip extends ConsumerWidget {
     return Container(
       constraints: const BoxConstraints(minWidth: 180),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white10,
-        borderRadius: BorderRadius.circular(999),
-      ),
+      decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(999)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

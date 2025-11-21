@@ -58,6 +58,24 @@ class StoriesRepository {
     }
   }
 
+  Future<void> addStoriesToPlaylist({
+    required String playlistId,
+    required List<String> storyIds,
+    int? position,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'story_ids': storyIds,
+      };
+      if (position != null) {
+        payload['position'] = position;
+      }
+      await _dio.post('/playlists/$playlistId/stories', data: payload);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
   /// Fetch detailed story information by ID.
   /// Public endpoint; no auth required.
   Future<StoryDetailDto> fetchStoryDetail(String storyId) async {

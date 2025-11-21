@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
+import 'package:antroph_mobile/features/story/providers/story_playlists_provider.dart';
+import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/features/story/providers/story_session_provider.dart';
 
 class StorySheet extends ConsumerStatefulWidget {
@@ -37,7 +39,7 @@ class _StorySheetState extends ConsumerState<StorySheet> {
   void dispose() {
     // Clear session when sheet is closed
     ref.read(storySessionProvider.notifier).clearSession();
-    
+
     super.dispose();
   }
 
@@ -74,6 +76,7 @@ class _StorySheetState extends ConsumerState<StorySheet> {
                           subtitle: widget.subtitle,
                           imageAsset: widget.imageAsset,
                           sessionState: sessionState,
+                          onAddToPlaylist: _openPlaylistPicker,
                         ),
                         const SizedBox(height: 20),
                         TypographyText(
@@ -112,6 +115,13 @@ class _StorySheetState extends ConsumerState<StorySheet> {
       ),
     );
   }
+
+  Future<void> _openPlaylistPicker() async {
+    await showCupertinoModalPopup(
+      context: context,
+      builder: (_) => _PlaylistsModal(storyId: widget.storyId),
+    );
+  }
 }
 
 class _GrabHandle extends StatelessWidget {
@@ -140,6 +150,7 @@ class _HeroCard extends ConsumerWidget {
     required this.subtitle,
     required this.imageAsset,
     required this.sessionState,
+    required this.onAddToPlaylist,
   });
 
   final Size size;
@@ -148,6 +159,7 @@ class _HeroCard extends ConsumerWidget {
   final String subtitle;
   final String imageAsset;
   final StorySessionState sessionState;
+  final VoidCallback onAddToPlaylist;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -219,58 +231,60 @@ class _HeroCard extends ConsumerWidget {
                         padding: EdgeInsets.symmetric(vertical: 10),
                         child: CupertinoActivityIndicator(color: Colors.white),
                       ),
-                    )
-                  else if (!hasSession)
-                    Row(
-                      children: [
-                        _GlassButton(
-                          label: 'Play',
-                          icon: CupertinoIcons.play_fill,
-                          onPressed: () =>
-                              ref.read(storySessionProvider.notifier).startSession(storyId),
-                        ),
-                        const SizedBox(width: 12),
-                        _PrimaryPillButton(
-                          label: 'Leave story',
-                          // Pop using the root navigator to reliably close the sheet even with nested navigators
-                          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
-                        ),
-                      ],
-                    )
-                  else if (isPaused)
-                    Row(
-                      children: [
-                        _GlassButton(
-                          label: 'Resume',
-                          icon: CupertinoIcons.play_fill,
-                          onPressed: () =>
-                              ref.read(storySessionProvider.notifier).playSession(storyId),
-                        ),
-                        const SizedBox(width: 12),
-                        _PrimaryPillButton(
-                          label: 'Leave story',
-                          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
-                        ),
-                      ],
-                    )
-                  else
-                    Row(
-                      children: [
-                        _GlassButton(
-                          label: 'Pause',
-                          icon: CupertinoIcons.pause_fill,
-                          onPressed: () =>
-                              ref.read(storySessionProvider.notifier).pauseSession(storyId),
-                        ),
-                        const SizedBox(width: 12),
-                        _PrimaryPillButton(
-                          label: 'Continue',
-                          onPressed: () {
-                            // TODO: Navigate to story playback screen
-                          },
-                        ),
-                      ],
                     ),
+                  // else if (!hasSession)
+                  //   Row(
+                  //     children: [
+                  //       _GlassButton(
+                  //         label: 'Play',
+                  //         icon: CupertinoIcons.play_fill,
+                  //         onPressed: () =>
+                  //             ref.read(storySessionProvider.notifier).startSession(storyId),
+                  //       ),
+                  //       const SizedBox(width: 12),
+                  //       _PrimaryPillButton(
+                  //         label: 'Leave story',
+                  //         // Pop using the root navigator to reliably close the sheet even with nested navigators
+                  //         onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                  //       ),
+                  //     ],
+                  //   )
+                  // else if (isPaused)
+                  //   Row(
+                  //     children: [
+                  //       _GlassButton(
+                  //         label: 'Resume',
+                  //         icon: CupertinoIcons.play_fill,
+                  //         onPressed: () =>
+                  //             ref.read(storySessionProvider.notifier).playSession(storyId),
+                  //       ),
+                  //       const SizedBox(width: 12),
+                  //       _PrimaryPillButton(
+                  //         label: 'Leave story',
+                  //         onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                  //       ),
+                  //     ],
+                  //   )
+                  // else
+                  //   Row(
+                  //     children: [
+                  //       _GlassButton(
+                  //         label: 'Pause',
+                  //         icon: CupertinoIcons.pause_fill,
+                  //         onPressed: () =>
+                  //             ref.read(storySessionProvider.notifier).pauseSession(storyId),
+                  //       ),
+                  //       const SizedBox(width: 12),
+                  //       _PrimaryPillButton(
+                  //         label: 'Continue',
+                  //         onPressed: () {
+                  //           // TODO: Navigate to story playback screen
+                  //         },
+                  //       ),
+                  //     ],
+                  //   ),
+                  const SizedBox(height: 12),
+                  _AddToPlaylistButton(onPressed: onAddToPlaylist),
                 ],
               ),
             ),
@@ -372,6 +386,182 @@ class _PrimaryPillButton extends StatelessWidget {
         variant: TypographyVariant.body2,
         color: Colors.white,
         fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+}
+
+class _AddToPlaylistButton extends StatelessWidget {
+  const _AddToPlaylistButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        backgroundColor: const Color.fromARGB(255, 15, 9, 9).withOpacity(0.78),
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        elevation: 0,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.playlist_add, size: 18, color: Colors.white),
+          const SizedBox(width: 6),
+          const TypographyText(
+            'Add to playlist',
+            variant: TypographyVariant.body2,
+            color: Colors.white,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlaylistsModal extends ConsumerStatefulWidget {
+  const _PlaylistsModal({required this.storyId});
+
+  final String storyId;
+
+  @override
+  ConsumerState<_PlaylistsModal> createState() => _PlaylistsModalState();
+}
+
+class _PlaylistsModalState extends ConsumerState<_PlaylistsModal> {
+  String? _loadingId;
+  String? _error;
+
+  Future<void> _addToPlaylist(String playlistId) async {
+    setState(() {
+      _loadingId = playlistId;
+      _error = null;
+    });
+    try {
+      await ref
+          .read(storiesRepositoryProvider)
+          .addStoriesToPlaylist(playlistId: playlistId, storyIds: [widget.storyId]);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Story added to playlist')));
+    } catch (err) {
+      setState(() {
+        _error = err.toString();
+        _loadingId = null;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final playlists = ref.watch(storyPlaylistsProvider);
+    return Material(
+      color: Colors.transparent,
+      child: SafeArea(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0D0F11),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: TypographyText(
+                      'Add to playlist',
+                      variant: TypographyVariant.h2,
+                      color: Colors.white,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: const Icon(CupertinoIcons.xmark, color: Colors.white, size: 20),
+                  ),
+                ],
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                TypographyText(
+                  _error!,
+                  variant: TypographyVariant.body2,
+                  color: Colors.redAccent,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+              const SizedBox(height: 12),
+              playlists.when(
+                loading: () => const Center(child: CupertinoActivityIndicator(color: Colors.white)),
+                error: (err, st) => Center(
+                  child: TypographyText(
+                    'Unable to load playlists.',
+                    variant: TypographyVariant.body2,
+                    color: Colors.white54,
+                  ),
+                ),
+                data: (items) {
+                  if (items.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: TypographyText(
+                        'You have no playlists yet.',
+                        variant: TypographyVariant.body2,
+                        color: Colors.white54,
+                      ),
+                    );
+                  }
+                  return ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.5,
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const Divider(color: Colors.white12),
+                      itemBuilder: (context, index) {
+                        final playlist = items[index];
+                        final isLoading = _loadingId == playlist.id;
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          title: TypographyText(
+                            playlist.name,
+                            variant: TypographyVariant.body1,
+                            color: Colors.white,
+                          ),
+                          subtitle: TypographyText(
+                            playlist.description.isNotEmpty
+                                ? playlist.description
+                                : '${playlist.storyCount} stories',
+                            variant: TypographyVariant.body2,
+                            color: Colors.white60,
+                          ),
+                          trailing: isLoading
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CupertinoActivityIndicator(color: Colors.white),
+                                )
+                              : const Icon(CupertinoIcons.add, color: Colors.white),
+                          onTap: isLoading ? null : () => _addToPlaylist(playlist.id),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

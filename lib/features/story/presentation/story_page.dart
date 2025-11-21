@@ -9,8 +9,6 @@ import 'package:antroph_mobile/features/story/models/story_models.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page_shimmer.dart';
-import 'package:antroph_mobile/features/story/presentation/collections_page.dart';
-import 'package:antroph_mobile/features/story/presentation/collections_action_button.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
 
 class StoryPage extends ConsumerWidget {
@@ -29,10 +27,13 @@ class StoryPage extends ConsumerWidget {
             asyncHome.when(
               loading: () => const StoryPageShimmer(),
               error: (err, st) {
-                final msg = err is ApiError ? err.message : 'Failed to load stories.';
+                final msg = err is ApiError
+                    ? err.message
+                    : 'Failed to load stories.';
                 return _ErrorView(
                   message: msg,
-                  onRetry: () => ref.refresh(storiesHomeSectionsProvider.future),
+                  onRetry: () =>
+                      ref.refresh(storiesHomeSectionsProvider.future),
                 );
               },
               data: (data) {
@@ -52,16 +53,14 @@ class StoryPage extends ConsumerWidget {
                       ),
                     ),
                     for (final section in sections)
-                      _SectionSliver(section: section, onTap: (card) => _openStory(context, card)),
+                      _SectionSliver(
+                        section: section,
+                        onTap: (card) => _openStory(context, card),
+                      ),
                     const SliverToBoxAdapter(child: SizedBox(height: 120)),
                   ],
                 );
               },
-            ),
-            Positioned(
-              top: 12,
-              right: 16,
-              child: CollectionsActionButton(onPressed: () => _openCollections(context)),
             ),
           ],
         ),
@@ -83,10 +82,6 @@ class StoryPage extends ConsumerWidget {
         views: card.views,
       ),
     );
-  }
-
-  void _openCollections(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CollectionsPage()));
   }
 }
 
@@ -141,7 +136,11 @@ class _SideLabel extends StatelessWidget {
           alignment: Alignment.center,
           child: Padding(
             padding: const EdgeInsets.only(left: 40.0),
-            child: TypographyText(text, variant: TypographyVariant.body1, color: Colors.white),
+            child: TypographyText(
+              text,
+              variant: TypographyVariant.body1,
+              color: Colors.white,
+            ),
           ),
         ),
       ),
@@ -180,7 +179,10 @@ class _StoryCard extends StatelessWidget {
                         topLeft: Radius.circular(cardRadius),
                         topRight: Radius.circular(cardRadius),
                       ),
-                      child: AspectRatio(aspectRatio: 1.2, child: _StoryImage(image: item.image)),
+                      child: AspectRatio(
+                        aspectRatio: 1.2,
+                        child: _StoryImage(image: item.image),
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Padding(
@@ -204,7 +206,11 @@ class _StoryCard extends StatelessWidget {
                           const SizedBox(height: 8),
                           Row(
                             children: [
-                              const Icon(CupertinoIcons.person_2, size: 14, color: Colors.white60),
+                              const Icon(
+                                CupertinoIcons.person_2,
+                                size: 14,
+                                color: Colors.white60,
+                              ),
                               const SizedBox(width: 6),
                               TypographyText(
                                 '${item.users}',
@@ -212,7 +218,11 @@ class _StoryCard extends StatelessWidget {
                                 color: Colors.white70,
                               ),
                               const SizedBox(width: 14),
-                              const Icon(CupertinoIcons.eye, size: 14, color: Colors.white60),
+                              const Icon(
+                                CupertinoIcons.eye,
+                                size: 14,
+                                color: Colors.white60,
+                              ),
                               const SizedBox(width: 6),
                               TypographyText(
                                 '${item.views}',
