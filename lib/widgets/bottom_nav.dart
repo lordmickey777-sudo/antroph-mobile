@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
-enum HomeTab { interact, story, profile }
+enum HomeTab { story, profile }
 
 class BottomNav extends StatelessWidget {
   const BottomNav({super.key, required this.current, required this.onChanged});
@@ -45,16 +45,10 @@ class BottomNav extends StatelessWidget {
                   ],
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                // Fixed order navigation items: Interact | Story | Profile
+                // Fixed order navigation items: Story | Profile
                 // Selected item is highlighted but items do NOT reorder.
                 child: Row(
                   children: [
-                    _navItem(
-                      context,
-                      tab: HomeTab.interact,
-                      iconPath: 'assets/images/chat.png',
-                      label: 'Interact',
-                    ),
                     _navItem(
                       context,
                       tab: HomeTab.story,
