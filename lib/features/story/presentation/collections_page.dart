@@ -58,10 +58,21 @@ class CollectionsPage extends ConsumerWidget {
                     builder: (_) => CollectionDetailPage(collection: collection),
                   ),
                 ),
+                onStartChat: () => _startChatForCollection(context, collection.name),
               );
             },
           );
         },
+      ),
+    );
+  }
+
+  void _startChatForCollection(BuildContext context, String title) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          storyTitle: title.isNotEmpty ? title : 'Chat',
+        ),
       ),
     );
   }
@@ -107,7 +118,7 @@ class CollectionDetailPage extends ConsumerWidget {
                 child: _CollectionStoryCard(
                   story: story,
                   onPlay: () => _openStory(context, story),
-                  onStartChat: () => _startChat(context, story),
+                  onStartChat: () => _startChatForStory(context, story),
                   onLeave: () => Navigator.of(context).pop(),
                 ),
               );
@@ -132,7 +143,7 @@ class CollectionDetailPage extends ConsumerWidget {
     );
   }
 
-  void _startChat(BuildContext context, PlaylistStoryDto story) {
+  void _startChatForStory(BuildContext context, PlaylistStoryDto story) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatPage(
@@ -141,13 +152,28 @@ class CollectionDetailPage extends ConsumerWidget {
       ),
     );
   }
+
+  void _startChatForCollection(BuildContext context, String title) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          storyTitle: title.isNotEmpty ? title : 'Chat',
+        ),
+      ),
+    );
+  }
 }
 
 class _CollectionCard extends StatelessWidget {
-  const _CollectionCard({required this.collection, required this.onTap});
+  const _CollectionCard({
+    required this.collection,
+    required this.onTap,
+    required this.onStartChat,
+  });
 
   final PlaylistDto collection;
   final VoidCallback onTap;
+  final VoidCallback onStartChat;
 
   @override
   Widget build(BuildContext context) {
@@ -187,6 +213,23 @@ class _CollectionCard extends StatelessWidget {
                       const SizedBox(width: 8),
                       TypographyText('${collection.storyCount} stories', variant: TypographyVariant.body2, color: Colors.white70),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: AppButton(
+                      onPressed: onStartChat,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        elevation: 0,
+                      ),
+                      child: const TypographyText(
+                        'Start story',
+                        variant: TypographyVariant.body2,
+                        color: Colors.black,
+                      ),
+                    ),
                   ),
                 ],
               ),
