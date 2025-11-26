@@ -56,23 +56,40 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   @override
   Future<AuthUser?> build() async {
     _setupTokenRefresher();
-    // Try to restore tokens from persistent storage
     final restored = await _loadTokens();
-    if (restored != null && restored.isValid) {
-      _tokens = restored;
-      ApiClient.I.setAuthTokens(
-        accessToken: restored.accessToken,
-        refreshToken: restored.refreshToken,
-        tokenType: restored.tokenType,
+    if (restored == null || !restored.isValid) return null;
+
+    _tokens = restored;
+    ApiClient.I.setAuthTokens(
+      accessToken: restored.accessToken,
+      refreshToken: restored.refreshToken,
+      tokenType: restored.tokenType,
+    );
+
+    // Refresh tokens on launch so we don't drop the session due to an expired access token.
+    try {
+      final refreshedMap = await _repo.refreshToken(refreshToken: restored.refreshToken);
+      final refreshedTokens = AuthTokens(
+        accessToken: refreshedMap['access_token'] ?? restored.accessToken,
+        refreshToken: refreshedMap['refresh_token'] ?? restored.refreshToken,
+        tokenType: refreshedMap['token_type'] ?? restored.tokenType,
       );
-      // Optionally, fetch user info here if needed
-      // For now, just keep user as logged in
-      // You may want to validate token with backend here
-      // (e.g., fetch profile, handle 401 to auto-logout if expired)
-      // For now, return a dummy AuthUser (customize as needed)
-      return AuthUser(id: 'self', email: '', emailVerificationRequired: false);
+      _tokens = refreshedTokens;
+      ApiClient.I.setAuthTokens(
+        accessToken: refreshedTokens.accessToken,
+        refreshToken: refreshedTokens.refreshToken,
+        tokenType: refreshedTokens.tokenType,
+      );
+      await _persistTokens(refreshedTokens);
+    } catch (_) {
+      _tokens = null;
+      ApiClient.I.clearAuthTokens();
+      await _clearTokens();
+      return null;
     }
-    return null;
+
+    final email = await EmailStorageService.getLastEmail() ?? '';
+    return AuthUser(id: 'self', email: email, emailVerificationRequired: false);
   }
 
   void _setupTokenRefresher() {

@@ -2,33 +2,63 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
+import 'package:antroph_mobile/core/auth/state/auth_state.dart';
+import 'package:antroph_mobile/core/auth/models/user.dart';
+import 'package:antroph_mobile/core/onboarding/onboarding_storage_service.dart';
 
-class SplashPage extends StatefulWidget {
+class SplashPage extends ConsumerStatefulWidget {
   const SplashPage({super.key});
 
   @override
-  State<SplashPage> createState() => _SplashPageState();
+  ConsumerState<SplashPage> createState() => _SplashPageState();
 }
 
-class _SplashPageState extends State<SplashPage> {
-  Timer? _timer;
+class _SplashPageState extends ConsumerState<SplashPage> {
+  bool _navigated = false;
 
   @override
   void initState() {
     super.initState();
-    // Navigate to onboarding after a short delay
-    _timer = Timer(const Duration(milliseconds: 1500), () {
-      if (!mounted) return;
-      context.go('/onboarding');
-    });
+    _determineStartRoute();
   }
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
+  Future<void> _determineStartRoute() async {
+    // Keep the splash visible briefly while we restore session/onboarding state.
+    final hasCompletedOnboarding = await OnboardingStorageService.hasCompletedOnboarding();
+    final minimumDisplay = hasCompletedOnboarding
+        ? Future<void>.value()
+        : Future.delayed(const Duration(milliseconds: 1200));
+
+    AuthUser? user;
+    try {
+      user = await ref.read(authControllerProvider.future);
+    } catch (_) {
+      user = null;
+    }
+
+    await minimumDisplay;
+    if (!mounted) return;
+
+    if (!hasCompletedOnboarding) {
+      _navigate('/onboarding');
+      return;
+    }
+
+    if (user != null) {
+      _navigate('/home');
+      return;
+    }
+
+    _navigate('/auth/login');
+  }
+
+  void _navigate(String path) {
+    if (_navigated || !mounted) return;
+    _navigated = true;
+    context.go(path);
   }
 
   @override

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:antroph_mobile/core/onboarding/onboarding_storage_service.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
@@ -122,14 +123,17 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             shape: const StadiumBorder(),
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
-                          onPressed: () {
+                          onPressed: () async {
                             if (_index < 2) {
                               _controller.nextPage(
                                 duration: const Duration(milliseconds: 250),
                                 curve: Curves.easeOut,
                               );
                             } else {
-                              context.go('/home');
+                              await OnboardingStorageService.markCompleted();
+                              if (mounted) {
+                                context.go('/auth/login');
+                              }
                             }
                           },
                           child: Row(
