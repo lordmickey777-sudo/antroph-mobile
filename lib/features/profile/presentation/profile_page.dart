@@ -172,39 +172,48 @@ class _ProfileMenuItem extends StatelessWidget {
 class _ProfileNudge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(profileControllerProvider).value;
-    final missing = ref.read(profileControllerProvider.notifier).missingFields(profile);
-    if (missing.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: InkWell(
-        onTap: () => context.pushNamed('edit-profile'),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.grey.withOpacity(0.12),
+    final profileAsync = ref.watch(profileControllerProvider);
+    return profileAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (profile) {
+        if (profile == null) return const SizedBox.shrink();
+        // Defensive: treat null/false the same to avoid runtime errors on hot reload.
+        if (profile.isCompleted == true) return const SizedBox.shrink();
+        final missing = ref.read(profileControllerProvider.notifier).missingFields(profile);
+        if (missing.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: InkWell(
+            onTap: () => context.pushNamed('edit-profile'),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.withOpacity(0.4)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.info_outline, color: Colors.orangeAccent),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TypographyText(
-                  'Complete your profile',
-
-                  // 'Complete your profile: ${missing.join(', ')}',
-                  variant: TypographyVariant.body2,
-                  color: Colors.white,
-                ),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.withOpacity(0.4)),
               ),
-              const Icon(Icons.chevron_right, color: Colors.white70),
-            ],
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.orangeAccent),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TypographyText(
+                      'Complete your profile',
+
+                      // 'Complete your profile: ${missing.join(', ')}',
+                      variant: TypographyVariant.body2,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: Colors.white70),
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

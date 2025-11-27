@@ -8,6 +8,7 @@ class UserProfile {
   final DateTime? dateOfBirth;
   final String? timezone;
   final String? language;
+  final bool isCompleted;
 
   const UserProfile({
     required this.id,
@@ -19,6 +20,7 @@ class UserProfile {
     this.dateOfBirth,
     this.timezone,
     this.language,
+    this.isCompleted = false,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -32,6 +34,7 @@ class UserProfile {
       dateOfBirth: _parseDate(json['date_of_birth']),
       timezone: json['timezone'] as String?,
       language: json['language'] as String?,
+      isCompleted: json['is_completed'] as bool? ?? false,
     );
   }
 

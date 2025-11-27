@@ -44,6 +44,7 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
         dateOfBirth: null,
         timezone: null,
         language: null,
+        isCompleted: false,
       );
     }
   }
@@ -69,6 +70,7 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
           dateOfBirth: current.dateOfBirth,
           timezone: current.timezone,
           language: current.language,
+          isCompleted: current.isCompleted,
         );
         state = AsyncValue.data(updated);
       }
@@ -149,6 +151,7 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
 
   List<String> missingFields(UserProfile? profile) {
     final p = profile;
+    if (p?.isCompleted == true) return [];
     if (p == null) return ['profile'];
     final missing = <String>[];
     if (p.avatarUrl == null || p.avatarUrl!.isEmpty) missing.add('avatar');

@@ -43,7 +43,7 @@ class StoryPage extends ConsumerWidget {
                       child: Padding(
                         padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
                         child: TypographyText(
-                          'Story Mode',
+                          'Stories',
                           variant: TypographyVariant.h1,
                           color: Colors.white,
                         ),
