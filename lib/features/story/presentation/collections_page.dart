@@ -52,9 +52,7 @@ class CollectionsPage extends ConsumerWidget {
               return _CollectionCard(
                 collection: collection,
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => CollectionDetailPage(collection: collection),
-                  ),
+                  MaterialPageRoute(builder: (_) => CollectionDetailPage(collection: collection)),
                 ),
                 onStartChat: () => _startChatForCollection(context, collection.name),
               );
@@ -67,11 +65,7 @@ class CollectionsPage extends ConsumerWidget {
 
   void _startChatForCollection(BuildContext context, String title) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatPage(
-          storyTitle: title.isNotEmpty ? title : 'Chat',
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => ChatPage(storyTitle: title.isNotEmpty ? title : 'Chat')),
     );
   }
 }
@@ -128,40 +122,28 @@ class CollectionDetailPage extends ConsumerWidget {
   }
 
   Future<void> _startStory(BuildContext context, PlaylistStoryDto story) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => StoryPlayerPage(story: story),
-      ),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => StoryPlayerPage(story: story)));
   }
 
   void _startChatForStory(BuildContext context, PlaylistStoryDto story) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatPage(
-          storyTitle: story.title.isNotEmpty ? story.title : 'Chat',
-        ),
+        builder: (_) => ChatPage(storyTitle: story.title.isNotEmpty ? story.title : 'Chat'),
       ),
     );
   }
 
   void _startChatForCollection(BuildContext context, String title) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatPage(
-          storyTitle: title.isNotEmpty ? title : 'Chat',
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => ChatPage(storyTitle: title.isNotEmpty ? title : 'Chat')),
     );
   }
 }
 
 class _CollectionCard extends StatelessWidget {
-  const _CollectionCard({
-    required this.collection,
-    required this.onTap,
-    required this.onStartChat,
-  });
+  const _CollectionCard({required this.collection, required this.onTap, required this.onStartChat});
 
   final PlaylistDto collection;
   final VoidCallback onTap;
@@ -189,21 +171,29 @@ class _CollectionCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TypographyText(collection.name, variant: TypographyVariant.body1, color: Colors.white),
-                  const SizedBox(height: 4),
                   TypographyText(
-                    collection.description,
-                    variant: TypographyVariant.body2,
-                    color: Colors.white70,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    collection.name,
+                    variant: TypographyVariant.body1,
+                    color: Colors.white,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
+                  // TypographyText(
+                  //   collection.description,
+                  //   variant: TypographyVariant.body2,
+                  //   color: Colors.white70,
+                  //   maxLines: 2,
+                  //   overflow: TextOverflow.ellipsis,
+                  // ),
+                  // const SizedBox(height: 8),
                   Row(
                     children: [
                       const Icon(CupertinoIcons.collections, size: 16, color: Colors.white60),
                       const SizedBox(width: 8),
-                      TypographyText('${collection.storyCount} stories', variant: TypographyVariant.body2, color: Colors.white70),
+                      TypographyText(
+                        '${collection.storyCount} stories',
+                        variant: TypographyVariant.body2,
+                        color: Colors.white70,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -291,7 +281,11 @@ class _CollectionStoryCard extends StatelessWidget {
                           children: const [
                             Icon(CupertinoIcons.play_fill, size: 18),
                             SizedBox(width: 6),
-                            TypographyText('Play', variant: TypographyVariant.body2, color: Colors.black),
+                            TypographyText(
+                              'Play',
+                              variant: TypographyVariant.body2,
+                              color: Colors.black,
+                            ),
                           ],
                         ),
                       ),
@@ -311,7 +305,11 @@ class _CollectionStoryCard extends StatelessWidget {
                           children: const [
                             Icon(CupertinoIcons.chat_bubble_2_fill, size: 18),
                             SizedBox(width: 6),
-                            TypographyText('Start chat', variant: TypographyVariant.body2, color: Colors.white),
+                            TypographyText(
+                              'Start chat',
+                              variant: TypographyVariant.body2,
+                              color: Colors.white,
+                            ),
                           ],
                         ),
                       ),
@@ -328,7 +326,11 @@ class _CollectionStoryCard extends StatelessWidget {
                       foregroundColor: Colors.white,
                       elevation: 0,
                     ),
-                    child: TypographyText('Leave story', variant: TypographyVariant.body2, color: Colors.white),
+                    child: TypographyText(
+                      'Leave story',
+                      variant: TypographyVariant.body2,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ],
@@ -415,10 +417,7 @@ class _CollectionCardShimmer extends StatelessWidget {
         children: [
           const ClipRRect(
             borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            child: SizedBox(
-              height: 160,
-              child: ShimmerBox(),
-            ),
+            child: SizedBox(height: 160, child: ShimmerBox()),
           ),
           Padding(
             padding: const EdgeInsets.all(12),
