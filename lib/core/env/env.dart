@@ -16,6 +16,14 @@ class AppEnv {
   static String get apiBaseUrl => _string('API_BASE_URL', '');
   static String get sentryDsn => _string('SENTRY_DSN', '');
   static String get robotSerial => _string('ROBOT_SERIAL', '');
+  static String get storyWsUrl {
+    final direct = _string('STORY_WS_URL', '');
+    if (direct.isNotEmpty) return direct;
+    final api = apiBaseUrl;
+    if (api.startsWith('https://')) return api.replaceFirst('https://', 'wss://');
+    if (api.startsWith('http://')) return api.replaceFirst('http://', 'ws://');
+    return '';
+  }
 
   static String _string(String key, String fallback) {
     // If dotenv hasn't been initialized (e.g., .env not bundled), avoid calling it.

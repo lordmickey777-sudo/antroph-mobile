@@ -1,15 +1,13 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
-
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 import 'package:antroph_mobile/features/story/models/story_playlists_models.dart';
-import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
+import 'package:antroph_mobile/features/story/presentation/story_player_page.dart';
 import '../providers/story_playlists_provider.dart';
 
 class CollectionsPage extends ConsumerWidget {
@@ -117,7 +115,7 @@ class CollectionDetailPage extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _CollectionStoryCard(
                   story: story,
-                  onPlay: () => _openStory(context, story),
+                  onPlay: () => _startStory(context, story),
                   onStartChat: () => _startChatForStory(context, story),
                   onLeave: () => Navigator.of(context).pop(),
                 ),
@@ -129,16 +127,10 @@ class CollectionDetailPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _openStory(BuildContext context, PlaylistStoryDto story) async {
-    await showCupertinoModalBottomSheet(
-      context: context,
-      expand: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => StorySheet(
-        storyId: story.storyId,
-        title: story.title,
-        subtitle: story.subtitle,
-        imageAsset: story.imageUrl.isNotEmpty ? story.imageUrl : 'assets/images/default.png',
+  Future<void> _startStory(BuildContext context, PlaylistStoryDto story) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => StoryPlayerPage(story: story),
       ),
     );
   }
