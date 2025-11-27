@@ -27,13 +27,10 @@ class StoryPage extends ConsumerWidget {
             asyncHome.when(
               loading: () => const StoryPageShimmer(),
               error: (err, st) {
-                final msg = err is ApiError
-                    ? err.message
-                    : 'Failed to load stories.';
+                final msg = err is ApiError ? err.message : 'Failed to load stories.';
                 return _ErrorView(
                   message: msg,
-                  onRetry: () =>
-                      ref.refresh(storiesHomeSectionsProvider.future),
+                  onRetry: () => ref.refresh(storiesHomeSectionsProvider.future),
                 );
               },
               data: (data) {
@@ -53,10 +50,7 @@ class StoryPage extends ConsumerWidget {
                       ),
                     ),
                     for (final section in sections)
-                      _SectionSliver(
-                        section: section,
-                        onTap: (card) => _openStory(context, card),
-                      ),
+                      _SectionSliver(section: section, onTap: (card) => _openStory(context, card)),
                     const SliverToBoxAdapter(child: SizedBox(height: 120)),
                   ],
                 );
@@ -136,11 +130,7 @@ class _SideLabel extends StatelessWidget {
           alignment: Alignment.center,
           child: Padding(
             padding: const EdgeInsets.only(left: 40.0),
-            child: TypographyText(
-              text,
-              variant: TypographyVariant.body1,
-              color: Colors.white,
-            ),
+            child: TypographyText(text, variant: TypographyVariant.body1, color: Colors.white),
           ),
         ),
       ),
@@ -148,17 +138,25 @@ class _SideLabel extends StatelessWidget {
   }
 }
 
-class _StoryCard extends StatelessWidget {
+class _StoryCard extends ConsumerStatefulWidget {
   const _StoryCard({required this.item, required this.onTap});
 
   final StoryCardDto item;
   final VoidCallback onTap;
 
   @override
+  ConsumerState<_StoryCard> createState() => _StoryCardState();
+}
+
+class _StoryCardState extends ConsumerState<_StoryCard> {
+  bool _isAdding = false;
+
+  @override
   Widget build(BuildContext context) {
     const cardRadius = 8.0;
+    final item = widget.item;
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: SizedBox(
         width: 220,
         child: Column(
@@ -179,14 +177,11 @@ class _StoryCard extends StatelessWidget {
                         topLeft: Radius.circular(cardRadius),
                         topRight: Radius.circular(cardRadius),
                       ),
-                      child: AspectRatio(
-                        aspectRatio: 1.2,
-                        child: _StoryImage(image: item.image),
-                      ),
+                      child: AspectRatio(aspectRatio: 1.2, child: _StoryImage(image: item.image)),
                     ),
                     const SizedBox(height: 10),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -195,43 +190,71 @@ class _StoryCard extends StatelessWidget {
                             variant: TypographyVariant.body1,
                             color: Colors.white,
                           ),
-                          const SizedBox(height: 4),
-                          TypographyText(
-                            item.subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            variant: TypographyVariant.body2,
-                            color: Colors.white70,
-                          ),
+                          // const SizedBox(height: 4),
+                          // TypographyText(
+                          //   item.subtitle,
+                          //   maxLines: 1,
+                          //   overflow: TextOverflow.ellipsis,
+                          //   variant: TypographyVariant.body2,
+                          //   color: Colors.white70,
+                          // ),
                           const SizedBox(height: 8),
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Icon(
-                                CupertinoIcons.person_2,
-                                size: 14,
-                                color: Colors.white60,
+                              Row(
+                                children: [
+                                  const Icon(
+                                    CupertinoIcons.person_2,
+                                    size: 14,
+                                    color: Colors.white60,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  TypographyText(
+                                    '${item.users}',
+                                    variant: TypographyVariant.body2,
+                                    color: Colors.white70,
+                                  ),
+                                  const SizedBox(width: 14),
+                                  const Icon(CupertinoIcons.eye, size: 14, color: Colors.white60),
+                                  const SizedBox(width: 6),
+                                  TypographyText(
+                                    '${item.views}',
+                                    variant: TypographyVariant.body2,
+                                    color: Colors.white70,
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 6),
-                              TypographyText(
-                                '${item.users}',
-                                variant: TypographyVariant.body2,
-                                color: Colors.white70,
-                              ),
-                              const SizedBox(width: 14),
-                              const Icon(
-                                CupertinoIcons.eye,
-                                size: 14,
-                                color: Colors.white60,
-                              ),
-                              const SizedBox(width: 6),
-                              TypographyText(
-                                '${item.views}',
-                                variant: TypographyVariant.body2,
-                                color: Colors.white70,
+                              AppButton(
+                                onPressed: _isAdding ? null : _handleAddToPlaylist,
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: Colors.black,
+                                  elevation: 0,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (_isAdding)
+                                      const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CupertinoActivityIndicator(radius: 8),
+                                      )
+                                    else
+                                      const Icon(CupertinoIcons.add, size: 18, color: Colors.black),
+                                    const SizedBox(width: 6),
+                                    TypographyText(
+                                      _isAdding ? 'Adding...' : 'Add',
+                                      variant: TypographyVariant.body2,
+                                      color: Colors.black,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
                         ],
                       ),
                     ),
@@ -244,6 +267,29 @@ class _StoryCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _handleAddToPlaylist() async {
+    if (_isAdding) return;
+    setState(() => _isAdding = true);
+    try {
+      await ref
+          .read(storiesRepositoryProvider)
+          .addStoriesToPlaylist(storyIds: [widget.item.storyId]);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Story added to playlist')));
+    } catch (err) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to add story: $err')));
+    } finally {
+      if (mounted) {
+        setState(() => _isAdding = false);
+      }
+    }
   }
 }
 
