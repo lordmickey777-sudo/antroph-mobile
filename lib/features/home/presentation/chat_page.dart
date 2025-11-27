@@ -27,16 +27,11 @@ class ChatPage extends StatelessWidget {
         iconTheme: const IconThemeData(color: Colors.white),
         title: TypographyText(
           storyTitle ?? 'Chat',
-          variant: TypographyVariant.h2,
+          variant: TypographyVariant.h3,
           color: Colors.white,
         ),
       ),
-      body: SafeArea(
-        child: _InteractContent(
-          size: size,
-          showCollectionsChips: true,
-        ),
-      ),
+      body: SafeArea(child: _InteractContent(size: size, showCollectionsChips: true)),
     );
   }
 }
@@ -89,7 +84,6 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 8),
-        HomeCollectionsChips(expanded: widget.showCollectionsChips),
         SizedBox(height: widget.size.height * 0.06),
 
         // Expression Display with synchronized expressions
@@ -238,53 +232,6 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
       return state.aiResponse!;
     }
     return 'Bonjour! Comment ça va?';
-  }
-}
-
-class HomeCollectionsChips extends ConsumerWidget {
-  const HomeCollectionsChips({super.key, required this.expanded});
-
-  final bool expanded;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final playlistsAsync = ref.watch(storyPlaylistsProvider);
-
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 240),
-      curve: Curves.easeInOut,
-      child: expanded
-          ? playlistsAsync.when(
-              loading: () => _LoadingChips(),
-              error: (err, st) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: TypographyText(
-                  'Unable to load collections.',
-                  variant: TypographyVariant.body2,
-                  color: Colors.white54,
-                ),
-              ),
-              data: (playlists) {
-                if (playlists.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                final display = playlists.take(6).toList();
-                return SizedBox(
-                  height: 92,
-                  child: ListView.separated(
-                    key: const PageStorageKey('collections-chips'),
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    itemBuilder: (context, index) => PlaylistChip(playlist: display[index]),
-                    separatorBuilder: (_, __) => const SizedBox(width: 12),
-                    itemCount: display.length,
-                  ),
-                );
-              },
-            )
-          : const SizedBox.shrink(),
-    );
   }
 }
 
