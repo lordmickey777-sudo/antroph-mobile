@@ -176,27 +176,8 @@ class _CollectionCard extends StatelessWidget {
                     variant: TypographyVariant.body1,
                     color: Colors.white,
                   ),
+
                   const SizedBox(height: 4),
-                  // TypographyText(
-                  //   collection.description,
-                  //   variant: TypographyVariant.body2,
-                  //   color: Colors.white70,
-                  //   maxLines: 2,
-                  //   overflow: TextOverflow.ellipsis,
-                  // ),
-                  // const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(CupertinoIcons.collections, size: 16, color: Colors.white60),
-                      const SizedBox(width: 8),
-                      TypographyText(
-                        '${collection.storyCount} stories',
-                        variant: TypographyVariant.body2,
-                        color: Colors.white70,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: AppButton(
@@ -399,6 +380,11 @@ class CollectionsPageShimmer extends StatelessWidget {
       itemBuilder: (context, index) => const _CollectionCardShimmer(),
     );
   }
+}
+
+String _storiesLabel(int count) {
+  if (count <= 0) return '1 story';
+  return count == 1 ? '1 story' : '$count stories';
 }
 
 class _CollectionCardShimmer extends StatelessWidget {

@@ -26,17 +26,29 @@ class PlaylistDto {
   factory PlaylistDto.fromJson(Map<String, dynamic> json) {
     final createdAt = DateTime.tryParse((json['created_at'] as String?) ?? '');
     final updatedAt = DateTime.tryParse((json['updated_at'] as String?) ?? '');
+    final storyIds = ((json['story_ids'] as List?) ?? const [])
+        .map((e) => (e as String?)?.trim() ?? '')
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final computedStoryCount = (json['story_count'] as num?)?.toInt() ??
+        (json['stories_count'] as num?)?.toInt() ??
+        storyIds.length;
+    final name = (json['name'] as String?)?.trim() ?? (json['title'] as String?)?.trim() ?? '';
+    final description =
+        (json['description'] as String?)?.trim() ?? (json['subtitle'] as String?)?.trim() ?? '';
+    final coverImage = (json['cover_image_url'] as String?) ??
+        (json['image_url'] as String?) ??
+        (json['image'] as String?) ??
+        (json['thumbnail_url'] as String?) ??
+        '';
     return PlaylistDto(
       id: (json['id'] as String?)?.trim() ?? '',
       userId: (json['user_id'] as String?)?.trim() ?? '',
-      name: (json['name'] as String?)?.trim() ?? '',
-      description: (json['description'] as String?)?.trim() ?? '',
-      coverImageUrl: (json['cover_image_url'] as String?)?.trim() ?? '',
-      storyIds: ((json['story_ids'] as List?) ?? const [])
-          .map((e) => (e as String?)?.trim() ?? '')
-          .where((e) => e.isNotEmpty)
-          .toList(),
-      storyCount: (json['story_count'] as num?)?.toInt() ?? 0,
+      name: name,
+      description: description,
+      coverImageUrl: coverImage.trim(),
+      storyIds: storyIds,
+      storyCount: computedStoryCount > 0 ? computedStoryCount : (name.isNotEmpty ? 1 : 0),
       isPublic: (json['is_public'] as bool?) ?? false,
       createdAt: createdAt ?? DateTime.now(),
       updatedAt: updatedAt ?? DateTime.now(),
