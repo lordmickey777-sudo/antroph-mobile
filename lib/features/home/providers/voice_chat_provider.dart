@@ -1,15 +1,20 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:logger/logger.dart';
 import 'package:flutter_sound/flutter_sound.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:logger/logger.dart';
 import 'package:path_provider/path_provider.dart';
-import '../../../core/env/env.dart';
-import '../../story/providers/story_session_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../core/auth/state/auth_state.dart';
 import '../models/expression_models.dart';
+import '../models/voice_ws_models.dart';
 import '../services/voice_chat_service.dart';
-import '../services/audio_playback_service.dart';
+import '../services/voice_stream_player.dart';
+import '../services/voice_websocket_service.dart';
 
 /// State for voice chat interaction
 enum PermissionDialogType { none, education, settings }
@@ -18,61 +23,74 @@ class VoiceChatState {
   final RobotExpression currentExpression;
   final bool isRecording;
   final bool isPlaying;
+  final bool isConnecting;
   final bool isProcessing;
   final String? userTranscription;
   final String? aiResponse;
   final String? errorMessage;
   final double playbackProgress;
   final PermissionDialogType permissionDialog;
+  final List<String> audioFormats;
 
   const VoiceChatState({
     this.currentExpression = RobotExpression.neutral,
     this.isRecording = false,
     this.isPlaying = false,
+    this.isConnecting = false,
     this.isProcessing = false,
     this.userTranscription,
     this.aiResponse,
     this.errorMessage,
     this.playbackProgress = 0.0,
     this.permissionDialog = PermissionDialogType.none,
+    this.audioFormats = const [],
   });
 
   VoiceChatState copyWith({
     RobotExpression? currentExpression,
     bool? isRecording,
     bool? isPlaying,
+    bool? isConnecting,
     bool? isProcessing,
     String? userTranscription,
     String? aiResponse,
     String? errorMessage,
     double? playbackProgress,
     PermissionDialogType? permissionDialog,
+    List<String>? audioFormats,
   }) {
     return VoiceChatState(
       currentExpression: currentExpression ?? this.currentExpression,
       isRecording: isRecording ?? this.isRecording,
       isPlaying: isPlaying ?? this.isPlaying,
+      isConnecting: isConnecting ?? this.isConnecting,
       isProcessing: isProcessing ?? this.isProcessing,
       userTranscription: userTranscription ?? this.userTranscription,
       aiResponse: aiResponse ?? this.aiResponse,
       errorMessage: errorMessage,
       playbackProgress: playbackProgress ?? this.playbackProgress,
       permissionDialog: permissionDialog ?? this.permissionDialog,
+      audioFormats: audioFormats ?? this.audioFormats,
     );
   }
 
-  bool get isBusy => isRecording || isProcessing || isPlaying;
+  bool get isBusy => isRecording || isProcessing || isPlaying || isConnecting;
 }
 
 /// Controller for voice chat interactions
 class VoiceChatController extends Notifier<VoiceChatState> {
-  final VoiceChatService _voiceChatService = VoiceChatService.instance;
-  final AudioPlaybackService _audioService = AudioPlaybackService();
+  final VoiceWebSocketService _wsService = VoiceWebSocketService.instance;
+  final VoiceStreamPlayer _streamPlayer = VoiceStreamPlayer();
   FlutterSoundRecorder? _audioRecorder;
+  VoiceWebSocketConnection? _wsConnection;
+  StreamSubscription<VoiceServerMessage>? _wsSubscription;
   final Logger _log = Logger();
   bool _iosPermissionDeniedOnce = false;
   Completer<bool>? _permissionDialogCompleter;
+  String? _currentSequenceId;
+  String _preferredContentType = 'audio/mpeg';
   static const String _permissionError = 'Microphone permission is required for voice chat';
+  static const String _deviceIdPrefsKey = 'voice_chat_device_id';
 
   @override
   VoiceChatState build() {
@@ -80,9 +98,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _audioRecorder = FlutterSoundRecorder();
 
     // Clean up on disposal
-    ref.onDispose(() {
-      _audioRecorder?.closeRecorder();
-      _audioService.dispose();
+    ref.onDispose(() async {
+      await _disposeSocket();
+      await _streamPlayer.stop();
+      await _audioRecorder?.closeRecorder();
     });
     return const VoiceChatState();
   }
@@ -112,14 +131,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       // Get temporary directory for recording
       final tempDir = await getTemporaryDirectory();
-      final filePath = '${tempDir.path}/voice_input_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final filePath = '${tempDir.path}/voice_input_${DateTime.now().millisecondsSinceEpoch}.wav';
 
       // Start recording
       await _audioRecorder!.startRecorder(
         toFile: filePath,
-        codec: Codec.aacMP4,
-        bitRate: 128000,
-        sampleRate: 44100,
+        codec: Codec.pcm16WAV,
+        numChannels: 1,
+        sampleRate: 16000,
       );
 
       state = state.copyWith(isRecording: true, errorMessage: null);
@@ -242,7 +261,15 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       // Stop recording
       final path = await _audioRecorder?.stopRecorder();
-      state = state.copyWith(isRecording: false, isProcessing: true);
+      state = state.copyWith(
+        isRecording: false,
+        isProcessing: true,
+        isPlaying: false,
+        isConnecting: true,
+        errorMessage: null,
+        aiResponse: null,
+        userTranscription: null,
+      );
 
       if (path == null || path.isEmpty) {
         throw Exception('Recording failed: no file path returned');
@@ -255,33 +282,45 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         throw Exception('Recording file not found');
       }
 
-      final storySessionId = _activeStorySessionId();
-      final robotSerial = _resolveRobotSerial();
+      await _streamPlayer.stop();
+      await _disposeSocket();
 
-      // Send to backend
-      final response = await _voiceChatService.sendVoiceMessage(
-        audioFile: audioFile,
-        conversationType: 'general',
-        language: 'en',
-        voice: 'nova',
-        storySessionId: storySessionId,
-        robotSerial: robotSerial,
+      final token = ref.read(authControllerProvider.notifier).tokens?.accessToken ?? '';
+      if (token.isEmpty) {
+        throw VoiceChatException('You must be logged in to use voice chat');
+      }
+
+      final deviceId = await _ensureDeviceId();
+      final deviceType = Platform.isIOS ? 'ios' : 'android';
+      final audioBytes = await audioFile.readAsBytes();
+      final requestId = 'upload-${DateTime.now().millisecondsSinceEpoch}';
+
+      _wsConnection = await _wsService.connect(
+        token: token,
+        deviceId: deviceId,
+        deviceType: deviceType,
+      );
+      _wsSubscription = _wsConnection!.messages.listen(
+        _handleServerMessage,
+        onError: (err, st) => _handleSocketError(err, st),
+        onDone: _handleSocketDone,
       );
 
-      _log.i('Voice chat response received: ${response.text}');
+      _preferredContentType = _pickContentType(state.audioFormats);
+      state = state.copyWith(isConnecting: false);
 
-      // Update state with response
-      state = state.copyWith(
-        isProcessing: false,
-        userTranscription: response.transcription,
-        aiResponse: response.text,
-        errorMessage: null,
-      );
+      _wsConnection!.sendJson({
+        'type': 'voice_upload',
+        'data': {
+          'data': base64Encode(audioBytes),
+          'encoding': 'wav',
+          'language': 'en',
+          'tts_voice': 'nova',
+        },
+        'request_id': requestId,
+      });
+      _log.i('Voice upload sent (${audioBytes.length} bytes)');
 
-      // Play audio with synchronized expressions
-      await _playResponseAudio(response);
-
-      // Clean up recording file
       audioFile.delete().catchError((e) {
         _log.w('Failed to delete recording file: $e');
         return audioFile;
@@ -291,34 +330,142 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       state = state.copyWith(
         isRecording: false,
         isProcessing: false,
+        isConnecting: false,
+        isPlaying: false,
         errorMessage: e is VoiceChatException ? e.message : 'Failed to process voice: $e',
       );
     }
   }
 
-  /// Play AI response audio with expression synchronization
-  Future<void> _playResponseAudio(VoiceChatResponse response) async {
-    try {
-      state = state.copyWith(isPlaying: true);
-
-      await _audioService.playSynchronizedAudio(
-        audioBase64: response.audioUrl,
-        expressions: response.expressions,
-        onExpressionChange: (expression) {
-          state = state.copyWith(currentExpression: expression);
-        },
-        onComplete: () {
-          state = state.copyWith(isPlaying: false, currentExpression: RobotExpression.neutral);
-        },
-      );
-    } catch (e, stackTrace) {
-      _log.e('Failed to play audio', error: e, stackTrace: stackTrace);
-      state = state.copyWith(
-        isPlaying: false,
-        currentExpression: RobotExpression.neutral,
-        errorMessage: 'Failed to play audio: $e',
-      );
+  void _handleServerMessage(VoiceServerMessage message) {
+    switch (message.type) {
+      case VoiceMessageType.connected:
+        final payload = message.data != null ? VoiceConnectedPayload.fromJson(message.data!) : null;
+        final formats = payload?.audioFormats ?? const <String>[];
+        _preferredContentType = _pickContentType(formats);
+        state = state.copyWith(
+          isConnecting: false,
+          audioFormats: formats,
+          errorMessage: null,
+        );
+        break;
+      case VoiceMessageType.voiceResponse:
+        final ack = message.data != null ? VoiceResponseAck.fromJson(message.data!) : const VoiceResponseAck();
+        state = state.copyWith(
+          isProcessing: false,
+          isConnecting: false,
+          aiResponse: ack.aiText ?? state.aiResponse,
+          userTranscription: ack.transcription ?? state.userTranscription,
+          errorMessage: null,
+        );
+        break;
+      case VoiceMessageType.voiceAudioChunk:
+        if (message.data != null) {
+          unawaited(_handleAudioChunk(VoiceAudioChunk.fromJson(message.data!)));
+        }
+        break;
+      case VoiceMessageType.error:
+        final err = message.data != null ? VoiceErrorPayload.fromJson(message.data!) : const VoiceErrorPayload();
+        _handleSocketError(err.message ?? err.code ?? 'Voice streaming error');
+        break;
+      default:
+        break;
     }
+  }
+
+  Future<void> _handleAudioChunk(VoiceAudioChunk chunk) async {
+    if (chunk.sequenceId.isNotEmpty && _currentSequenceId != chunk.sequenceId) {
+      await _streamPlayer.stop();
+      _currentSequenceId = chunk.sequenceId;
+    } else if (_currentSequenceId == null && chunk.sequenceId.isNotEmpty) {
+      _currentSequenceId = chunk.sequenceId;
+    }
+
+    if (chunk.data != null && chunk.data!.isNotEmpty) {
+      try {
+        await _ensurePlayerReady();
+        final bytes = base64Decode(chunk.data!);
+        await _streamPlayer.addChunk(bytes);
+        state = state.copyWith(isPlaying: true, isProcessing: false, isConnecting: false, errorMessage: null);
+      } catch (e, st) {
+        _handlePlaybackError(e, st);
+      }
+    }
+
+    if (chunk.isFinal) {
+      state = state.copyWith(isProcessing: false, isConnecting: false);
+      await _streamPlayer.markComplete();
+      _currentSequenceId = null;
+      await _disposeSocket();
+    }
+  }
+
+  Future<void> _ensurePlayerReady() async {
+    if (_streamPlayer.hasStream) return;
+    await _streamPlayer.start(
+      contentType: _preferredContentType,
+      onComplete: _handlePlaybackComplete,
+      onError: (err, st) => _handlePlaybackError(err, st),
+    );
+  }
+
+  void _handlePlaybackComplete() {
+    state = state.copyWith(isPlaying: false, currentExpression: RobotExpression.neutral);
+  }
+
+  void _handlePlaybackError(Object err, [StackTrace? st]) {
+    _log.e('Playback error', error: err, stackTrace: st);
+    state = state.copyWith(
+      isPlaying: false,
+      isProcessing: false,
+      isConnecting: false,
+      currentExpression: RobotExpression.neutral,
+      errorMessage: 'Failed to play audio: $err',
+    );
+  }
+
+  void _handleSocketError(Object err, [StackTrace? st]) {
+    _log.e('Voice websocket error', error: err, stackTrace: st);
+    state = state.copyWith(
+      isProcessing: false,
+      isConnecting: false,
+      isPlaying: false,
+      errorMessage: '$err',
+    );
+    unawaited(_disposeSocket());
+  }
+
+  void _handleSocketDone() {
+    state = state.copyWith(isConnecting: false, isProcessing: false);
+  }
+
+  Future<void> _disposeSocket() async {
+    await _wsSubscription?.cancel();
+    _wsSubscription = null;
+    if (_wsConnection != null) {
+      try {
+        await _wsConnection!.close();
+      } catch (_) {}
+    }
+    _wsConnection = null;
+    _currentSequenceId = null;
+  }
+
+  Future<String> _ensureDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getString(_deviceIdPrefsKey);
+    if (existing != null && existing.isNotEmpty) return existing;
+    final generated =
+        '${Platform.isIOS ? "ios" : "android"}-${DateTime.now().millisecondsSinceEpoch}-${DateTime.now().microsecondsSinceEpoch.remainder(100000)}';
+    await prefs.setString(_deviceIdPrefsKey, generated);
+    return generated;
+  }
+
+  String _pickContentType(List<String> formats) {
+    final lower = formats.map((f) => f.toLowerCase()).toList();
+    if (lower.contains('opus')) return 'audio/ogg';
+    if (lower.contains('mp3')) return 'audio/mpeg';
+    return 'audio/mpeg';
   }
 
   /// Cancel current recording
@@ -343,26 +490,19 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   /// Stop audio playback
   Future<void> stopPlayback() async {
-    await _audioService.stop();
-    state = state.copyWith(isPlaying: false, currentExpression: RobotExpression.neutral);
+    await _streamPlayer.stop();
+    await _disposeSocket();
+    state = state.copyWith(
+      isPlaying: false,
+      isProcessing: false,
+      isConnecting: false,
+      currentExpression: RobotExpression.neutral,
+    );
   }
 
   /// Clear error message
   void clearError() {
     state = state.copyWith(errorMessage: null);
-  }
-
-  String? _activeStorySessionId() {
-    return ref.read(storySessionProvider).session?.id;
-  }
-
-  String _resolveRobotSerial() {
-    final envSerial = AppEnv.robotSerial.trim();
-    if (envSerial.isNotEmpty) {
-      return envSerial;
-    }
-    final os = Platform.operatingSystem;
-    return '$os-mobile-app';
   }
 }
 

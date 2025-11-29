@@ -83,19 +83,12 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 8),
-        SizedBox(height: widget.size.height * 0.06),
-
-        // Expression Display with synchronized expressions
-        Center(
-          child: ExpressionDisplay(
-            expression: voiceChatState.currentExpression,
-            size: widget.size.width * 0.55,
-            showGlow: true,
-          ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: _VoiceStatusCard(state: voiceChatState),
         ),
-
-        const SizedBox(height: 28),
+        const SizedBox(height: 20),
 
         // AI Response or Status Text
         Padding(
@@ -171,7 +164,7 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
               ),
             ),
           )
-        else if (voiceChatState.isProcessing)
+        else if (voiceChatState.isProcessing || voiceChatState.isConnecting)
           Center(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -180,17 +173,39 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: Colors.blue),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
+                  const SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue),
                   ),
+                  const SizedBox(width: 8),
+                  Text(
+                    voiceChatState.isConnecting ? 'Connecting...' : 'Processing...',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                  )
+                ],
+              ),
+            ),
+          )
+        else if (voiceChatState.isPlaying)
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.greenAccent),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.volume_up, color: Colors.greenAccent, size: 18),
                   SizedBox(width: 8),
                   Text(
-                    'Processing...',
+                    'Streaming reply...',
                     style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
                   ),
                 ],
@@ -224,17 +239,105 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
   String _getStatusText(VoiceChatState state) {
     if (state.isRecording) {
       return 'Listening...';
+    } else if (state.isConnecting) {
+      return 'Connecting to the voice service...';
     } else if (state.isProcessing) {
-      return 'Thinking...';
-    } else if (state.isPlaying && state.aiResponse != null) {
-      return state.aiResponse!;
+      return 'Transcribing and thinking...';
     } else if (state.aiResponse != null) {
       return state.aiResponse!;
     }
-    return 'Bonjour! Comment ça va?';
+    return 'Tap the mic and speak to stream the reply.';
   }
 }
 
+class _VoiceStatusCard extends StatelessWidget {
+  const _VoiceStatusCard({required this.state});
+
+  final VoiceChatState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = _resolveStatus();
+    final prompt =
+        state.aiResponse ?? 'Send a quick clip and the backend will stream the TTS reply over websocket.';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: meta.color.withOpacity(0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(meta.icon, color: meta.color, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  meta.label,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (state.isProcessing || state.isConnecting)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            prompt,
+            style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.3),
+          ),
+          if (state.userTranscription != null && state.userTranscription!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Heard: ${state.userTranscription}',
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ],
+          if (state.audioFormats.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Server formats: ${state.audioFormats.join(", ")}',
+              style: const TextStyle(color: Colors.white38, fontSize: 11),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  _VoiceStatusMeta _resolveStatus() {
+    if (state.isRecording) {
+      return _VoiceStatusMeta('Listening for your voice', Icons.mic, Colors.redAccent);
+    }
+    if (state.isConnecting) {
+      return _VoiceStatusMeta('Connecting to /ws/voice', Icons.wifi_tethering, Colors.blueAccent);
+    }
+    if (state.isProcessing) {
+      return _VoiceStatusMeta('Transcribing & thinking', Icons.auto_awesome, Colors.blueAccent);
+    }
+    if (state.isPlaying) {
+      return _VoiceStatusMeta('Streaming the reply', Icons.volume_up, Colors.greenAccent);
+    }
+    return _VoiceStatusMeta('Ready for voice upload', Icons.chat_bubble_outline, Colors.white70);
+  }
+}
+
+class _VoiceStatusMeta {
+  const _VoiceStatusMeta(this.label, this.icon, this.color);
+  final String label;
+  final IconData icon;
+  final Color color;
+}
+
+// ignore: unused_element
 class _LoadingChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
