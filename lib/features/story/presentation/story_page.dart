@@ -36,23 +36,28 @@ class StoryPage extends ConsumerWidget {
               data: (data) {
                 final sections = data.sections;
                 if (sections.isEmpty) return const _EmptyView();
-                return CustomScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  slivers: [
-                    const SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
-                        child: TypographyText(
-                          'Stories',
-                          variant: TypographyVariant.h1,
-                          color: Colors.white,
+                return RefreshIndicator.adaptive(
+                  color: Colors.white,
+                  backgroundColor: _bg,
+                  onRefresh: () => ref.refresh(storiesHomeSectionsProvider.future),
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                    slivers: [
+                      const SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
+                          child: TypographyText(
+                            'Stories',
+                            variant: TypographyVariant.h1,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
-                    ),
-                    for (final section in sections)
-                      _SectionSliver(section: section, onTap: (card) => _openStory(context, card)),
-                    const SliverToBoxAdapter(child: SizedBox(height: 120)),
-                  ],
+                      for (final section in sections)
+                        _SectionSliver(section: section, onTap: (card) => _openStory(context, card)),
+                      const SliverToBoxAdapter(child: SizedBox(height: 120)),
+                    ],
+                  ),
                 );
               },
             ),

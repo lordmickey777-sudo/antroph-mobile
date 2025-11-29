@@ -93,14 +93,33 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
         // AI Response or Status Text
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: TypographyText(
-              _getStatusText(voiceChatState),
-              key: ValueKey(voiceChatState.aiResponse ?? voiceChatState.isRecording),
-              variant: TypographyVariant.h2,
-              textAlign: TextAlign.center,
-              color: Colors.white,
+          child: SizedBox(
+            height: widget.size.height * 0.24,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: LayoutBuilder(
+                key: ValueKey(voiceChatState.aiResponse ?? voiceChatState.isRecording),
+                builder: (context, constraints) {
+                  return Scrollbar(
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                        child: Center(
+                          child: TypographyText(
+                            _getStatusText(voiceChatState),
+                            variant: TypographyVariant.h2,
+                            textAlign: TextAlign.center,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),

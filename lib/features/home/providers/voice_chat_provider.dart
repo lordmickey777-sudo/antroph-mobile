@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_sound/flutter_sound.dart';
@@ -31,6 +32,8 @@ class VoiceChatState {
   final double playbackProgress;
   final PermissionDialogType permissionDialog;
   final List<String> audioFormats;
+  final Uint8List? currentFaceBitmap;
+  final int? faceTimestampMs;
 
   const VoiceChatState({
     this.currentExpression = RobotExpression.neutral,
@@ -44,6 +47,8 @@ class VoiceChatState {
     this.playbackProgress = 0.0,
     this.permissionDialog = PermissionDialogType.none,
     this.audioFormats = const [],
+    this.currentFaceBitmap,
+    this.faceTimestampMs,
   });
 
   VoiceChatState copyWith({
@@ -58,6 +63,9 @@ class VoiceChatState {
     double? playbackProgress,
     PermissionDialogType? permissionDialog,
     List<String>? audioFormats,
+    Uint8List? currentFaceBitmap,
+    int? faceTimestampMs,
+    bool clearFace = false,
   }) {
     return VoiceChatState(
       currentExpression: currentExpression ?? this.currentExpression,
@@ -71,6 +79,8 @@ class VoiceChatState {
       playbackProgress: playbackProgress ?? this.playbackProgress,
       permissionDialog: permissionDialog ?? this.permissionDialog,
       audioFormats: audioFormats ?? this.audioFormats,
+      currentFaceBitmap: clearFace ? null : (currentFaceBitmap ?? this.currentFaceBitmap),
+      faceTimestampMs: clearFace ? null : (faceTimestampMs ?? this.faceTimestampMs),
     );
   }
 
@@ -269,6 +279,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         errorMessage: null,
         aiResponse: null,
         userTranscription: null,
+        clearFace: true,
       );
 
       if (path == null || path.isEmpty) {
@@ -332,6 +343,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isProcessing: false,
         isConnecting: false,
         isPlaying: false,
+        clearFace: true,
         errorMessage: e is VoiceChatException ? e.message : 'Failed to process voice: $e',
       );
     }
@@ -374,6 +386,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   Future<void> _handleAudioChunk(VoiceAudioChunk chunk) async {
+    _applyExpressionFrames(chunk.frames);
+
     if (chunk.sequenceId.isNotEmpty && _currentSequenceId != chunk.sequenceId) {
       await _streamPlayer.stop();
       _currentSequenceId = chunk.sequenceId;
@@ -400,6 +414,44 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     }
   }
 
+  void _applyExpressionFrames(List<VoiceExpressionFrame> frames) {
+    if (frames.isEmpty) return;
+    final latest = frames.lastWhere((f) => f.packedFace.isNotEmpty, orElse: () => frames.last);
+    if (latest.packedFace.isEmpty) return;
+    final decoded = _decodePackedFace(latest.packedFace);
+    if (decoded == null || decoded.isEmpty) return;
+
+    final ts = latest.timestampMs ?? DateTime.now().millisecondsSinceEpoch;
+    if (state.faceTimestampMs != null && ts < state.faceTimestampMs!) return;
+
+    state = state.copyWith(
+      currentFaceBitmap: decoded,
+      faceTimestampMs: ts,
+    );
+  }
+
+  Uint8List? _decodePackedFace(String packed) {
+    if (packed.isEmpty) return null;
+    // Try standard/base64-url decoding first.
+    final normalized = base64.normalize(packed.replaceAll('-', '+').replaceAll('_', '/'));
+    try {
+      return Uint8List.fromList(base64Decode(normalized));
+    } catch (_) {}
+    try {
+      return Uint8List.fromList(base64Url.decode(packed));
+    } catch (_) {}
+
+    // Fallback: treat as hex string (as emitted by FaceCompressor).
+    final hex = packed.replaceAll(RegExp(r'[^0-9a-fA-F]'), '');
+    if (hex.length % 2 != 0 || hex.isEmpty) return null;
+    final bytes = Uint8List(hex.length ~/ 2);
+    for (var i = 0; i < hex.length; i += 2) {
+      final byte = hex.substring(i, i + 2);
+      bytes[i ~/ 2] = int.tryParse(byte, radix: 16) ?? 0;
+    }
+    return bytes;
+  }
+
   Future<void> _ensurePlayerReady() async {
     if (_streamPlayer.hasStream) return;
     await _streamPlayer.start(
@@ -410,7 +462,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void _handlePlaybackComplete() {
-    state = state.copyWith(isPlaying: false, currentExpression: RobotExpression.neutral);
+    state = state.copyWith(
+      isPlaying: false,
+      currentExpression: RobotExpression.neutral,
+      clearFace: true,
+    );
   }
 
   void _handlePlaybackError(Object err, [StackTrace? st]) {
@@ -420,6 +476,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isProcessing: false,
       isConnecting: false,
       currentExpression: RobotExpression.neutral,
+      clearFace: true,
       errorMessage: 'Failed to play audio: $err',
     );
   }
@@ -430,6 +487,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isProcessing: false,
       isConnecting: false,
       isPlaying: false,
+      clearFace: true,
       errorMessage: '$err',
     );
     unawaited(_disposeSocket());
@@ -479,12 +537,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
             return File(path);
           });
         }
-        state = state.copyWith(isRecording: false, errorMessage: null);
+        state = state.copyWith(isRecording: false, errorMessage: null, clearFace: true);
         _log.i('Recording cancelled');
       }
     } catch (e, stackTrace) {
       _log.e('Failed to cancel recording', error: e, stackTrace: stackTrace);
-      state = state.copyWith(isRecording: false);
+      state = state.copyWith(isRecording: false, clearFace: true);
     }
   }
 
@@ -497,6 +555,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isProcessing: false,
       isConnecting: false,
       currentExpression: RobotExpression.neutral,
+      clearFace: true,
     );
   }
 
