@@ -95,6 +95,7 @@ class _ProfileMenu extends ConsumerWidget {
       (Icons.attach_money_outlined, 'Subscription', true),
       (Icons.lock_outline, 'Security', true),
       (Icons.help_outline, 'Support', true),
+      (Icons.delete_outline, 'Delete account', false),
       (Icons.logout, 'Logout', false),
     ];
 
@@ -119,6 +120,42 @@ class _ProfileMenu extends ConsumerWidget {
                 case 'Support':
                   // showToast(context, 'Opening support…');
                   context.pushNamed('support');
+                  break;
+                case 'Delete account':
+                  final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: const Color(0xFF1B1D1F),
+                          title: const Text('Delete account', style: TextStyle(color: Colors.white)),
+                          content: const Text(
+                            'This will deactivate your account and schedule deletion. Continue?',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                            ),
+                          ],
+                        ),
+                      ) ??
+                      false;
+                  if (!confirmed) return;
+                  try {
+                    final msg = await ref.read(profileControllerProvider.notifier).deleteAccount();
+                    if (context.mounted) {
+                      showToast(context, msg.isNotEmpty ? msg : 'Account deleted', success: true);
+                      context.goNamed('login');
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      showToast(context, e.toString());
+                    }
+                  }
                   break;
                 case 'Logout':
                   final controller = ref.read(authControllerProvider.notifier);

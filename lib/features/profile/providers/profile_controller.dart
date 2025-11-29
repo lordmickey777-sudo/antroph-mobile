@@ -162,6 +162,21 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
     if (p.timezone == null || p.timezone!.isEmpty) missing.add('timezone');
     return missing;
   }
+
+  /// Soft delete the current account via /users/me/account then logout locally.
+  Future<String> deleteAccount() async {
+    try {
+      final message = await _repo.deleteAccount();
+      // Clear local state first to avoid showing stale data.
+      state = const AsyncValue.data(null);
+      await ref.read(authControllerProvider.notifier).logout();
+      return message;
+    } on ApiError catch (e) {
+      throw e;
+    } catch (e) {
+      throw ApiError(message: e.toString());
+    }
+  }
 }
 
 final profileControllerProvider = AsyncNotifierProvider<ProfileController, UserProfile?>(

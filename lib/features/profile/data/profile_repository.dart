@@ -72,4 +72,19 @@ class ProfileRepository {
       throw ErrorFormatter.fromDio(e);
     }
   }
+
+  /// DELETE /users/me/account to soft-delete the current user account.
+  /// Returns the server message (if provided).
+  Future<String> deleteAccount() async {
+    try {
+      final res = await _dio.delete('/users/me/account');
+      final data = res.data;
+      if (data is Map<String, dynamic> && data['message'] is String) {
+        return data['message'] as String;
+      }
+      return 'Account deleted';
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
 }
