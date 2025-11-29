@@ -204,7 +204,7 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
                   Text(
                     voiceChatState.isConnecting ? 'Connecting...' : 'Processing...',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-                  )
+                  ),
                 ],
               ),
             ),
@@ -278,58 +278,10 @@ class _VoiceStatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final meta = _resolveStatus();
     final prompt =
-        state.aiResponse ?? 'Send a quick clip and the backend will stream the TTS reply over websocket.';
+        state.aiResponse ??
+        'Send a quick clip and the backend will stream the TTS reply over websocket.';
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: meta.color.withOpacity(0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(meta.icon, color: meta.color, size: 22),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  meta.label,
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ),
-              if (state.isProcessing || state.isConnecting)
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            prompt,
-            style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.3),
-          ),
-          if (state.userTranscription != null && state.userTranscription!.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Heard: ${state.userTranscription}',
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-          ],
-          if (state.audioFormats.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Server formats: ${state.audioFormats.join(", ")}',
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
-            ),
-          ],
-        ],
-      ),
-    );
+    return Container(padding: const EdgeInsets.all(16));
   }
 
   _VoiceStatusMeta _resolveStatus() {
