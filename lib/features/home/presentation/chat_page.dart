@@ -1,7 +1,11 @@
+import 'dart:math' as math;
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
+import 'package:antroph_mobile/features/home/widgets/face_canvas.dart';
 import 'package:antroph_mobile/features/home/widgets/expression_widgets.dart';
 import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
 import 'package:antroph_mobile/features/story/models/story_playlists_models.dart';
@@ -61,6 +65,22 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
         }
         _showPermissionDialog(next);
       });
+
+      ref.listen<VoiceChatState>(voiceChatControllerProvider, (previous, next) {
+        final prevErr = previous?.errorMessage;
+        final err = next.errorMessage;
+        if (!mounted || err == null || err.isEmpty || err == prevErr) return;
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(err),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: Colors.redAccent,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+      });
     });
   }
 
@@ -79,160 +99,46 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
   Widget build(BuildContext context) {
     final voiceChatState = ref.watch(voiceChatControllerProvider);
     final voiceChatController = ref.read(voiceChatControllerProvider.notifier);
+    final hasFace = voiceChatState.currentFaceBitmap != null && voiceChatState.currentFaceBitmap!.isNotEmpty;
+    final faceSize = math.max(140.0, widget.size.width * 0.4);
+    final isBusy = voiceChatState.isRecording || voiceChatState.isProcessing || voiceChatState.isConnecting;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: _VoiceStatusCard(state: voiceChatState),
-        ),
-        const SizedBox(height: 20),
-
-        // AI Response or Status Text
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        const SizedBox(height: 24),
+        Center(
           child: SizedBox(
-            height: widget.size.height * 0.24,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: LayoutBuilder(
-                key: ValueKey(voiceChatState.aiResponse ?? voiceChatState.isRecording),
-                builder: (context, constraints) {
-                  return Scrollbar(
-                    thumbVisibility: true,
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                        child: Center(
-                          child: TypographyText(
-                            _getStatusText(voiceChatState),
-                            variant: TypographyVariant.h2,
-                            textAlign: TextAlign.center,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
+            height: widget.size.height * 0.36,
+            child: Center(
+              child: hasFace
+                  ? FaceCanvas(
+                      bitmap: voiceChatState.currentFaceBitmap,
+                      timestampMs: voiceChatState.faceTimestampMs,
+                      size: faceSize,
+                      backgroundColor: Colors.transparent,
+                      showFrame: false,
+                    )
+                  : ExpressionDisplay(
+                      expression: voiceChatState.currentExpression,
+                      size: faceSize,
+                      showGlow: false,
                     ),
-                  );
-                },
-              ),
             ),
           ),
         ),
 
-        // Error message display
-        if (voiceChatState.errorMessage != null) ...[
+        if (isBusy) ...[
           const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.5)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      voiceChatState.errorMessage!,
-                      style: const TextStyle(color: Colors.red, fontSize: 12),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.red, size: 18),
-                    onPressed: () => voiceChatController.clearError(),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-            ),
+          const Center(
+            child: CupertinoActivityIndicator(radius: 12, color: Colors.white70),
           ),
+        ] else if (voiceChatState.isPlaying) ...[
+          const SizedBox(height: 12),
+          const Center(child: Icon(Icons.graphic_eq, color: Colors.greenAccent, size: 22)),
         ],
 
         const Spacer(),
-
-        // Recording/Processing indicator
-        if (voiceChatState.isRecording)
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.red),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.fiber_manual_record, color: Colors.red, size: 16),
-                  SizedBox(width: 8),
-                  Text(
-                    'Recording...',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else if (voiceChatState.isProcessing || voiceChatState.isConnecting)
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.blue),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    voiceChatState.isConnecting ? 'Connecting...' : 'Processing...',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else if (voiceChatState.isPlaying)
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.18),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.greenAccent),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.volume_up, color: Colors.greenAccent, size: 18),
-                  SizedBox(width: 8),
-                  Text(
-                    'Streaming reply...',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        const SizedBox(height: 20),
 
         // Voice Record Button
         Center(
@@ -250,63 +156,12 @@ class _InteractContentState extends ConsumerState<_InteractContent> {
             size: 75,
           ),
         ),
-        SizedBox(height: widget.size.height * 0.15),
+        SizedBox(height: widget.size.height * 0.12),
       ],
     );
   }
-
-  String _getStatusText(VoiceChatState state) {
-    if (state.isRecording) {
-      return 'Listening...';
-    } else if (state.isConnecting) {
-      return 'Connecting to the voice service...';
-    } else if (state.isProcessing) {
-      return 'Transcribing and thinking...';
-    } else if (state.aiResponse != null) {
-      return state.aiResponse!;
-    }
-    return 'Tap the mic and speak to stream the reply.';
-  }
 }
 
-class _VoiceStatusCard extends StatelessWidget {
-  const _VoiceStatusCard({required this.state});
-
-  final VoiceChatState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final meta = _resolveStatus();
-    final prompt =
-        state.aiResponse ??
-        'Send a quick clip and the backend will stream the TTS reply over websocket.';
-
-    return Container(padding: const EdgeInsets.all(16));
-  }
-
-  _VoiceStatusMeta _resolveStatus() {
-    if (state.isRecording) {
-      return _VoiceStatusMeta('Listening for your voice', Icons.mic, Colors.redAccent);
-    }
-    if (state.isConnecting) {
-      return _VoiceStatusMeta('Connecting to /ws/voice', Icons.wifi_tethering, Colors.blueAccent);
-    }
-    if (state.isProcessing) {
-      return _VoiceStatusMeta('Transcribing & thinking', Icons.auto_awesome, Colors.blueAccent);
-    }
-    if (state.isPlaying) {
-      return _VoiceStatusMeta('Streaming the reply', Icons.volume_up, Colors.greenAccent);
-    }
-    return _VoiceStatusMeta('Ready for voice upload', Icons.chat_bubble_outline, Colors.white70);
-  }
-}
-
-class _VoiceStatusMeta {
-  const _VoiceStatusMeta(this.label, this.icon, this.color);
-  final String label;
-  final IconData icon;
-  final Color color;
-}
 
 // ignore: unused_element
 class _LoadingChips extends StatelessWidget {

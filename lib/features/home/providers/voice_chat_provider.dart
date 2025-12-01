@@ -95,6 +95,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   VoiceWebSocketConnection? _wsConnection;
   StreamSubscription<VoiceServerMessage>? _wsSubscription;
   final Logger _log = Logger();
+  final Map<String, Uint8List> _faceCache = {};
   bool _iosPermissionDeniedOnce = false;
   Completer<bool>? _permissionDialogCompleter;
   String? _currentSequenceId;
@@ -432,16 +433,33 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   Uint8List? _decodePackedFace(String packed) {
     if (packed.isEmpty) return null;
-    // Try standard/base64-url decoding first.
+    if (_faceCache.containsKey(packed)) return _faceCache[packed];
+
+    // Preferred: numeric base-64 RLE (FaceCompressor.encode_to_base64)
+    final rleDecoded = _decodeNumericBase64Face(packed);
+    if (rleDecoded != null) {
+      _cacheFace(packed, rleDecoded);
+      return rleDecoded;
+    }
+
+    // Fallback: packed bitmap encoded via standard/base64-url
     final normalized = base64.normalize(packed.replaceAll('-', '+').replaceAll('_', '/'));
     try {
-      return Uint8List.fromList(base64Decode(normalized));
+      final bytes = _normalizeFaceBits(Uint8List.fromList(base64Decode(normalized)));
+      if (bytes != null) {
+        _cacheFace(packed, bytes);
+        return bytes;
+      }
     } catch (_) {}
     try {
-      return Uint8List.fromList(base64Url.decode(packed));
+      final bytes = _normalizeFaceBits(Uint8List.fromList(base64Url.decode(packed)));
+      if (bytes != null) {
+        _cacheFace(packed, bytes);
+        return bytes;
+      }
     } catch (_) {}
 
-    // Fallback: treat as hex string (as emitted by FaceCompressor).
+    // Fallback: treat as hex string (as emitted by FaceCompressor.pack_bitmap_to_base64)
     final hex = packed.replaceAll(RegExp(r'[^0-9a-fA-F]'), '');
     if (hex.length % 2 != 0 || hex.isEmpty) return null;
     final bytes = Uint8List(hex.length ~/ 2);
@@ -449,7 +467,130 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       final byte = hex.substring(i, i + 2);
       bytes[i ~/ 2] = int.tryParse(byte, radix: 16) ?? 0;
     }
+    final normalizedHex = _normalizeFaceBits(bytes);
+    if (normalizedHex != null) {
+      _cacheFace(packed, normalizedHex);
+    }
+    return normalizedHex;
+  }
+
+  Uint8List? _normalizeFaceBits(Uint8List raw) {
+    if (raw.isEmpty) return null;
+    const facePixels = 128 * 128;
+    const packedLength = facePixels ~/ 8;
+
+    // Already packed to bits (2048 bytes expected).
+    if (raw.length == packedLength) return raw;
+
+    // If we have at least one bit per pixel, pack down to bits to keep painting predictable.
+    if (raw.length * 8 >= facePixels) {
+      final packed = Uint8List(packedLength);
+      for (var i = 0; i < facePixels; i++) {
+        final byteIndex = i >> 3;
+        final bitMask = 1 << (7 - (i & 7));
+        final isOn = raw.length >= facePixels ? raw[i] != 0 : (raw[byteIndex] & bitMask) != 0;
+        if (isOn) {
+          packed[byteIndex] |= bitMask;
+        }
+      }
+      return packed;
+    }
+
+    return raw;
+  }
+
+  Uint8List? _decodeNumericBase64Face(String data) {
+    try {
+      final bytes = _base64DigitsToBytes(data);
+      if (bytes.isEmpty) return null;
+
+      Uint8List? attemptDecode(Uint8List candidate) {
+        var buf = candidate;
+        if (buf.length.isEven) {
+          buf = Uint8List(buf.length + 1)..setRange(1, buf.length + 1, buf);
+        }
+        final startBit = buf[0] & 1;
+        final runs = <int>[];
+        var i = 1;
+        while (i + 1 < buf.length) {
+          runs.add((buf[i] << 8) | buf[i + 1]);
+          i += 2;
+        }
+        final bitsTotal = runs.fold<int>(0, (acc, v) => acc + v);
+        if (bitsTotal != 128 * 128 || runs.any((r) => r <= 0)) {
+          return null;
+        }
+        return _runsToPackedBits(runs, startBit: startBit);
+      }
+
+      for (var pad = 0; pad <= 4; pad++) {
+        final padded = Uint8List(pad + bytes.length)
+          ..setRange(pad, pad + bytes.length, bytes);
+        final decoded = attemptDecode(padded);
+        if (decoded != null) return decoded;
+      }
+
+      // Fallback compatibility from backend: ensure at least a leading start byte
+      var fallback = bytes;
+      if (fallback.isEmpty || (fallback.first != 0 && fallback.first != 1)) {
+        fallback = Uint8List(fallback.length + 1)..setRange(1, fallback.length + 1, fallback);
+      }
+      if (fallback.length.isEven) {
+        fallback = Uint8List(fallback.length + 1)..setRange(1, fallback.length + 1, fallback);
+      }
+      return attemptDecode(fallback);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Uint8List _runsToPackedBits(List<int> runs, {int startBit = 0}) {
+    const facePixels = 128 * 128;
+    final packed = Uint8List(facePixels ~/ 8);
+    var bit = startBit & 1;
+    var bitIndex = 0;
+    for (final run in runs) {
+      for (var i = 0; i < run; i++) {
+        if (bit != 0) {
+          final byteIndex = bitIndex >> 3;
+          final mask = 1 << (7 - (bitIndex & 7));
+          packed[byteIndex] |= mask;
+        }
+        bitIndex++;
+      }
+      bit ^= 1;
+    }
+    return packed;
+  }
+
+  Uint8List _base64DigitsToBytes(String input) {
+    const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_';
+    if (input.isEmpty) return Uint8List(0);
+    var n = BigInt.zero;
+    for (final ch in input.split('')) {
+      final idx = alphabet.indexOf(ch);
+      if (idx == -1) throw FormatException('Invalid base64 digit: $ch');
+      n = (n * BigInt.from(64)) + BigInt.from(idx);
+    }
+
+    final byteLen = (n.bitLength + 7) >> 3;
+    if (byteLen == 0) return Uint8List.fromList([0]);
+
+    final bytes = Uint8List(byteLen);
+    var temp = n;
+    for (var i = 0; i < byteLen; i++) {
+      bytes[byteLen - 1 - i] = (temp & BigInt.from(0xFF)).toInt();
+      temp = temp >> 8;
+    }
     return bytes;
+  }
+
+  void _cacheFace(String key, Uint8List face) {
+    _faceCache[key] = face;
+    const max = 64;
+    if (_faceCache.length > max) {
+      _faceCache.remove(_faceCache.keys.first);
+    }
   }
 
   Future<void> _ensurePlayerReady() async {
