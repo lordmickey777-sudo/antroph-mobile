@@ -1,9 +1,35 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+
+fun getSigningProperty(propertyKey: String, envKey: String): String? {
+    val fromFile = keystoreProperties.getProperty(propertyKey)
+    val fromEnv = System.getenv(envKey)
+    return (fromFile ?: fromEnv)?.takeIf { it.isNotBlank() }
+}
+
+val releaseStoreFilePath = getSigningProperty("storeFile", "ANDROID_KEYSTORE_PATH")
+val releaseStorePassword = getSigningProperty("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+val releaseKeyAlias = getSigningProperty("keyAlias", "ANDROID_KEY_ALIAS")
+val releaseKeyPassword = getSigningProperty("keyPassword", "ANDROID_KEY_PASSWORD")
+val isReleaseSigningConfigured = listOf(
+    releaseStoreFilePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
 
 android {
     namespace = "com.antroph.aura"
@@ -30,11 +56,26 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (isReleaseSigningConfigured) {
+            create("release") {
+                storeFile = File(releaseStoreFilePath!!)
+                storePassword = releaseStorePassword!!
+                keyAlias = releaseKeyAlias!!
+                keyPassword = releaseKeyPassword!!
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (!isReleaseSigningConfigured) {
+                throw GradleException(
+                    "Release signing is not configured. Add android/key.properties or set ANDROID_* env vars.",
+                )
+            }
+
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

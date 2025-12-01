@@ -31,56 +31,61 @@ Below are common Flutter commands to build Android and iOS release artifacts. Ru
 
 ### Android (APK / App Bundle)
 
-- Build a single release APK:
+**Single APK (universal)**
 
-```sh
-flutter build apk --release
-# Output: build/app/outputs/flutter-apk/app-release.apk
-```
+1) `flutter pub get`
+2) (Optional) add defines, e.g. `--dart-define=SENTRY_DSN=...`
+3) Build: `flutter build apk --release`
+4) Artifact: `build/app/outputs/flutter-apk/app-release.apk`
 
-- Build APKs split per ABI (smaller, device-specific APKs):
+**Per-ABI APKs (smaller, device-specific)**
 
 ```sh
 flutter build apk --split-per-abi --release
-# Outputs: build/app/outputs/flutter-apk/app-<abi>-release.apk
+# Artifacts: build/app/outputs/flutter-apk/app-<abi>-release.apk
 ```
 
-- Build an Android App Bundle (AAB) for Play Store upload:
+**Android App Bundle (Play Store)**
 
 ```sh
 flutter build appbundle --release
-# Output: build/app/outputs/bundle/release/app-release.aab
+# Artifact: build/app/outputs/bundle/release/app-release.aab
 ```
 
-- Install the release build to a connected Android device:
+**Install release build on device**
 
 ```sh
 flutter install --release
 ```
 
+### Configure Android release signing
+
+- Generate a keystore (example): `keytool -genkey -v -storetype JKS -keyalg RSA -keysize 2048 -validity 36500 -keystore android/app/antroph-release-key.jks -alias antroph`
+- Create `android/key.properties` (git-ignored) using the values from your keystore. You can start from `android/key.properties.example`.
+- Alternatively, set environment variables instead of a file: `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
+- A release build will fail if these values are missing; configure them before running `flutter build appbundle --release` or uploading to Play Console.
+
 ### iOS (IPA / Archive)
 
 Prerequisites: macOS, Xcode, CocoaPods, and valid provisioning profiles / signing set up in Xcode.
 
-- Install CocoaPods dependencies (from project root):
+**One-time**
 
 ```sh
 cd ios && pod install && cd -
 ```
 
-- Build an Xcode archive (opens Xcode workspace for further Archive/export steps):
+**Archive for App Store/TestFlight (via Xcode)**
 
-```sh
-flutter build ios --release
-# Then open Xcode: open ios/Runner.xcworkspace
-# Use Xcode Organizer to Archive and export, or use Xcode command line tools for automation.
-```
+1) `flutter build ios --release`
+2) Open workspace: `open ios/Runner.xcworkspace`
+3) In Xcode: Product ➜ Archive ➜ distribute via Organizer.
 
-- Build an IPA directly (choose export method: development, ad-hoc, enterprise, app-store):
+**Build IPA via Flutter CLI**
 
 ```sh
 flutter build ipa --export-method app-store
-# Output (example): build/ios/ipa/Runner.ipa
+# Artifact: build/ios/ipa/Runner.ipa
 ```
 
 Notes:
