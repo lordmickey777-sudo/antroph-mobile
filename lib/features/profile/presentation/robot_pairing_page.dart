@@ -9,7 +9,6 @@ import '../../../widgets/toast.dart';
 import '../../../widgets/typography_text.dart';
 import '../../home/models/expression_models.dart';
 import '../../home/widgets/expression_widgets.dart';
-import '../data/robot_pairing_repository.dart';
 import '../providers/robot_pairing_provider.dart';
 
 class RobotPairingPageArgs {
