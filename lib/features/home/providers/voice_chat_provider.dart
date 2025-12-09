@@ -30,6 +30,7 @@ class VoiceChatState {
   final bool isProcessing;
   final String? userTranscription;
   final String? aiResponse;
+  final Uint8List? aiAudioBytes;
   final String? errorMessage;
   final double playbackProgress;
   final PermissionDialogType permissionDialog;
@@ -45,6 +46,7 @@ class VoiceChatState {
     this.isProcessing = false,
     this.userTranscription,
     this.aiResponse,
+    this.aiAudioBytes,
     this.errorMessage,
     this.playbackProgress = 0.0,
     this.permissionDialog = PermissionDialogType.none,
@@ -61,6 +63,7 @@ class VoiceChatState {
     bool? isProcessing,
     String? userTranscription,
     String? aiResponse,
+    Uint8List? aiAudioBytes,
     String? errorMessage,
     double? playbackProgress,
     PermissionDialogType? permissionDialog,
@@ -68,6 +71,7 @@ class VoiceChatState {
     Uint8List? currentFaceBitmap,
     int? faceTimestampMs,
     bool clearFace = false,
+    bool clearAiAudio = false,
   }) {
     return VoiceChatState(
       currentExpression: currentExpression ?? this.currentExpression,
@@ -77,6 +81,7 @@ class VoiceChatState {
       isProcessing: isProcessing ?? this.isProcessing,
       userTranscription: userTranscription ?? this.userTranscription,
       aiResponse: aiResponse ?? this.aiResponse,
+      aiAudioBytes: clearAiAudio ? null : (aiAudioBytes ?? this.aiAudioBytes),
       errorMessage: errorMessage,
       playbackProgress: playbackProgress ?? this.playbackProgress,
       permissionDialog: permissionDialog ?? this.permissionDialog,
@@ -109,6 +114,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   DateTime? _recordingStartedAt;
   String? _recordingFilePath;
   int _chunkCount = 0;
+  final List<int> _aiAudioBuffer = <int>[];
   String? _currentRequestId;
   static const int _sampleRate = 16000;
   static const String _preferredEncoding = 'opus';
@@ -183,6 +189,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isProcessing: false,
         isPlaying: false,
         aiResponse: null,
+        clearAiAudio: true,
         userTranscription: null,
         errorMessage: null,
         clearFace: true,
@@ -461,6 +468,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _log.i('Voice stream ended. chunks=$_chunkCount duration=${durationMs}ms');
       await _cleanupRecordingFile();
       _chunkCount = 0;
+      _aiAudioBuffer.clear();
     } catch (e, stackTrace) {
       _log.e('Failed to process voice message', error: e, stackTrace: stackTrace);
       state = state.copyWith(
@@ -468,6 +476,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isProcessing: false,
         isConnecting: false,
         isPlaying: false,
+        clearAiAudio: true,
         clearFace: true,
         errorMessage: e is VoiceChatException ? e.message : 'Failed to process voice: $e',
       );
@@ -495,6 +504,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         _log.w('Recording file empty for fallback streaming: $path');
         return;
       }
+      _aiAudioBuffer
+        ..clear()
+        ..addAll(bytes);
       const chunkSize = 8192;
       var localChunks = 0;
       for (var offset = 0; offset < bytes.length; offset += chunkSize) {
@@ -522,7 +534,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         final payload = message.data != null ? VoiceConnectedPayload.fromJson(message.data!) : null;
         final formats = payload?.audioFormats ?? const <String>[];
         _preferredContentType = _pickContentType(formats);
-        state = state.copyWith(isConnecting: false, audioFormats: formats, errorMessage: null);
+        state = state.copyWith(
+          isConnecting: false,
+          audioFormats: formats,
+          errorMessage: null,
+          clearAiAudio: true,
+        );
         break;
       case VoiceMessageType.voiceResponse:
         final ack = message.data != null
@@ -546,7 +563,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
             ? VoiceTranscriptionPayload.fromJson(message.data!)
             : null;
         if (payload != null && payload.text.isNotEmpty) {
-          state = state.copyWith(userTranscription: payload.text, errorMessage: null);
+          state = state.copyWith(
+            userTranscription: payload.text,
+            errorMessage: null,
+          );
         }
         break;
       case VoiceMessageType.error:
@@ -577,6 +597,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       try {
         await _ensurePlayerReady();
         final bytes = base64Decode(chunk.data!);
+        _aiAudioBuffer.addAll(bytes);
         await _streamPlayer.addChunk(bytes);
         state = state.copyWith(
           isPlaying: true,
@@ -590,10 +611,17 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     }
 
     if (chunk.isFinal) {
-      state = state.copyWith(isProcessing: false, isConnecting: false);
+      final recordedAudio =
+          _aiAudioBuffer.isNotEmpty ? Uint8List.fromList(_aiAudioBuffer) : null;
+      state = state.copyWith(
+        isProcessing: false,
+        isConnecting: false,
+        aiAudioBytes: recordedAudio,
+      );
       await _streamPlayer.markComplete();
       _currentSequenceId = null;
       await _disposeSocket();
+      _aiAudioBuffer.clear();
     }
   }
 
@@ -823,6 +851,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _micStreamController = null;
     _recordingStartedAt = null;
     _chunkCount = 0;
+    _aiAudioBuffer.clear();
     await _wsSubscription?.cancel();
     _wsSubscription = null;
     if (_wsConnection != null) {
@@ -876,6 +905,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           isRecording: false,
           isProcessing: false,
           errorMessage: null,
+          clearAiAudio: true,
           clearFace: true,
         );
         _sendVoiceEnd(totalChunks: _chunkCount, durationMs: durationMs);
