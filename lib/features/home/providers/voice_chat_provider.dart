@@ -167,10 +167,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         _activeCodec = Codec.opusOGG;
         _activeEncoding = _preferredEncoding;
       } else {
-        _activeCodec = Codec.pcm16;
-        _activeEncoding = 'pcm';
+        _activeCodec = Codec.pcm16WAV;
+        _activeEncoding = 'wav';
         _log.w(
-          'Opus not supported on this device. Falling back to PCM streaming.',
+          'Opus not supported on this device. Falling back to WAV container.',
         );
       }
       _log.i(
@@ -244,7 +244,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       }, onError: (err, st) => _handleSocketError(err, st));
 
       _recordingStartedAt = DateTime.now();
-      final bitRate = _activeCodec == Codec.pcm16 ? _sampleRate * 16 : 16000;
+      final bitRate = (_activeCodec == Codec.pcm16 ||
+              _activeCodec == Codec.pcm16WAV)
+          ? _sampleRate * 16
+          : 16000;
       await _audioRecorder!.startRecorder(
         toStream: _micStreamController!.sink,
         codec: _activeCodec,
