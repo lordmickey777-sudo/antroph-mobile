@@ -16,11 +16,29 @@ class AppEnv {
   static String get apiBaseUrl => _string('API_BASE_URL', '');
   static String get sentryDsn => _string('SENTRY_DSN', '');
   static String get robotSerial => _string('ROBOT_SERIAL', '');
+  static String get chatWsUrl {
+    final direct = _string('CHAT_WS_URL', '');
+    if (direct.isNotEmpty) {
+      return _normalizeWsUrl(direct);
+    }
+    final api = apiBaseUrl;
+    if (api.isEmpty) return '';
+    final base = api.endsWith('/') ? api.substring(0, api.length - 1) : api;
+    if (base.startsWith('https://')) {
+      return '${base.replaceFirst('https://', 'wss://')}/ws/chat';
+    }
+    if (base.startsWith('http://')) {
+      return '${base.replaceFirst('http://', 'ws://')}/ws/chat';
+    }
+    return 'wss://$base/ws/chat';
+  }
+
   static String get storyWsUrl {
     final direct = _string('STORY_WS_URL', '');
     if (direct.isNotEmpty) return direct;
     final api = apiBaseUrl;
-    if (api.startsWith('https://')) return api.replaceFirst('https://', 'wss://');
+    if (api.startsWith('https://'))
+      return api.replaceFirst('https://', 'wss://');
     if (api.startsWith('http://')) return api.replaceFirst('http://', 'ws://');
     return '';
   }
@@ -35,5 +53,17 @@ class AppEnv {
     }
     // Fallback to dart-define or provided default
     return String.fromEnvironment(key, defaultValue: fallback);
+  }
+
+  static String _normalizeWsUrl(String input) {
+    var trimmed = input.trim();
+    if (trimmed.endsWith('#')) {
+      trimmed = trimmed.substring(0, trimmed.length - 1);
+    }
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null) return trimmed;
+    if (uri.scheme == 'https') return uri.replace(scheme: 'wss').toString();
+    if (uri.scheme == 'http') return uri.replace(scheme: 'ws').toString();
+    return trimmed;
   }
 }
