@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:antroph_mobile/features/home/models/chat_models.dart';
 import 'package:antroph_mobile/features/home/providers/chat_provider.dart';
+import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/home/widgets/face_avatar.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
@@ -70,6 +71,8 @@ class ChatScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(chatControllerProvider);
     final controller = ref.read(chatControllerProvider.notifier);
+    final voiceState = ref.watch(voiceChatControllerProvider);
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
     final failedMessage = _lastFailed(state.messages);
 
     return Column(
@@ -91,6 +94,24 @@ class ChatScreen extends ConsumerWidget {
             onRetry: controller.retrySend,
           ),
         ),
+        if (_VoiceStatusBar.shouldShow(voiceState))
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _VoiceStatusBar(
+              state: voiceState,
+              onStop: () {
+                if (voiceState.isRecording) {
+                  voiceController.stopRecordingAndSend();
+                } else {
+                  voiceController.stopPlayback();
+                }
+              },
+              onCancel: () {
+                voiceController.cancelRecording();
+                voiceController.clearError();
+              },
+            ),
+          ),
         MessageInput(
           enabled: state.isConnected,
           isConnecting: state.isConnecting,
@@ -99,6 +120,14 @@ class ChatScreen extends ConsumerWidget {
           failedMessage: failedMessage,
           onSend: controller.sendMessage,
           onReconnect: controller.forceReconnect,
+          voiceState: voiceState,
+          onStartVoice: voiceController.startRecording,
+          onStopVoice: voiceController.stopRecordingAndSend,
+          onStopVoicePlayback: voiceController.stopPlayback,
+          onCancelVoice: () {
+            voiceController.cancelRecording();
+            voiceController.clearError();
+          },
           onRetryFailed: failedMessage != null
               ? () => controller.retrySend(failedMessage.id)
               : null,
@@ -351,6 +380,159 @@ class _StatusRow extends StatelessWidget {
   }
 }
 
+class _VoiceStatusBar extends StatelessWidget {
+  const _VoiceStatusBar({
+    required this.state,
+    required this.onStop,
+    required this.onCancel,
+  });
+
+  final VoiceChatState state;
+  final VoidCallback onStop;
+  final VoidCallback onCancel;
+
+  static bool shouldShow(VoiceChatState state) {
+    return state.isRecording ||
+        state.isProcessing ||
+        state.isPlaying ||
+        (state.userTranscription?.isNotEmpty ?? false) ||
+        (state.aiResponse?.isNotEmpty ?? false) ||
+        (state.errorMessage?.isNotEmpty ?? false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasError = state.errorMessage?.isNotEmpty ?? false;
+    final active = state.isRecording || state.isProcessing || state.isPlaying;
+    final iconColor = hasError
+        ? Colors.redAccent
+        : state.isRecording
+        ? Colors.redAccent
+        : state.isPlaying
+        ? Colors.lightGreenAccent
+        : Colors.white70;
+    final icon = state.isRecording
+        ? Icons.mic
+        : state.isProcessing
+        ? Icons.cloud_sync
+        : state.isPlaying
+        ? Icons.graphic_eq
+        : hasError
+        ? Icons.error_outline
+        : Icons.mic_none;
+    final title = state.isRecording
+        ? 'Listening...'
+        : state.isProcessing
+        ? 'Processing voice...'
+        : state.isPlaying
+        ? 'Playing reply...'
+        : hasError
+        ? 'Voice chat issue'
+        : 'Voice chat ready';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: hasError
+            ? Colors.redAccent.withOpacity(0.12)
+            : Colors.white.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: hasError ? Colors.redAccent.withOpacity(0.6) : Colors.white12,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: iconColor, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              if (active || hasError)
+                TextButton(
+                  onPressed: hasError ? onCancel : onStop,
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                  ),
+                  child: Text(hasError ? 'Dismiss' : 'Stop'),
+                ),
+            ],
+          ),
+          if (state.userTranscription?.isNotEmpty ?? false) ...[
+            const SizedBox(height: 6),
+            _VoiceLine(label: 'You', text: state.userTranscription!),
+          ],
+          if (state.aiResponse?.isNotEmpty ?? false) ...[
+            const SizedBox(height: 6),
+            _VoiceLine(label: 'AI', text: state.aiResponse!),
+          ],
+          if (hasError &&
+              state.errorMessage != null &&
+              state.errorMessage!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                state.errorMessage!,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VoiceLine extends StatelessWidget {
+  const _VoiceLine({required this.label, required this.text});
+
+  final String label;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$label: ',
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class MessageInput extends StatefulWidget {
   const MessageInput({
     super.key,
@@ -361,6 +543,11 @@ class MessageInput extends StatefulWidget {
     this.failedMessage,
     required this.onSend,
     required this.onReconnect,
+    required this.voiceState,
+    required this.onStartVoice,
+    required this.onStopVoice,
+    required this.onStopVoicePlayback,
+    required this.onCancelVoice,
     this.onRetryFailed,
   });
 
@@ -371,6 +558,11 @@ class MessageInput extends StatefulWidget {
   final ChatMessageModel? failedMessage;
   final ValueChanged<String> onSend;
   final VoidCallback onReconnect;
+  final VoiceChatState voiceState;
+  final VoidCallback onStartVoice;
+  final VoidCallback onStopVoice;
+  final VoidCallback onStopVoicePlayback;
+  final VoidCallback onCancelVoice;
   final VoidCallback? onRetryFailed;
 
   @override
@@ -421,6 +613,14 @@ class _MessageInputState extends State<MessageInput> {
                     ),
                     child: Row(
                       children: [
+                        _VoiceRecordIcon(
+                          state: widget.voiceState,
+                          enabled: widget.enabled,
+                          onStart: widget.onStartVoice,
+                          onStop: widget.onStopVoice,
+                          onStopPlayback: widget.onStopVoicePlayback,
+                        ),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: TextField(
                             controller: _controller,
@@ -432,7 +632,7 @@ class _MessageInputState extends State<MessageInput> {
                             ),
                             maxLines: null,
                             decoration: const InputDecoration(
-                              hintText: 'Type a message',
+                              hintText: 'Type a message or use voice',
                               hintStyle: TextStyle(color: Colors.white38),
                               border: InputBorder.none,
                               isDense: true,
@@ -491,6 +691,13 @@ class _MessageInputState extends State<MessageInput> {
                   ),
               ],
             ),
+            const SizedBox(height: 4),
+            _VoiceInlineStatus(
+              state: widget.voiceState,
+              onStop: widget.onStopVoicePlayback,
+              onCancel: widget.onCancelVoice,
+              onStopRecording: widget.onStopVoice,
+            ),
             if (widget.failedMessage != null &&
                 widget.onRetryFailed != null) ...[
               const SizedBox(height: 6),
@@ -533,6 +740,151 @@ class _MessageInputState extends State<MessageInput> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _VoiceRecordIcon extends StatelessWidget {
+  const _VoiceRecordIcon({
+    required this.state,
+    required this.enabled,
+    required this.onStart,
+    required this.onStop,
+    required this.onStopPlayback,
+  });
+
+  final VoiceChatState state;
+  final bool enabled;
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+  final VoidCallback onStopPlayback;
+
+  @override
+  Widget build(BuildContext context) {
+    final recording = state.isRecording;
+    final waiting = state.isProcessing || state.isConnecting;
+    final playing = state.isPlaying;
+    final hasError = state.errorMessage?.isNotEmpty ?? false;
+
+    IconData icon;
+    Color color;
+    VoidCallback? action;
+
+    if (recording) {
+      icon = Icons.stop_rounded;
+      color = Colors.redAccent;
+      action = onStop;
+    } else if (waiting || playing) {
+      icon = Icons.pause_circle_filled;
+      color = Colors.amberAccent;
+      action = onStopPlayback;
+    } else {
+      icon = hasError ? Icons.refresh : Icons.mic_none_rounded;
+      color = hasError ? Colors.redAccent : Colors.white70;
+      action = enabled ? onStart : null;
+    }
+
+    return InkWell(
+      onTap: action,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: recording
+              ? Colors.redAccent.withOpacity(0.15)
+              : Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: recording ? Colors.redAccent : Colors.white12,
+          ),
+        ),
+        child: Center(child: Icon(icon, color: color, size: 22)),
+      ),
+    );
+  }
+}
+
+class _VoiceInlineStatus extends StatelessWidget {
+  const _VoiceInlineStatus({
+    required this.state,
+    required this.onStop,
+    required this.onCancel,
+    required this.onStopRecording,
+  });
+
+  final VoiceChatState state;
+  final VoidCallback onStop;
+  final VoidCallback onCancel;
+  final VoidCallback onStopRecording;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasError = state.errorMessage?.isNotEmpty ?? false;
+    String? label;
+    IconData icon = Icons.mic_none;
+    Color color = Colors.white54;
+    VoidCallback? action;
+    String actionLabel = 'Stop';
+
+    if (state.isRecording) {
+      label = 'Recording voice...';
+      icon = Icons.mic;
+      color = Colors.redAccent;
+      action = onStopRecording;
+      actionLabel = 'Send';
+    } else if (state.isProcessing) {
+      label = 'Processing voice...';
+      icon = Icons.cloud_sync;
+      color = Colors.amberAccent;
+      action = onStop;
+    } else if (state.isPlaying) {
+      label = 'Playing reply...';
+      icon = Icons.graphic_eq;
+      color = Colors.lightGreenAccent;
+      action = onStop;
+    } else if (hasError) {
+      label = state.errorMessage;
+      icon = Icons.error_outline;
+      color = Colors.redAccent;
+      action = onCancel;
+      actionLabel = 'Dismiss';
+    } else if (state.userTranscription?.isNotEmpty ?? false) {
+      label = 'Heard: ${state.userTranscription}';
+      icon = Icons.hearing;
+      color = Colors.white70;
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 16),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label ?? '',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ),
+        if (action != null)
+          TextButton(
+            onPressed: action,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              foregroundColor: Colors.white,
+              textStyle: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            child: Text(actionLabel),
+          ),
+      ],
     );
   }
 }

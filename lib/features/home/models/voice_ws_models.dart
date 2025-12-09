@@ -1,6 +1,14 @@
 import 'dart:convert';
 
-enum VoiceMessageType { connected, voiceResponse, voiceAudioChunk, error, ping, unknown }
+enum VoiceMessageType {
+  connected,
+  voiceResponse,
+  voiceAudioChunk,
+  voiceTranscription,
+  error,
+  ping,
+  unknown,
+}
 
 VoiceMessageType voiceMessageTypeFromString(String raw) {
   switch (raw.toLowerCase()) {
@@ -10,6 +18,8 @@ VoiceMessageType voiceMessageTypeFromString(String raw) {
       return VoiceMessageType.voiceResponse;
     case 'voice_audio_chunk':
       return VoiceMessageType.voiceAudioChunk;
+    case 'voice_transcription':
+      return VoiceMessageType.voiceTranscription;
     case 'error':
       return VoiceMessageType.error;
     case 'ping':
@@ -52,7 +62,9 @@ class VoiceServerMessage {
     final type = voiceMessageTypeFromString((json['type'] as String?) ?? '');
     final data = json['data'] is Map<String, dynamic>
         ? json['data'] as Map<String, dynamic>
-        : (json['data'] is Map ? (json['data'] as Map).cast<String, dynamic>() : null);
+        : (json['data'] is Map
+              ? (json['data'] as Map).cast<String, dynamic>()
+              : null);
     final ts = json['timestamp'];
     DateTime? parsed;
     if (ts is String) {
@@ -87,7 +99,8 @@ class VoiceConnectedPayload {
   final List<String> capabilities;
   final List<String> audioFormats;
 
-  factory VoiceConnectedPayload.fromJson(Map<String, dynamic> json) => VoiceConnectedPayload(
+  factory VoiceConnectedPayload.fromJson(Map<String, dynamic> json) =>
+      VoiceConnectedPayload(
         reconnectToken: json['reconnect_token'] as String?,
         deviceId: json['device_id'] as String?,
         deviceType: json['device_type'] as String?,
@@ -110,10 +123,33 @@ class VoiceResponseAck {
   final String? transcription;
   final String? aiText;
 
-  factory VoiceResponseAck.fromJson(Map<String, dynamic> json) => VoiceResponseAck(
+  factory VoiceResponseAck.fromJson(Map<String, dynamic> json) =>
+      VoiceResponseAck(
         message: json['message'] as String?,
         transcription: json['transcription'] as String?,
         aiText: json['ai_text'] as String?,
+      );
+}
+
+class VoiceTranscriptionPayload {
+  const VoiceTranscriptionPayload({
+    required this.text,
+    this.language,
+    this.confidence,
+    this.durationMs,
+  });
+
+  final String text;
+  final String? language;
+  final double? confidence;
+  final int? durationMs;
+
+  factory VoiceTranscriptionPayload.fromJson(Map<String, dynamic> json) =>
+      VoiceTranscriptionPayload(
+        text: (json['text'] as String?) ?? '',
+        language: json['language'] as String?,
+        confidence: (json['confidence'] as num?)?.toDouble(),
+        durationMs: (json['duration_ms'] as num?)?.toInt(),
       );
 }
 
@@ -134,14 +170,28 @@ class VoiceExpressionFrame {
   final List<num>? heading;
   final List<num>? headingDelta;
 
-  factory VoiceExpressionFrame.fromJson(Map<String, dynamic> json) => VoiceExpressionFrame(
+  factory VoiceExpressionFrame.fromJson(Map<String, dynamic> json) =>
+      VoiceExpressionFrame(
         timestampMs: (json['t'] as num?)?.toInt(),
-        packedFace: (json['f'] as String?) ?? '',
-        durationMs: (json['duration'] as num?)?.toInt(),
+        packedFace: _coercePackedFace(json['f']),
+        durationMs: ((json['duration'] ?? json['d']) as num?)?.toInt(),
         subtitle: json['s'] as String?,
         heading: (json['h'] as List?)?.whereType<num>().toList(),
         headingDelta: (json['hd'] as List?)?.whereType<num>().toList(),
       );
+
+  static String _coercePackedFace(dynamic input) {
+    if (input is String) return input;
+    if (input is List) {
+      try {
+        final ints = input.whereType<num>().map((e) => e.toInt()).toList();
+        return base64Encode(ints);
+      } catch (_) {
+        return '';
+      }
+    }
+    return '';
+  }
 }
 
 class VoiceAudioChunk {
@@ -151,6 +201,8 @@ class VoiceAudioChunk {
     this.chunkIndex,
     this.data,
     this.chunkServerTime,
+    this.chunkPart,
+    this.totalParts,
     this.frames = const <VoiceExpressionFrame>[],
     this.isFinal = false,
   });
@@ -160,35 +212,50 @@ class VoiceAudioChunk {
   final int? chunkIndex;
   final String? data;
   final int? chunkServerTime;
+  final int? chunkPart;
+  final int? totalParts;
   final List<VoiceExpressionFrame> frames;
   final bool isFinal;
 
-  factory VoiceAudioChunk.fromJson(Map<String, dynamic> json) => VoiceAudioChunk(
+  factory VoiceAudioChunk.fromJson(Map<String, dynamic> json) =>
+      VoiceAudioChunk(
         sequenceId: (json['sequence_id'] as String?) ?? '',
         sequence: (json['sequence'] as num?)?.toInt(),
         chunkIndex: (json['chunk_index'] as num?)?.toInt(),
         data: json['data'] as String?,
         chunkServerTime: (json['chunk_server_time'] as num?)?.toInt(),
+        chunkPart: (json['chunk_part'] as num?)?.toInt(),
+        totalParts: (json['total_parts'] as num?)?.toInt(),
         frames: ((json['frames'] as List?) ?? const [])
             .whereType<Map>()
-            .map((e) => VoiceExpressionFrame.fromJson(e.cast<String, dynamic>()))
+            .map(
+              (e) => VoiceExpressionFrame.fromJson(e.cast<String, dynamic>()),
+            )
             .toList(),
         isFinal: json['is_final'] == true,
       );
 }
 
 class VoiceErrorPayload {
-  const VoiceErrorPayload({this.code, this.message, this.severity, this.details});
+  const VoiceErrorPayload({
+    this.code,
+    this.message,
+    this.severity,
+    this.details,
+  });
 
   final String? code;
   final String? message;
   final String? severity;
   final Map<String, dynamic>? details;
 
-  factory VoiceErrorPayload.fromJson(Map<String, dynamic> json) => VoiceErrorPayload(
+  factory VoiceErrorPayload.fromJson(Map<String, dynamic> json) =>
+      VoiceErrorPayload(
         code: json['code'] as String?,
         message: json['message'] as String?,
         severity: json['severity'] as String?,
-        details: json['details'] is Map ? (json['details'] as Map).cast<String, dynamic>() : null,
+        details: json['details'] is Map
+            ? (json['details'] as Map).cast<String, dynamic>()
+            : null,
       );
 }
