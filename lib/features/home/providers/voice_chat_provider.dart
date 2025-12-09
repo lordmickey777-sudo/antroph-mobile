@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,12 +81,8 @@ class VoiceChatState {
       playbackProgress: playbackProgress ?? this.playbackProgress,
       permissionDialog: permissionDialog ?? this.permissionDialog,
       audioFormats: audioFormats ?? this.audioFormats,
-      currentFaceBitmap: clearFace
-          ? null
-          : (currentFaceBitmap ?? this.currentFaceBitmap),
-      faceTimestampMs: clearFace
-          ? null
-          : (faceTimestampMs ?? this.faceTimestampMs),
+      currentFaceBitmap: clearFace ? null : (currentFaceBitmap ?? this.currentFaceBitmap),
+      faceTimestampMs: clearFace ? null : (faceTimestampMs ?? this.faceTimestampMs),
     );
   }
 
@@ -115,8 +112,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   String? _currentRequestId;
   static const int _sampleRate = 16000;
   static const String _preferredEncoding = 'opus';
-  static const String _permissionError =
-      'Microphone permission is required for voice chat';
+  static const String _permissionError = 'Microphone permission is required for voice chat';
   static const String _deviceIdPrefsKey = 'voice_chat_device_id';
 
   @override
@@ -157,35 +153,27 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         await _audioRecorder!.openRecorder();
       }
 
-      final supportsOpus = await _audioRecorder!
-          .isEncoderSupported(Codec.opusOGG)
-          .catchError((e, st) {
-            _log.w(
-              'Opus encoder support check failed: $e',
-              error: e,
-              stackTrace: st,
-            );
-            return false;
-          });
+      final supportsOpus = await _audioRecorder!.isEncoderSupported(Codec.opusOGG).catchError((
+        e,
+        st,
+      ) {
+        _log.w('Opus encoder support check failed: $e', error: e, stackTrace: st);
+        return false;
+      });
       if (supportsOpus) {
         _activeCodec = Codec.opusOGG;
         _activeEncoding = _preferredEncoding;
       } else {
         _activeCodec = Codec.pcm16WAV;
         _activeEncoding = 'wav';
-        _log.w(
-          'Opus not supported on this device. Falling back to WAV container.',
-        );
+        _log.w('Opus not supported on this device. Falling back to WAV container.');
       }
-      _log.i(
-        'Voice recorder using codec=$_activeCodec encoding=$_activeEncoding',
-      );
+      _log.i('Voice recorder using codec=$_activeCodec encoding=$_activeEncoding');
 
       await _streamPlayer.stop();
       await _disposeSocket();
 
-      final token =
-          ref.read(authControllerProvider.notifier).tokens?.accessToken ?? '';
+      final token = ref.read(authControllerProvider.notifier).tokens?.accessToken ?? '';
       if (token.isEmpty) {
         throw VoiceChatException('You must be logged in to use voice chat');
       }
@@ -213,7 +201,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         onDone: _handleSocketDone,
       );
 
-      _preferredContentType = 'audio/mpeg';
+      // Set content type based on actual encoding being used
+      _preferredContentType = _getContentTypeForEncoding(_activeEncoding);
       _currentRequestId = 'voice-${DateTime.now().millisecondsSinceEpoch}';
       _chunkCount = 0;
 
@@ -222,10 +211,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _log.i('Voice session started (request=$_currentRequestId)');
     } catch (e, stackTrace) {
       _log.e('Failed to start recording', error: e, stackTrace: stackTrace);
-      state = state.copyWith(
-        isRecording: false,
-        errorMessage: 'Failed to start recording: $e',
-      );
+      state = state.copyWith(isRecording: false, errorMessage: 'Failed to start recording: $e');
     }
   }
 
@@ -248,8 +234,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       }, onError: (err, st) => _handleSocketError(err, st));
 
       _recordingStartedAt = DateTime.now();
-      final bitRate = (_activeCodec == Codec.pcm16 ||
-              _activeCodec == Codec.pcm16WAV)
+      final bitRate = (_activeCodec == Codec.pcm16 || _activeCodec == Codec.pcm16WAV)
           ? _sampleRate * 16
           : 16000;
       _recordingFilePath = await _prepareRecordingFilePath();
@@ -287,8 +272,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Future<String> _prepareRecordingFilePath() async {
     final tempDir = await getTemporaryDirectory();
     final extension = _fileExtensionForCodec(_activeCodec);
-    final fileName =
-        'voice-${DateTime.now().millisecondsSinceEpoch}.$extension';
+    final fileName = 'voice-${DateTime.now().millisecondsSinceEpoch}.$extension';
     return p.join(tempDir.path, fileName);
   }
 
@@ -316,11 +300,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         await file.delete();
       }
     } catch (e, st) {
-      _log.w(
-        'Failed to delete temp recording file: $e',
-        error: e,
-        stackTrace: st,
-      );
+      _log.w('Failed to delete temp recording file: $e', error: e, stackTrace: st);
     }
   }
 
@@ -365,8 +345,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   Future<bool> _showEducationDialogAndWait() async {
-    if (_permissionDialogCompleter != null &&
-        !_permissionDialogCompleter!.isCompleted) {
+    if (_permissionDialogCompleter != null && !_permissionDialogCompleter!.isCompleted) {
       return _permissionDialogCompleter!.future;
     }
     final completer = Completer<bool>();
@@ -404,8 +383,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void handleEducationDialogResult(bool accepted) {
-    if (_permissionDialogCompleter != null &&
-        !_permissionDialogCompleter!.isCompleted) {
+    if (_permissionDialogCompleter != null && !_permissionDialogCompleter!.isCompleted) {
       _permissionDialogCompleter!.complete(accepted);
     }
     _permissionDialogCompleter = null;
@@ -413,8 +391,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void dismissPermissionDialog() {
-    if (_permissionDialogCompleter != null &&
-        !_permissionDialogCompleter!.isCompleted) {
+    if (_permissionDialogCompleter != null && !_permissionDialogCompleter!.isCompleted) {
       _permissionDialogCompleter!.complete(false);
     }
     _permissionDialogCompleter = null;
@@ -431,8 +408,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _sendVoiceStart() {
     if (_wsConnection == null) return;
-    final reqId =
-        _currentRequestId ?? 'voice-${DateTime.now().millisecondsSinceEpoch}';
+    final reqId = _currentRequestId ?? 'voice-${DateTime.now().millisecondsSinceEpoch}';
     _currentRequestId = reqId;
     _wsConnection!.sendJson({
       'type': 'voice_start',
@@ -471,8 +447,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       await _micStreamSubscription?.cancel();
       await _micStreamController?.close();
       _recordingStartedAt = null;
-      await _cleanupRecordingFile();
 
+      await _sendBufferedRecordingIfNeeded();
       state = state.copyWith(
         isRecording: false,
         isProcessing: true,
@@ -482,25 +458,60 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       );
 
       _sendVoiceEnd(totalChunks: _chunkCount, durationMs: durationMs);
-      _log.i(
-        'Voice stream ended. chunks=$_chunkCount duration=${durationMs}ms',
-      );
+      _log.i('Voice stream ended. chunks=$_chunkCount duration=${durationMs}ms');
+      await _cleanupRecordingFile();
       _chunkCount = 0;
     } catch (e, stackTrace) {
-      _log.e(
-        'Failed to process voice message',
-        error: e,
-        stackTrace: stackTrace,
-      );
+      _log.e('Failed to process voice message', error: e, stackTrace: stackTrace);
       state = state.copyWith(
         isRecording: false,
         isProcessing: false,
         isConnecting: false,
         isPlaying: false,
         clearFace: true,
-        errorMessage: e is VoiceChatException
-            ? e.message
-            : 'Failed to process voice: $e',
+        errorMessage: e is VoiceChatException ? e.message : 'Failed to process voice: $e',
+      );
+    }
+  }
+
+  /// iOS flutter_sound currently does not forward live audio chunks to Dart.
+  /// If we didn't stream any bytes, fall back to reading the recorded file and
+  /// push it through the websocket before we send voice_end.
+  Future<void> _sendBufferedRecordingIfNeeded() async {
+    if (_chunkCount > 0) return;
+    final path = _recordingFilePath;
+    if (_wsConnection == null || path == null || path.isEmpty) {
+      _log.w('No websocket or recording file available for fallback streaming.');
+      return;
+    }
+    final file = File(path);
+    if (!await file.exists()) {
+      _log.w('Recording file missing for fallback streaming: $path');
+      return;
+    }
+    try {
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
+        _log.w('Recording file empty for fallback streaming: $path');
+        return;
+      }
+      const chunkSize = 8192;
+      var localChunks = 0;
+      for (var offset = 0; offset < bytes.length; offset += chunkSize) {
+        final end = math.min(offset + chunkSize, bytes.length);
+        final chunk = bytes.sublist(offset, end);
+        _wsConnection?.sendBinary(chunk);
+        localChunks++;
+      }
+      _chunkCount = localChunks;
+      _log.i(
+        'Fallback streamed $_chunkCount chunks from recorded file (${bytes.length} bytes).',
+      );
+    } catch (e, st) {
+      _log.e(
+        'Failed to fallback-stream recorded audio file',
+        error: e,
+        stackTrace: st,
       );
     }
   }
@@ -508,16 +519,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   void _handleServerMessage(VoiceServerMessage message) {
     switch (message.type) {
       case VoiceMessageType.connected:
-        final payload = message.data != null
-            ? VoiceConnectedPayload.fromJson(message.data!)
-            : null;
+        final payload = message.data != null ? VoiceConnectedPayload.fromJson(message.data!) : null;
         final formats = payload?.audioFormats ?? const <String>[];
         _preferredContentType = _pickContentType(formats);
-        state = state.copyWith(
-          isConnecting: false,
-          audioFormats: formats,
-          errorMessage: null,
-        );
+        state = state.copyWith(isConnecting: false, audioFormats: formats, errorMessage: null);
         break;
       case VoiceMessageType.voiceResponse:
         final ack = message.data != null
@@ -541,10 +546,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
             ? VoiceTranscriptionPayload.fromJson(message.data!)
             : null;
         if (payload != null && payload.text.isNotEmpty) {
-          state = state.copyWith(
-            userTranscription: payload.text,
-            errorMessage: null,
-          );
+          state = state.copyWith(userTranscription: payload.text, errorMessage: null);
         }
         break;
       case VoiceMessageType.error:
@@ -597,10 +599,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _applyExpressionFrames(List<VoiceExpressionFrame> frames) {
     if (frames.isEmpty) return;
-    final latest = frames.lastWhere(
-      (f) => f.packedFace.isNotEmpty,
-      orElse: () => frames.last,
-    );
+    final latest = frames.lastWhere((f) => f.packedFace.isNotEmpty, orElse: () => frames.last);
     if (latest.packedFace.isEmpty) return;
     final decoded = _decodePackedFace(latest.packedFace);
     if (decoded == null || decoded.isEmpty) return;
@@ -623,22 +622,16 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     }
 
     // Fallback: packed bitmap encoded via standard/base64-url
-    final normalized = base64.normalize(
-      packed.replaceAll('-', '+').replaceAll('_', '/'),
-    );
+    final normalized = base64.normalize(packed.replaceAll('-', '+').replaceAll('_', '/'));
     try {
-      final bytes = _normalizeFaceBits(
-        Uint8List.fromList(base64Decode(normalized)),
-      );
+      final bytes = _normalizeFaceBits(Uint8List.fromList(base64Decode(normalized)));
       if (bytes != null) {
         _cacheFace(packed, bytes);
         return bytes;
       }
     } catch (_) {}
     try {
-      final bytes = _normalizeFaceBits(
-        Uint8List.fromList(base64Url.decode(packed)),
-      );
+      final bytes = _normalizeFaceBits(Uint8List.fromList(base64Url.decode(packed)));
       if (bytes != null) {
         _cacheFace(packed, bytes);
         return bytes;
@@ -674,9 +667,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       for (var i = 0; i < facePixels; i++) {
         final byteIndex = i >> 3;
         final bitMask = 1 << (7 - (i & 7));
-        final isOn = raw.length >= facePixels
-            ? raw[i] != 0
-            : (raw[byteIndex] & bitMask) != 0;
+        final isOn = raw.length >= facePixels ? raw[i] != 0 : (raw[byteIndex] & bitMask) != 0;
         if (isOn) {
           packed[byteIndex] |= bitMask;
         }
@@ -712,8 +703,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       }
 
       for (var pad = 0; pad <= 4; pad++) {
-        final padded = Uint8List(pad + bytes.length)
-          ..setRange(pad, pad + bytes.length, bytes);
+        final padded = Uint8List(pad + bytes.length)..setRange(pad, pad + bytes.length, bytes);
         final decoded = attemptDecode(padded);
         if (decoded != null) return decoded;
       }
@@ -721,12 +711,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       // Fallback compatibility from backend: ensure at least a leading start byte
       var fallback = bytes;
       if (fallback.isEmpty || (fallback.first != 0 && fallback.first != 1)) {
-        fallback = Uint8List(fallback.length + 1)
-          ..setRange(1, fallback.length + 1, fallback);
+        fallback = Uint8List(fallback.length + 1)..setRange(1, fallback.length + 1, fallback);
       }
       if (fallback.length.isEven) {
-        fallback = Uint8List(fallback.length + 1)
-          ..setRange(1, fallback.length + 1, fallback);
+        fallback = Uint8List(fallback.length + 1)..setRange(1, fallback.length + 1, fallback);
       }
       return attemptDecode(fallback);
     } catch (_) {
@@ -754,8 +742,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   Uint8List _base64DigitsToBytes(String input) {
-    const alphabet =
-        '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_';
+    const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_';
     if (input.isEmpty) return Uint8List(0);
     var n = BigInt.zero;
     for (final ch in input.split('')) {
@@ -826,11 +813,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void _handleSocketDone() {
-    state = state.copyWith(
-      isConnecting: false,
-      isProcessing: false,
-      isPlaying: false,
-    );
+    state = state.copyWith(isConnecting: false, isProcessing: false, isPlaying: false);
   }
 
   Future<void> _disposeSocket() async {
@@ -865,8 +848,17 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   String _pickContentType(List<String> formats) {
     final lower = formats.map((f) => f.toLowerCase()).toList();
     if (lower.contains('opus')) return 'audio/ogg';
+    if (lower.contains('wav')) return 'audio/wav';
     if (lower.contains('mp3')) return 'audio/mpeg';
-    return 'audio/mpeg';
+    return 'audio/wav'; // default to WAV for safety
+  }
+
+  String _getContentTypeForEncoding(String encoding) {
+    final lower = encoding.toLowerCase();
+    if (lower.contains('opus') || lower == 'ogg') return 'audio/ogg';
+    if (lower == 'wav') return 'audio/wav';
+    if (lower.contains('mp3') || lower == 'mpeg') return 'audio/mpeg';
+    return 'audio/wav'; // default to WAV
   }
 
   /// Cancel current recording
@@ -880,7 +872,6 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         await _micStreamSubscription?.cancel();
         await _micStreamController?.close();
         _recordingStartedAt = null;
-        await _cleanupRecordingFile();
         state = state.copyWith(
           isRecording: false,
           isProcessing: false,
@@ -888,6 +879,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           clearFace: true,
         );
         _sendVoiceEnd(totalChunks: _chunkCount, durationMs: durationMs);
+        await _cleanupRecordingFile();
         _chunkCount = 0;
         _log.i('Recording cancelled');
       }
@@ -918,6 +910,4 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
 /// Provider for voice chat controller
 final voiceChatControllerProvider =
-    NotifierProvider.autoDispose<VoiceChatController, VoiceChatState>(
-      VoiceChatController.new,
-    );
+    NotifierProvider.autoDispose<VoiceChatController, VoiceChatState>(VoiceChatController.new);
