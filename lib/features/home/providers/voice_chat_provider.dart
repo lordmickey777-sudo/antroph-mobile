@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:logger/logger.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/auth/state/auth_state.dart';
@@ -108,6 +110,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   StreamController<Uint8List>? _micStreamController;
   StreamSubscription<Uint8List>? _micStreamSubscription;
   DateTime? _recordingStartedAt;
+  String? _recordingFilePath;
   int _chunkCount = 0;
   String? _currentRequestId;
   static const int _sampleRate = 16000;
@@ -125,6 +128,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     ref.onDispose(() async {
       await _disposeSocket();
       await _streamPlayer.stop();
+      await _cleanupRecordingFile();
       await _audioRecorder?.closeRecorder();
     });
     return const VoiceChatState();
@@ -248,8 +252,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
               _activeCodec == Codec.pcm16WAV)
           ? _sampleRate * 16
           : 16000;
+      _recordingFilePath = await _prepareRecordingFilePath();
       await _audioRecorder!.startRecorder(
         toStream: _micStreamController!.sink,
+        toFile: _recordingFilePath,
         codec: _activeCodec,
         numChannels: 1,
         sampleRate: _sampleRate,
@@ -265,6 +271,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       );
     } catch (e, st) {
       _log.e('Failed to start streaming recorder', error: e, stackTrace: st);
+      await _cleanupRecordingFile();
       state = state.copyWith(
         isRecording: false,
         isProcessing: false,
@@ -274,6 +281,46 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         errorMessage: 'Failed to start recording: $e',
       );
       await _disposeSocket();
+    }
+  }
+
+  Future<String> _prepareRecordingFilePath() async {
+    final tempDir = await getTemporaryDirectory();
+    final extension = _fileExtensionForCodec(_activeCodec);
+    final fileName =
+        'voice-${DateTime.now().millisecondsSinceEpoch}.$extension';
+    return p.join(tempDir.path, fileName);
+  }
+
+  String _fileExtensionForCodec(Codec codec) {
+    switch (codec) {
+      case Codec.opusOGG:
+        return 'opus';
+      case Codec.pcm16WAV:
+      case Codec.pcmFloat32WAV:
+        return 'wav';
+      case Codec.pcm16:
+        return 'pcm';
+      default:
+        return 'aac';
+    }
+  }
+
+  Future<void> _cleanupRecordingFile() async {
+    final path = _recordingFilePath;
+    _recordingFilePath = null;
+    if (path == null || path.isEmpty) return;
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e, st) {
+      _log.w(
+        'Failed to delete temp recording file: $e',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 
@@ -424,6 +471,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       await _micStreamSubscription?.cancel();
       await _micStreamController?.close();
       _recordingStartedAt = null;
+      await _cleanupRecordingFile();
 
       state = state.copyWith(
         isRecording: false,
@@ -832,6 +880,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         await _micStreamSubscription?.cancel();
         await _micStreamController?.close();
         _recordingStartedAt = null;
+        await _cleanupRecordingFile();
         state = state.copyWith(
           isRecording: false,
           isProcessing: false,

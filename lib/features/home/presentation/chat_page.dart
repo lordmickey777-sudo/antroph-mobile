@@ -5,6 +5,7 @@ import 'package:antroph_mobile/features/home/models/chat_models.dart';
 import 'package:antroph_mobile/features/home/providers/chat_provider.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/home/widgets/face_avatar.dart';
+import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
 const _chatBg = Color(0xFF121516);
@@ -64,11 +65,43 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 }
 
-class ChatScreen extends ConsumerWidget {
+class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends ConsumerState<ChatScreen> {
+  void _handleVoicePermissionDialogs(
+    VoiceChatState? previous,
+    VoiceChatState next,
+  ) async {
+    if (!mounted || previous?.permissionDialog == next.permissionDialog) {
+      return;
+    }
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    switch (next.permissionDialog) {
+      case PermissionDialogType.education:
+        final accepted = await MicrophoneEducationDialog.show(context);
+        voiceController.handleEducationDialogResult(accepted ?? false);
+        break;
+      case PermissionDialogType.settings:
+        await MicrophonePermissionModal.show(context);
+        voiceController.dismissPermissionDialog();
+        break;
+      case PermissionDialogType.none:
+        break;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<VoiceChatState>(
+      voiceChatControllerProvider,
+      _handleVoicePermissionDialogs,
+    );
+
     final state = ref.watch(chatControllerProvider);
     final controller = ref.read(chatControllerProvider.notifier);
     final voiceState = ref.watch(voiceChatControllerProvider);
