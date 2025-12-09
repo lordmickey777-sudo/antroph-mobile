@@ -1,11 +1,32 @@
 import 'dart:convert';
 
-enum ChatEnvelopeType { chat, face, presence, error, ping, pong, ack, unknown }
+enum ChatEnvelopeType {
+  connected,
+  chat,
+  chatChunk,
+  chatDone,
+  chatResponse,
+  face,
+  presence,
+  error,
+  ping,
+  pong,
+  ack,
+  unknown,
+}
 
 ChatEnvelopeType chatEnvelopeTypeFromString(String raw) {
   switch (raw.toLowerCase()) {
+    case 'connected':
+      return ChatEnvelopeType.connected;
     case 'chat':
       return ChatEnvelopeType.chat;
+    case 'chat_chunk':
+      return ChatEnvelopeType.chatChunk;
+    case 'chat_done':
+      return ChatEnvelopeType.chatDone;
+    case 'chat_response':
+      return ChatEnvelopeType.chatResponse;
     case 'face':
       return ChatEnvelopeType.face;
     case 'presence':
@@ -24,16 +45,24 @@ ChatEnvelopeType chatEnvelopeTypeFromString(String raw) {
 }
 
 class ChatEnvelope {
-  ChatEnvelope({required this.type, this.data, this.id, this.ts, this.raw});
+  ChatEnvelope({
+    required this.type,
+    this.data,
+    this.id,
+    this.requestId,
+    this.ts,
+    this.raw,
+  });
 
   final ChatEnvelopeType type;
   final Map<String, dynamic>? data;
   final String? id;
+  final String? requestId;
   final DateTime? ts;
   final dynamic raw;
 
   factory ChatEnvelope.fromJson(Map<String, dynamic> json) {
-    final ts = json['ts'];
+    final ts = json['ts'] ?? json['timestamp'];
     DateTime? parsedTs;
     if (ts is num) {
       final millis = ts.toInt();
@@ -51,6 +80,7 @@ class ChatEnvelope {
     return ChatEnvelope(
       type: chatEnvelopeTypeFromString((json['type'] as String?) ?? ''),
       id: json['id']?.toString(),
+      requestId: json['request_id']?.toString(),
       data: data,
       ts: parsedTs,
       raw: json,
@@ -77,6 +107,7 @@ class ChatEnvelope {
     return {
       'type': _typeToString(type),
       if (id != null) 'id': id,
+      if (requestId != null) 'request_id': requestId,
       if (ts != null) 'ts': ts!.millisecondsSinceEpoch,
       if (data != null) 'data': data,
     };
@@ -84,8 +115,16 @@ class ChatEnvelope {
 
   static String _typeToString(ChatEnvelopeType type) {
     switch (type) {
+      case ChatEnvelopeType.connected:
+        return 'connected';
       case ChatEnvelopeType.chat:
         return 'chat';
+      case ChatEnvelopeType.chatChunk:
+        return 'chat_chunk';
+      case ChatEnvelopeType.chatDone:
+        return 'chat_done';
+      case ChatEnvelopeType.chatResponse:
+        return 'chat_response';
       case ChatEnvelopeType.face:
         return 'face';
       case ChatEnvelopeType.presence:
@@ -126,6 +165,7 @@ class ChatMessageModel {
     required this.message,
     required this.ts,
     this.delivery = ChatDeliveryState.sent,
+    this.streaming = false,
   });
 
   final String id;
@@ -133,10 +173,12 @@ class ChatMessageModel {
   final String message;
   final DateTime ts;
   final ChatDeliveryState delivery;
+  final bool streaming;
 
   bool get isUser => role == ChatRole.user;
   bool get isFailed => delivery == ChatDeliveryState.failed;
   bool get isPending => delivery == ChatDeliveryState.sending;
+  bool get isStreaming => streaming;
 
   ChatMessageModel copyWith({
     String? id,
@@ -144,6 +186,7 @@ class ChatMessageModel {
     String? message,
     DateTime? ts,
     ChatDeliveryState? delivery,
+    bool? streaming,
   }) {
     return ChatMessageModel(
       id: id ?? this.id,
@@ -151,6 +194,7 @@ class ChatMessageModel {
       message: message ?? this.message,
       ts: ts ?? this.ts,
       delivery: delivery ?? this.delivery,
+      streaming: streaming ?? this.streaming,
     );
   }
 }

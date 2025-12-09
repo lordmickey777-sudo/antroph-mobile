@@ -1,13 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:web_socket_channel/io.dart';
+import 'package:web_socket_channel/status.dart' as ws_status;
 
 import '../../../core/auth/state/auth_state.dart';
 import '../../../core/env/env.dart';
 import '../models/chat_models.dart';
-import '../services/chat_websocket_service.dart';
 
 enum ChatConnectionStatus { connected, connecting, disconnected }
 
@@ -51,12 +55,11 @@ class ChatState {
 }
 
 class ChatController extends Notifier<ChatState> {
-  final _service = ChatWebSocketService.instance;
   final _log = Logger();
   final _rand = Random();
 
-  ChatSocketConnection? _connection;
-  StreamSubscription<ChatEnvelope>? _subscription;
+  IOWebSocketChannel? _channel;
+  StreamSubscription<dynamic>? _subscription;
   Timer? _pingTimer;
   Timer? _retryTimer;
   Timer? _retryTicker;
@@ -65,8 +68,11 @@ class ChatController extends Notifier<ChatState> {
   int _retryAttempt = 0;
   FacePose? _pendingFace;
   DateTime? _lastFaceAt;
+  final Map<String, ChatMessageModel> _streamingReplies = {};
+  String? _deviceId;
 
   static const _backoffSeconds = [1, 2, 4, 8, 16, 30];
+  static const _deviceIdPrefsKey = 'voice_chat_device_id';
 
   @override
   ChatState build() {
@@ -79,8 +85,10 @@ class ChatController extends Notifier<ChatState> {
   Future<void> _dispose() async {
     await _subscription?.cancel();
     _subscription = null;
-    await _connection?.close();
-    _connection = null;
+    try {
+      await _channel?.sink.close(ws_status.normalClosure, 'dispose');
+    } catch (_) {}
+    _channel = null;
     _pingTimer?.cancel();
     _retryTimer?.cancel();
     _retryTicker?.cancel();
@@ -93,15 +101,17 @@ class ChatController extends Notifier<ChatState> {
     _retryTicker?.cancel();
     await _subscription?.cancel();
     _subscription = null;
-    await _connection?.close();
-    _connection = null;
+    try {
+      await _channel?.sink.close(ws_status.normalClosure, 'reconnect');
+    } catch (_) {}
+    _channel = null;
     state = state.copyWith(
       connection: ChatConnectionStatus.connecting,
       retryIn: null,
       error: null,
     );
 
-    final uri = _chatUri();
+    final uri = await _chatUri();
     if (uri == null) {
       state = state.copyWith(
         connection: ChatConnectionStatus.disconnected,
@@ -112,9 +122,9 @@ class ChatController extends Notifier<ChatState> {
 
     try {
       _log.i('Opening chat socket to $uri');
-      _connection = await _service.connect(uri: uri, headers: _headers());
-      _subscription = _connection!.messages.listen(
-        _handleEnvelope,
+      _channel = IOWebSocketChannel.connect(uri, headers: _headers());
+      _subscription = _channel!.stream.listen(
+        _handleRaw,
         onError: _handleError,
         onDone: _handleDone,
         cancelOnError: true,
@@ -127,24 +137,16 @@ class ChatController extends Notifier<ChatState> {
         error: null,
       );
       // Kick off a ping to establish liveness early.
-      _connection!.sendRaw({
-        'type': 'ping',
-        'ts': DateTime.now().millisecondsSinceEpoch,
-      });
+      _sendRaw({'type': 'ping', 'ts': DateTime.now().millisecondsSinceEpoch});
     } catch (e, st) {
       _log.e('Chat connect failed', error: e, stackTrace: st);
       _scheduleReconnect(e);
     }
   }
 
-  Map<String, dynamic>? _headers() {
-    final tokens = ref.read(authControllerProvider.notifier).tokens;
-    if (tokens == null || tokens.accessToken.isEmpty) return null;
-    final type = tokens.tokenType.isNotEmpty ? tokens.tokenType : 'Bearer';
-    return {'Authorization': '$type ${tokens.accessToken}'};
-  }
+  Map<String, dynamic>? _headers() => null;
 
-  Uri? _chatUri() {
+  Future<Uri?> _chatUri() async {
     final url = AppEnv.chatWsUrl;
     if (url.isEmpty) return null;
     Uri? parsed;
@@ -167,6 +169,20 @@ class ChatController extends Notifier<ChatState> {
     if (parsed.hasFragment) {
       parsed = parsed.replace(fragment: '');
     }
+    final token = ref.read(authControllerProvider.notifier).tokens?.accessToken;
+    final deviceId = await _ensureDeviceId();
+    final deviceType = Platform.isIOS
+        ? 'ios'
+        : Platform.isAndroid
+        ? 'android'
+        : 'mobile';
+    final qp = Map<String, String>.from(parsed.queryParameters);
+    if (token != null && token.isNotEmpty) {
+      qp['token'] = token;
+    }
+    qp.putIfAbsent('device_id', () => deviceId);
+    qp.putIfAbsent('device_type', () => deviceType);
+    parsed = parsed.replace(queryParameters: qp);
     return parsed;
   }
 
@@ -175,8 +191,13 @@ class ChatController extends Notifier<ChatState> {
     _pingTimer = Timer.periodic(const Duration(seconds: 25), (_) {
       final ts = DateTime.now().millisecondsSinceEpoch;
       _log.t('Sending ping $ts');
-      _connection?.sendRaw({'type': 'ping', 'ts': ts});
+      _sendRaw({'type': 'ping', 'ts': ts});
     });
+  }
+
+  void _handleRaw(dynamic raw) {
+    final envelope = ChatEnvelope.fromSocketData(raw);
+    _handleEnvelope(envelope);
   }
 
   void _handleEnvelope(ChatEnvelope envelope) {
@@ -184,8 +205,19 @@ class ChatController extends Notifier<ChatState> {
       'Chat envelope ${envelope.type} id=${envelope.id} ts=${envelope.ts}',
     );
     switch (envelope.type) {
+      case ChatEnvelopeType.connected:
+        break;
       case ChatEnvelopeType.chat:
         _handleIncomingChat(envelope);
+        break;
+      case ChatEnvelopeType.chatChunk:
+        _handleChatChunk(envelope);
+        break;
+      case ChatEnvelopeType.chatDone:
+        _handleChatDone(envelope);
+        break;
+      case ChatEnvelopeType.chatResponse:
+        _handleChatResponse(envelope);
         break;
       case ChatEnvelopeType.face:
         _handleFace(envelope);
@@ -194,10 +226,7 @@ class ChatController extends Notifier<ChatState> {
         _handleSocketError(envelope);
         break;
       case ChatEnvelopeType.ping:
-        _connection?.sendRaw({
-          'type': 'pong',
-          'ts': DateTime.now().millisecondsSinceEpoch,
-        });
+        _sendRaw({'type': 'pong', 'ts': DateTime.now().millisecondsSinceEpoch});
         break;
       case ChatEnvelopeType.ack:
         if (envelope.id != null) {
@@ -238,6 +267,33 @@ class ChatController extends Notifier<ChatState> {
       next = [...next, incoming];
     }
     state = state.copyWith(messages: next);
+  }
+
+  void _handleChatChunk(ChatEnvelope envelope) {
+    final data = envelope.data ?? const <String, dynamic>{};
+    final chunk = data['content']?.toString() ?? '';
+    if (chunk.isEmpty) return;
+    final req = envelope.requestId ?? '';
+    _upsertAssistantStream(
+      req.isNotEmpty ? req : envelope.id ?? 'srv-stream',
+      chunk,
+      streaming: true,
+    );
+  }
+
+  void _handleChatDone(ChatEnvelope envelope) {
+    final req = envelope.requestId ?? envelope.id ?? '';
+    if (req.isEmpty) return;
+    _finalizeAssistantStream(req);
+  }
+
+  void _handleChatResponse(ChatEnvelope envelope) {
+    final data = envelope.data ?? const <String, dynamic>{};
+    final text =
+        data['message']?.toString() ?? data['content']?.toString() ?? '';
+    if (text.isEmpty) return;
+    final req = envelope.requestId ?? envelope.id ?? _newId('asst');
+    _upsertAssistantStream(req, text, streaming: false, replace: true);
   }
 
   void _handleFace(ChatEnvelope envelope) {
@@ -303,6 +359,18 @@ class ChatController extends Notifier<ChatState> {
     _scheduleReconnect('socket_closed');
   }
 
+  void _sendRaw(Map<String, dynamic> payload) {
+    try {
+      if (_channel == null) {
+        _log.w('Attempted to send on null channel');
+        return;
+      }
+      _channel!.sink.add(jsonEncode(payload));
+    } catch (e, st) {
+      _log.e('Send raw failed', error: e, stackTrace: st);
+    }
+  }
+
   void _scheduleReconnect(Object? reason) {
     _pingTimer?.cancel();
     _retryTimer?.cancel();
@@ -335,11 +403,12 @@ class ChatController extends Notifier<ChatState> {
   Future<void> sendMessage(String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
-    if (_connection == null) {
+    if (_channel == null) {
       state = state.copyWith(error: 'Not connected');
       return;
     }
     final id = _newId('user');
+    final requestId = id;
     final ts = DateTime.now();
     final msg = ChatMessageModel(
       id: id,
@@ -351,11 +420,14 @@ class ChatController extends Notifier<ChatState> {
     state = state.copyWith(messages: [...state.messages, msg], error: null);
     try {
       _log.t('Sending chat message $id');
-      _connection!.sendRaw({
+      _sendRaw({
         'type': 'chat',
-        'id': id,
-        'ts': ts.millisecondsSinceEpoch,
-        'data': {'role': 'user', 'message': trimmed},
+        'request_id': requestId,
+        'data': {
+          'message': trimmed,
+          'conversation_type': 'general',
+          'stream': true,
+        },
       });
     } catch (e, st) {
       _log.e('Send chat failed', error: e, stackTrace: st);
@@ -378,7 +450,7 @@ class ChatController extends Notifier<ChatState> {
   }
 
   void _sendRetry(ChatMessageModel msg) {
-    if (_connection == null) {
+    if (_channel == null) {
       state = state.copyWith(error: 'Not connected');
       return;
     }
@@ -389,11 +461,14 @@ class ChatController extends Notifier<ChatState> {
     state = state.copyWith(messages: nextMessages, error: null);
     try {
       _log.t('Retry sending message ${msg.id}');
-      _connection!.sendRaw({
+      _sendRaw({
         'type': 'chat',
-        'id': msg.id,
-        'ts': DateTime.now().millisecondsSinceEpoch,
-        'data': {'role': 'user', 'message': msg.message},
+        'request_id': msg.id,
+        'data': {
+          'message': msg.message,
+          'conversation_type': 'general',
+          'stream': true,
+        },
       });
     } catch (e, st) {
       _log.e('Retry send failed', error: e, stackTrace: st);
@@ -439,8 +514,8 @@ class ChatController extends Notifier<ChatState> {
     _faceIdleTimer?.cancel();
     _subscription?.cancel();
     _subscription = null;
-    _connection?.close();
-    _connection = null;
+    _channel?.sink.close(ws_status.normalClosure, 'pause');
+    _channel = null;
     state = state.copyWith(connection: ChatConnectionStatus.disconnected);
   }
 
@@ -449,9 +524,73 @@ class ChatController extends Notifier<ChatState> {
     _connect();
   }
 
+  Future<String> _ensureDeviceId() async {
+    if (_deviceId != null && _deviceId!.isNotEmpty) return _deviceId!;
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getString(_deviceIdPrefsKey);
+    if (existing != null && existing.isNotEmpty) {
+      _deviceId = existing;
+      return existing;
+    }
+    final generated =
+        '${Platform.isIOS
+            ? "ios"
+            : Platform.isAndroid
+            ? "android"
+            : "mobile"}-${DateTime.now().millisecondsSinceEpoch}-${DateTime.now().microsecondsSinceEpoch.remainder(100000)}';
+    _deviceId = generated;
+    await prefs.setString(_deviceIdPrefsKey, generated);
+    return generated;
+  }
+
   String _newId(String prefix) {
     final nonce = _rand.nextInt(0xFFFFFF).toRadixString(16);
     return 'm-$prefix-${DateTime.now().millisecondsSinceEpoch}-$nonce';
+  }
+
+  void _upsertAssistantStream(
+    String requestId,
+    String chunk, {
+    bool streaming = true,
+    bool replace = false,
+  }) {
+    if (requestId.isEmpty) return;
+    final existing =
+        _streamingReplies[requestId] ??
+        ChatMessageModel(
+          id: 'asst-$requestId',
+          role: ChatRole.assistant,
+          message: '',
+          ts: DateTime.now(),
+          streaming: true,
+        );
+    final merged = existing.copyWith(
+      message: replace ? chunk : '${existing.message}$chunk',
+      ts: DateTime.now(),
+      streaming: streaming,
+      delivery: ChatDeliveryState.sent,
+    );
+    _streamingReplies[requestId] = merged;
+    final updatedList = List<ChatMessageModel>.from(state.messages);
+    final idx = updatedList.indexWhere((m) => m.id == merged.id);
+    if (idx >= 0) {
+      updatedList[idx] = merged;
+    } else {
+      updatedList.add(merged);
+    }
+    state = state.copyWith(messages: updatedList);
+  }
+
+  void _finalizeAssistantStream(String requestId) {
+    final existing = _streamingReplies.remove(requestId);
+    if (existing == null) return;
+    final merged = existing.copyWith(streaming: false);
+    final updatedList = List<ChatMessageModel>.from(state.messages);
+    final idx = updatedList.indexWhere((m) => m.id == merged.id);
+    if (idx >= 0) {
+      updatedList[idx] = merged;
+      state = state.copyWith(messages: updatedList);
+    }
   }
 }
 

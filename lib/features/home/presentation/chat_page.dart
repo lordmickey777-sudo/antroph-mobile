@@ -236,6 +236,7 @@ class _ChatBubble extends StatelessWidget {
         : Alignment.centerLeft;
     final bgColor = message.isUser ? _userBubble : _assistantBubble;
     final textColor = message.isUser ? Colors.white : Colors.white;
+    final isStreaming = !message.isUser && message.isStreaming;
 
     return Align(
       alignment: alignment,
@@ -262,7 +263,27 @@ class _ChatBubble extends StatelessWidget {
                 message.message,
                 style: TextStyle(color: textColor, fontSize: 15, height: 1.4),
               ),
-              if (message.isPending || message.isFailed) ...[
+              if (isStreaming) ...[
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white70,
+                      ),
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      'Streaming...',
+                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ] else if (message.isPending || message.isFailed) ...[
                 const SizedBox(height: 8),
                 _StatusRow(message: message, onRetry: onRetry),
               ],

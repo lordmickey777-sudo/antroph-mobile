@@ -25,12 +25,12 @@ class AppEnv {
     if (api.isEmpty) return '';
     final base = api.endsWith('/') ? api.substring(0, api.length - 1) : api;
     if (base.startsWith('https://')) {
-      return '${base.replaceFirst('https://', 'wss://')}/ws/chat';
+      return '${base.replaceFirst('https://', 'wss://')}/ws/voice';
     }
     if (base.startsWith('http://')) {
-      return '${base.replaceFirst('http://', 'ws://')}/ws/chat';
+      return '${base.replaceFirst('http://', 'ws://')}/ws/voice';
     }
-    return 'wss://$base/ws/chat';
+    return 'wss://$base/ws/voice';
   }
 
   static String get storyWsUrl {
