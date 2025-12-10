@@ -30,7 +30,8 @@ class VoiceWebSocketConnection {
 
   void sendBinary(List<int> data) => channel.sink.add(data);
 
-  void sendJson(Map<String, dynamic> payload) => channel.sink.add(jsonEncode(payload));
+  void sendJson(Map<String, dynamic> payload) =>
+      channel.sink.add(jsonEncode(payload));
 }
 
 class VoiceWebSocketService {
@@ -44,7 +45,11 @@ class VoiceWebSocketService {
     required String deviceId,
     required String deviceType,
   }) async {
-    final uri = _buildVoiceUri(token: token, deviceId: deviceId, deviceType: deviceType);
+    final uri = _buildVoiceUri(
+      token: token,
+      deviceId: deviceId,
+      deviceType: deviceType,
+    );
     _log.i('Connecting to voice websocket $uri');
     late final IOWebSocketChannel channel;
     try {
@@ -76,7 +81,10 @@ class VoiceWebSocketService {
       close: () async {
         await subscription.cancel();
         try {
-          await channel.sink.close(WebSocketStatus.normalClosure, 'client_close');
+          await channel.sink.close(
+            WebSocketStatus.normalClosure,
+            'client_close',
+          );
         } catch (_) {}
         await controller.close();
       },
@@ -90,7 +98,9 @@ class VoiceWebSocketService {
   }) {
     final rawBase = AppEnv.apiBaseUrl.trim();
     if (rawBase.isEmpty) {
-      throw VoiceSocketException('API_BASE_URL is missing; cannot derive voice websocket URL.');
+      throw VoiceSocketException(
+        'API_BASE_URL is missing; cannot derive voice websocket URL.',
+      );
     }
     Uri base;
     try {
@@ -105,15 +115,13 @@ class VoiceWebSocketService {
       'device_id': deviceId,
       'device_type': deviceType,
     };
-    return base.replace(
-      scheme: scheme,
-      path: path,
-      queryParameters: params,
-    );
+    return base.replace(scheme: scheme, path: path, queryParameters: params);
   }
 
   String _joinPaths(String first, String second) {
-    final a = first.endsWith('/') ? first.substring(0, first.length - 1) : first;
+    final a = first.endsWith('/')
+        ? first.substring(0, first.length - 1)
+        : first;
     final b = second.startsWith('/') ? second : '/$second';
     return '$a$b';
   }

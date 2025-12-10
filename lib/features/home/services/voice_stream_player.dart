@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:logger/logger.dart';
@@ -13,6 +15,7 @@ class VoiceStreamPlayer {
   VoidCallback? _onComplete;
   void Function(Object, StackTrace)? _onError;
   String _contentType = 'audio/mpeg';
+  bool _sessionConfigured = false;
 
   bool get isPlaying => _player?.playing ?? false;
   bool get hasStream => _controller != null && (_controller?.isClosed == false);
@@ -23,33 +26,47 @@ class VoiceStreamPlayer {
     void Function(Object, StackTrace)? onError,
   }) async {
     await stop();
+    await _ensureSession();
     _contentType = contentType;
     _onComplete = onComplete;
     _onError = onError;
     _controller = StreamController<List<int>>();
     _player = AudioPlayer();
-    _stateSub = _player!.playerStateStream.listen((state) {
-      if (state.processingState == ProcessingState.completed) {
-        _onComplete?.call();
-      }
-    }, onError: (Object err, StackTrace st) {
-      _log.e('Audio player stream error', error: err, stackTrace: st);
-      _onError?.call(err, st);
-    });
+    _stateSub = _player!.playerStateStream.listen(
+      (state) {
+        if (state.processingState == ProcessingState.completed) {
+          _onComplete?.call();
+        }
+      },
+      onError: (Object err, StackTrace st) {
+        _log.e('Audio player stream error', error: err, stackTrace: st);
+        _onError?.call(err, st);
+      },
+    );
   }
 
   Future<void> addChunk(Uint8List bytes) async {
     if (_controller == null || _player == null) {
-      await start(contentType: _contentType, onComplete: _onComplete, onError: _onError);
+      await start(
+        contentType: _contentType,
+        onComplete: _onComplete,
+        onError: _onError,
+      );
     }
     if (_controller?.isClosed == true) return;
     _controller!.add(bytes);
     if (_setupFuture == null) {
-      final source = _VoiceStreamAudioSource(_controller!.stream, contentType: _contentType);
-      _setupFuture = _player!.setAudioSource(source).then((_) => _player!.play());
-      _setupFuture!.catchError((Object err, StackTrace st) {
+      final source = _VoiceStreamAudioSource(
+        _controller!.stream,
+        contentType: _contentType,
+      );
+      _setupFuture = _player!
+          .setAudioSource(source)
+          .then((_) => _player!.play());
+      _setupFuture!.catchError((Object err, StackTrace st) async {
         _log.e('Failed to start audio stream', error: err, stackTrace: st);
         _onError?.call(err, st);
+        await stop(); // reset so we can retry with next chunks
       });
     }
   }
@@ -76,6 +93,17 @@ class VoiceStreamPlayer {
     _player = null;
     _controller = null;
     _setupFuture = null;
+  }
+
+  Future<void> _ensureSession() async {
+    if (_sessionConfigured) return;
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.speech());
+      _sessionConfigured = true;
+    } catch (err, st) {
+      _log.w('Audio session configure failed', error: err, stackTrace: st);
+    }
   }
 }
 

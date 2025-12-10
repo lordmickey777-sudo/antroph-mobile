@@ -112,6 +112,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   String? _currentSequenceId;
   final _AudioChunkAssembler _audioAssembler = _AudioChunkAssembler();
   String _preferredContentType = 'audio/mpeg';
+  String? _sampleRateLoggedForSeq;
   Codec _activeCodec = Codec.opusOGG;
   String _activeEncoding = _preferredEncoding;
   StreamController<Uint8List>? _micStreamController;
@@ -121,7 +122,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   int _chunkCount = 0;
   final List<int> _aiAudioBuffer = <int>[];
   String? _currentRequestId;
-  static const int _sampleRate = 16000;
+  // Backend prefers 8k for transcription quality.
+  static const int _sampleRate = 8000;
   static const String _preferredEncoding = 'opus';
   static const String _permissionError =
       'Microphone permission is required for voice chat';
@@ -211,6 +213,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       final deviceId = await _ensureDeviceId();
       final deviceType = Platform.isIOS ? 'ios' : 'android';
+      _log.i(
+        'Voice session starting with deviceId=$deviceId deviceType=$deviceType sampleRate=${_isIOS ? 8000 : _sampleRate}',
+      );
       _wsConnection = await _wsService.connect(
         token: token,
         deviceId: deviceId,
@@ -227,7 +232,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _currentRequestId = 'voice-${DateTime.now().millisecondsSinceEpoch}';
       _chunkCount = 0;
 
-      _sendVoiceStart();
+      await _sendVoiceStart();
       await _startStreamingRecorder();
       _log.i('Voice session started (request=$_currentRequestId)');
     } catch (e, stackTrace) {
@@ -258,17 +263,19 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       }, onError: (err, st) => _handleSocketError(err, st));
 
       _recordingStartedAt = DateTime.now();
+      // Server prefers 8k for best transcription; scale down when we can.
+      final targetSampleRate = _isIOS ? 8000 : _sampleRate;
       final bitRate =
           (_activeCodec == Codec.pcm16 || _activeCodec == Codec.pcm16WAV)
-          ? _sampleRate * 16
-          : 16000;
+          ? targetSampleRate * 16
+          : (_activeCodec == Codec.opusOGG ? 24000 : 16000);
       _recordingFilePath = await _prepareRecordingFilePath();
       await _audioRecorder!.startRecorder(
         toStream: _micStreamController!.sink,
         toFile: _recordingFilePath,
         codec: _activeCodec,
         numChannels: 1,
-        sampleRate: _sampleRate,
+        sampleRate: targetSampleRate,
         bitRate: bitRate,
       );
 
@@ -439,18 +446,21 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     state = state.copyWith(errorMessage: _permissionError);
   }
 
-  void _sendVoiceStart() {
+  Future<void> _sendVoiceStart() async {
     if (_wsConnection == null) return;
     final reqId =
         _currentRequestId ?? 'voice-${DateTime.now().millisecondsSinceEpoch}';
     _currentRequestId = reqId;
+    final deviceId = await _ensureDeviceId();
     _wsConnection!.sendJson({
       'type': 'voice_start',
       'data': {
         'conversation_type': 'general',
         'language': 'en',
-        'sample_rate': _sampleRate,
+        'sample_rate': _isIOS ? 8000 : _sampleRate,
         'encoding': _activeEncoding,
+        'device_id': deviceId,
+        'device_type': Platform.isIOS ? 'ios' : 'android',
       },
       'request_id': reqId,
     });
@@ -573,6 +583,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
             : null;
         final formats = payload?.audioFormats ?? const <String>[];
         _preferredContentType = _pickContentType(formats);
+        final devId = payload?.deviceId ?? 'unknown';
+        _log.i('Voice connected deviceId=$devId formats=$formats');
         state = state.copyWith(
           isConnecting: false,
           audioFormats: formats,
@@ -630,8 +642,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _currentSequenceId = chunk.sequenceId;
       _audioAssembler.reset();
       _aiAudioBuffer.clear();
+      _sampleRateLoggedForSeq = null;
     } else if (_currentSequenceId == null && chunk.sequenceId.isNotEmpty) {
       _currentSequenceId = chunk.sequenceId;
+      _sampleRateLoggedForSeq = null;
     }
 
     if (chunk.data != null && chunk.data!.isNotEmpty) {
@@ -694,6 +708,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       final normalized = base64.normalize(base64Audio);
       final bytes = base64Decode(normalized);
       if (bytes.isEmpty) return;
+      _logSampleRateIfNeeded(bytes);
       _aiAudioBuffer.addAll(bytes);
       await _streamPlayer.addChunk(bytes);
       state = state.copyWith(
@@ -974,6 +989,46 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (lower == 'wav') return 'audio/wav';
     if (lower.contains('mp3') || lower == 'mpeg') return 'audio/mpeg';
     return 'audio/wav'; // default to WAV
+  }
+
+  void _logSampleRateIfNeeded(Uint8List bytes) {
+    final seq = _currentSequenceId ?? 'unknown';
+    if (_sampleRateLoggedForSeq == seq) return;
+
+    final sampleRate = _detectMp3SampleRate(bytes);
+    if (sampleRate != null) {
+      _sampleRateLoggedForSeq = seq;
+      _log.i('Voice playback sample rate ~${sampleRate}Hz (seq=$seq)');
+    }
+  }
+
+  int? _detectMp3SampleRate(Uint8List bytes) {
+    for (var i = 0; i + 3 < bytes.length; i++) {
+      final b1 = bytes[i];
+      final b2 = bytes[i + 1];
+      if (b1 != 0xFF || (b2 & 0xE0) != 0xE0) continue;
+
+      final versionBits = (b2 >> 3) & 0x03; // 00=2.5, 10=2, 11=1
+      final version = switch (versionBits) {
+        0x00 => 2.5,
+        0x02 => 2.0,
+        0x03 => 1.0,
+        _ => null,
+      };
+      if (version == null) continue;
+
+      final b3 = bytes[i + 2];
+      final srIndex = (b3 >> 2) & 0x03;
+      final base = switch (version) {
+        1.0 => [44100, 48000, 32000, 0],
+        2.0 => [22050, 24000, 16000, 0],
+        2.5 => [11025, 12000, 8000, 0],
+        _ => [0, 0, 0, 0],
+      };
+      final sr = base[srIndex];
+      if (sr > 0) return sr;
+    }
+    return null;
   }
 
   /// Cancel current recording

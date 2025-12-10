@@ -203,6 +203,7 @@ class VoiceAudioChunk {
     this.chunkServerTime,
     this.chunkPart,
     this.totalParts,
+    this.deviceId,
     this.frames = const <VoiceExpressionFrame>[],
     this.isFinal = false,
   });
@@ -214,6 +215,7 @@ class VoiceAudioChunk {
   final int? chunkServerTime;
   final int? chunkPart;
   final int? totalParts;
+  final String? deviceId;
   final List<VoiceExpressionFrame> frames;
   final bool isFinal;
 
@@ -226,6 +228,7 @@ class VoiceAudioChunk {
         chunkServerTime: (json['chunk_server_time'] as num?)?.toInt(),
         chunkPart: (json['chunk_part'] as num?)?.toInt(),
         totalParts: (json['total_parts'] as num?)?.toInt(),
+        deviceId: json['device_id'] as String?,
         frames: ((json['frames'] as List?) ?? const [])
             .whereType<Map>()
             .map(
