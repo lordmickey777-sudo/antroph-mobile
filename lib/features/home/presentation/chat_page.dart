@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/features/home/models/chat_models.dart';
 import 'package:antroph_mobile/features/home/providers/chat_provider.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
-import 'package:antroph_mobile/features/home/widgets/face_avatar.dart';
+import 'package:antroph_mobile/features/home/widgets/antroph_face.dart';
 import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
@@ -184,7 +184,16 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          FaceAvatar(pose: state.face, size: faceSize),
+          RepaintBoundary(
+            child: SizedBox(
+              width: faceSize,
+              height: faceSize,
+              child: AntrophFace(
+                faceDNA: state.face.toArray(),
+                backgroundColor: const Color(0xFF1B1F22),
+              ),
+            ),
+          ),
           const SizedBox(height: 10),
           _ConnectionChip(state: state, onReconnect: onReconnect),
         ],

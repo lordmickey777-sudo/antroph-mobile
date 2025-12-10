@@ -12,6 +12,7 @@ import 'package:web_socket_channel/status.dart' as ws_status;
 import '../../../core/auth/state/auth_state.dart';
 import '../../../core/env/env.dart';
 import '../models/chat_models.dart';
+import '../models/face_state.dart';
 
 enum ChatConnectionStatus { connected, connecting, disconnected }
 
@@ -20,14 +21,14 @@ class ChatState {
     this.connection = ChatConnectionStatus.connecting,
     this.retryIn,
     this.messages = const [],
-    FacePose? face,
+    FaceState? face,
     this.error,
-  }) : face = face ?? FacePose.neutral();
+  }) : face = face ?? FaceState.neutral();
 
   final ChatConnectionStatus connection;
   final Duration? retryIn;
   final List<ChatMessageModel> messages;
-  final FacePose face;
+  final FaceState face;
   final String? error;
 
   bool get isConnected => connection == ChatConnectionStatus.connected;
@@ -38,7 +39,7 @@ class ChatState {
     ChatConnectionStatus? connection,
     Object? retryIn = _keepRetry,
     List<ChatMessageModel>? messages,
-    FacePose? face,
+    FaceState? face,
     Object? error = _keepError,
   }) {
     return ChatState(
@@ -66,7 +67,7 @@ class ChatController extends Notifier<ChatState> {
   Timer? _faceThrottleTimer;
   Timer? _faceIdleTimer;
   int _retryAttempt = 0;
-  FacePose? _pendingFace;
+  FaceState? _pendingFace;
   DateTime? _lastFaceAt;
   final Map<String, ChatMessageModel> _streamingReplies = {};
   String? _deviceId;
@@ -79,7 +80,7 @@ class ChatController extends Notifier<ChatState> {
     ref.onDispose(_dispose);
     // Fire connect after build to avoid synchronous state churn.
     Timer.run(_connect);
-    return ChatState(face: FacePose.neutral());
+    return ChatState(face: FaceState.neutral());
   }
 
   Future<void> _dispose() async {
@@ -297,12 +298,17 @@ class ChatController extends Notifier<ChatState> {
   }
 
   void _handleFace(ChatEnvelope envelope) {
-    final pose = FacePose.fromJson(
-      envelope.data ?? const <String, dynamic>{},
-      ts: envelope.ts,
-    );
-    _pendingFace = pose;
+    final payload = envelope.data ?? _coerceRawData(envelope.raw);
+    final face = FaceState.maybeFromDynamic(payload);
+    if (face == null) return;
+    _pendingFace = face;
     _flushFaceFrame();
+  }
+
+  dynamic _coerceRawData(dynamic raw) {
+    if (raw is Map<String, dynamic>) return raw['data'] ?? raw;
+    if (raw is Map) return raw['data'] ?? raw;
+    return raw;
   }
 
   void _flushFaceFrame() {
@@ -310,31 +316,22 @@ class ChatController extends Notifier<ChatState> {
     _faceThrottleTimer = Timer(const Duration(milliseconds: 16), () {
       _faceThrottleTimer?.cancel();
       _faceThrottleTimer = null;
-      final pose = _pendingFace;
+      final face = _pendingFace;
       _pendingFace = null;
-      if (pose != null) {
-        _applyFace(pose);
-      }
+      if (face != null) _applyFace(face);
     });
   }
 
-  void _applyFace(FacePose pose) {
+  void _applyFace(FaceState face) {
     _lastFaceAt = DateTime.now();
-    state = state.copyWith(face: pose);
-    _log.t(
-      'Face update eyes=(${pose.eyes.x.toStringAsFixed(2)}, ${pose.eyes.y.toStringAsFixed(2)}) '
-      'blink=${pose.eyes.blink.toStringAsFixed(2)} '
-      'mouth=open ${pose.mouth.open.toStringAsFixed(2)} smile ${pose.mouth.smile.toStringAsFixed(2)} '
-      'talking=${pose.mouth.talking}',
-    );
+    state = state.copyWith(face: face);
+    _log.t('Face update dna=${face.toArray().join(",")}');
     _faceIdleTimer?.cancel();
     _faceIdleTimer = Timer(const Duration(milliseconds: 650), () {
       if (_lastFaceAt == null) return;
       final elapsed = DateTime.now().difference(_lastFaceAt!);
       if (elapsed >= const Duration(milliseconds: 500)) {
-        state = state.copyWith(
-          face: FacePose.neutral(updatedAt: DateTime.now()),
-        );
+        state = state.copyWith(face: FaceState.neutral());
       }
     });
   }
