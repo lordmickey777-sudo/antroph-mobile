@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import 'antroph_face.dart';
+
 /// Renders a monochrome face bitmap coming from the streaming response.
 /// Converts the packed bitmask into a tiny 128x128 image and scales it
 /// with nearest-neighbor filtering to keep edges crisp while staying smooth.
@@ -12,7 +14,7 @@ class FaceCanvas extends StatefulWidget {
     required this.bitmap,
     this.timestampMs,
     this.size = 180,
-    this.faceColor = Colors.white,
+    this.faceColor = AntrophFace.skinTone,
     this.backgroundColor = const Color(0xFF0D0F10),
     this.showFrame = true,
   });
@@ -62,7 +64,8 @@ class _FaceCanvasState extends State<FaceCanvas> {
       return;
     }
 
-    final sameContent = _lastBitmap == bitmap || (_lastTs != null && _lastTs == ts);
+    final sameContent =
+        _lastBitmap == bitmap || (_lastTs != null && _lastTs == ts);
     if (sameContent && _image != null) return;
 
     _lastBitmap = bitmap;
@@ -113,7 +116,11 @@ class _FaceCanvasState extends State<FaceCanvas> {
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: Colors.white12),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, spreadRadius: 4),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 20,
+                  spreadRadius: 4,
+                ),
               ],
             )
           : null,
@@ -140,7 +147,11 @@ class _FacePlaceholder extends StatelessWidget {
     return Center(
       child: Opacity(
         opacity: 0.5,
-        child: Icon(Icons.face_retouching_natural, color: Colors.white, size: 48),
+        child: Icon(
+          Icons.face_retouching_natural,
+          color: Colors.white,
+          size: 48,
+        ),
       ),
     );
   }

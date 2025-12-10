@@ -203,7 +203,7 @@ class _Header extends StatelessWidget {
                     bitmap: voiceFace,
                     timestampMs: voiceState.faceTimestampMs,
                     size: faceSize,
-                    faceColor: Colors.white,
+                    faceColor: AntrophFace.skinTone,
                     backgroundColor: const Color(0xFF1B1F22),
                     showFrame: false,
                   )

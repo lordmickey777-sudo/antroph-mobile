@@ -461,6 +461,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         'encoding': _activeEncoding,
         'device_id': deviceId,
         'device_type': Platform.isIOS ? 'ios' : 'android',
+        'playback_sample_rate': _sampleRate,
       },
       'request_id': reqId,
     });
@@ -976,6 +977,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   String _pickContentType(List<String> formats) {
+    // Prefer formats that hint at 8k sample rate if present.
+    final eightK = formats.firstWhere(
+      (f) => f.contains('8000'),
+      orElse: () => '',
+    );
+    if (eightK.isNotEmpty) return eightK;
     final lower = formats.map((f) => f.toLowerCase()).toList();
     if (lower.contains('opus')) return 'audio/ogg';
     if (lower.contains('wav')) return 'audio/wav';
