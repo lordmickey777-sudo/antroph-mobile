@@ -5,6 +5,7 @@ import 'package:antroph_mobile/features/home/models/chat_models.dart';
 import 'package:antroph_mobile/features/home/providers/chat_provider.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/home/widgets/antroph_face.dart';
+import 'package:antroph_mobile/features/home/widgets/face_canvas.dart';
 import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
@@ -111,7 +112,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return Column(
       children: [
         const SizedBox(height: 12),
-        _Header(state: state, onReconnect: controller.forceReconnect),
+        _Header(
+          state: state,
+          voiceState: voiceState,
+          onReconnect: controller.forceReconnect,
+        ),
         if (state.error != null && state.error!.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -171,31 +176,58 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.state, required this.onReconnect});
+  const _Header({
+    required this.state,
+    required this.voiceState,
+    required this.onReconnect,
+  });
 
   final ChatState state;
+  final VoiceChatState voiceState;
   final VoidCallback onReconnect;
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final faceSize = (size.width * 0.5).clamp(140.0, 220.0);
+    final faceSize = (size.width * 0.42).clamp(140.0, 200.0);
+    final voiceFace = voiceState.currentFaceBitmap;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Column(
         children: [
-          RepaintBoundary(
-            child: SizedBox(
-              width: faceSize,
-              height: faceSize,
-              child: AntrophFace(
-                faceDNA: state.face.toArray(),
-                backgroundColor: const Color(0xFF1B1F22),
-              ),
-            ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: voiceFace != null && voiceFace.isNotEmpty
+                ? FaceCanvas(
+                    key: const ValueKey('voice-face'),
+                    bitmap: voiceFace,
+                    timestampMs: voiceState.faceTimestampMs,
+                    size: faceSize,
+                    faceColor: Colors.white,
+                    backgroundColor: const Color(0xFF1B1F22),
+                    showFrame: false,
+                  )
+                : RepaintBoundary(
+                    key: const ValueKey('chat-face'),
+                    child: SizedBox(
+                      width: faceSize,
+                      height: faceSize,
+                      child: AntrophFace(
+                        faceDNA: state.face.toArray(),
+                        backgroundColor: const Color(0xFF1B1F22),
+                      ),
+                    ),
+                  ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           _ConnectionChip(state: state, onReconnect: onReconnect),
+          if (voiceState.isPlaying || voiceState.isProcessing)
+            const SizedBox(height: 6),
+          if (voiceState.isPlaying || voiceState.isProcessing)
+            Text(
+              voiceState.isPlaying ? 'Playing reply…' : 'Processing…',
+              style: const TextStyle(color: Colors.white60, fontSize: 12),
+            ),
         ],
       ),
     );
