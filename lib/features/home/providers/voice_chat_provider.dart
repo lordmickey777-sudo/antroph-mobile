@@ -255,6 +255,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _micStreamSubscription = _micStreamController!.stream.listen((bytes) {
         if (bytes.isEmpty) return;
         _chunkCount++;
+        _log.d('Sending mic chunk #$_chunkCount bytes=${bytes.length}');
         try {
           _wsConnection?.sendBinary(bytes);
         } catch (e, st) {
@@ -270,6 +271,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           ? targetSampleRate * 16
           : (_activeCodec == Codec.opusOGG ? 24000 : 16000);
       _recordingFilePath = await _prepareRecordingFilePath();
+      _log.i(
+        'Starting recorder requestId=${_currentRequestId ?? 'unknown'} '
+        'sampleRate=$targetSampleRate bitRate=$bitRate codec=$_activeCodec '
+        'encoding=$_activeEncoding file=$_recordingFilePath '
+        'contentType=$_preferredContentType',
+      );
       await _audioRecorder!.startRecorder(
         toStream: _micStreamController!.sink,
         toFile: _recordingFilePath,
@@ -452,23 +459,36 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         _currentRequestId ?? 'voice-${DateTime.now().millisecondsSinceEpoch}';
     _currentRequestId = reqId;
     final deviceId = await _ensureDeviceId();
-    _wsConnection!.sendJson({
+    final data = {
+      'conversation_type': 'general',
+      'language': 'en',
+      'sample_rate': _isIOS ? 8000 : _sampleRate,
+      'encoding': _activeEncoding,
+      'device_id': deviceId,
+      'device_type': Platform.isIOS ? 'ios' : 'android',
+      'playback_sample_rate': _sampleRate,
+    };
+    final payload = {
       'type': 'voice_start',
-      'data': {
-        'conversation_type': 'general',
-        'language': 'en',
-        'sample_rate': _isIOS ? 8000 : _sampleRate,
-        'encoding': _activeEncoding,
-        'device_id': deviceId,
-        'device_type': Platform.isIOS ? 'ios' : 'android',
-        'playback_sample_rate': _sampleRate,
-      },
+      'data': data,
       'request_id': reqId,
-    });
+    };
+    _log.i(
+      'Sending voice_start requestId=$reqId deviceId=$deviceId '
+      'deviceType=${data['device_type']} sampleRate=${data['sample_rate']} '
+      'playbackSampleRate=${data['playback_sample_rate']} '
+      'encoding=${data['encoding']} contentType=$_preferredContentType',
+    );
+    _log.d('voice_start payload=$payload');
+    _wsConnection!.sendJson(payload);
   }
 
   void _sendVoiceEnd({required int totalChunks, required int durationMs}) {
     if (_wsConnection == null || _currentRequestId == null) return;
+    _log.i(
+      'Sending voice_end requestId=$_currentRequestId '
+      'totalChunks=$totalChunks durationMs=$durationMs',
+    );
     _wsConnection!.sendJson({
       'type': 'voice_end',
       'data': {'total_chunks': totalChunks, 'total_duration_ms': durationMs},
@@ -565,7 +585,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       }
       _chunkCount = localChunks;
       _log.i(
-        'Fallback streamed $_chunkCount chunks from recorded file (${bytes.length} bytes).',
+        'Fallback streamed $_chunkCount chunks from recorded file '
+        '(${bytes.length} bytes) requestId=${_currentRequestId ?? 'unknown'}.',
       );
     } catch (e, st) {
       _log.e(
@@ -577,6 +598,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void _handleServerMessage(VoiceServerMessage message) {
+    _log.d(
+      'WS message type=${message.type} requestId=${message.requestId ?? 'unknown'} '
+      'timestamp=${message.timestamp}',
+    );
     switch (message.type) {
       case VoiceMessageType.connected:
         final payload = message.data != null
@@ -585,7 +610,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         final formats = payload?.audioFormats ?? const <String>[];
         _preferredContentType = _pickContentType(formats);
         final devId = payload?.deviceId ?? 'unknown';
-        _log.i('Voice connected deviceId=$devId formats=$formats');
+        _log.i(
+          'Voice connected deviceId=$devId formats=$formats '
+          'deviceType=${payload?.deviceType} requestId=${message.requestId ?? _currentRequestId ?? 'unknown'}',
+        );
         state = state.copyWith(
           isConnecting: false,
           audioFormats: formats,
@@ -597,6 +625,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         final ack = message.data != null
             ? VoiceResponseAck.fromJson(message.data!)
             : const VoiceResponseAck();
+        _log.i(
+          'Voice response ack request=${message.requestId ?? _currentRequestId ?? 'unknown'} '
+          'transcriptionLen=${(ack.transcription ?? '').length} '
+          'aiTextLen=${(ack.aiText ?? '').length} message=${ack.message ?? ''}',
+        );
         state = state.copyWith(
           isProcessing: false,
           isConnecting: false,
@@ -615,6 +648,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
             ? VoiceTranscriptionPayload.fromJson(message.data!)
             : null;
         if (payload != null && payload.text.isNotEmpty) {
+          _log.i(
+            'Transcription update request=${message.requestId ?? _currentRequestId ?? 'unknown'} '
+            'text="${payload.text}" confidence=${payload.confidence ?? 'n/a'} '
+            'durationMs=${payload.durationMs ?? 0}',
+          );
           state = state.copyWith(
             userTranscription: payload.text,
             errorMessage: null,
@@ -629,8 +667,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         break;
       case VoiceMessageType.ping:
         _wsConnection?.sendJson({'type': 'pong'});
+        _log.d('Responded to ping');
         break;
       default:
+        _log.w(
+          'Received unknown WS message type=${message.type} '
+          'requestId=${message.requestId ?? 'unknown'}',
+        );
         break;
     }
   }
@@ -640,6 +683,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
     if (chunk.sequenceId.isNotEmpty && _currentSequenceId != chunk.sequenceId) {
       await _streamPlayer.stop();
+      _log.i(
+        'Starting new playback sequence=${chunk.sequenceId} '
+        'prev=${_currentSequenceId ?? 'none'}',
+      );
       _currentSequenceId = chunk.sequenceId;
       _audioAssembler.reset();
       _aiAudioBuffer.clear();
@@ -647,9 +694,16 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     } else if (_currentSequenceId == null && chunk.sequenceId.isNotEmpty) {
       _currentSequenceId = chunk.sequenceId;
       _sampleRateLoggedForSeq = null;
+      _log.d('Initialized playback sequence=$_currentSequenceId');
     }
 
     if (chunk.data != null && chunk.data!.isNotEmpty) {
+      _log.d(
+        'Handling audio chunk seq=${chunk.sequenceId} idx=${chunk.chunkIndex ?? -1} '
+        'part=${chunk.chunkPart ?? 0}/${chunk.totalParts ?? 0} '
+        'isFinal=${chunk.isFinal} base64Len=${chunk.data!.length} '
+        'frames=${chunk.frames.length}',
+      );
       final hasParts = chunk.chunkPart != null && chunk.totalParts != null;
       if (hasParts) {
         _audioAssembler.startSequence(chunk.sequenceId);
@@ -662,6 +716,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           final merged = _audioAssembler.buildMerged();
           _audioAssembler.reset();
           if (merged != null && merged.isNotEmpty) {
+            _log.d(
+              'Assembled audio chunk seq=${chunk.sequenceId} '
+              'mergedBase64Len=${merged.length}',
+            );
             await _playBase64(merged);
           }
         }
@@ -674,6 +732,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       final recordedAudio = _aiAudioBuffer.isNotEmpty
           ? Uint8List.fromList(_aiAudioBuffer)
           : null;
+      _log.i(
+        'Final audio chunk seq=${chunk.sequenceId} '
+        'recordedBytes=${recordedAudio?.length ?? 0}',
+      );
       state = state.copyWith(
         isProcessing: false,
         isConnecting: false,
@@ -711,6 +773,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       if (bytes.isEmpty) return;
       _logSampleRateIfNeeded(bytes);
       _aiAudioBuffer.addAll(bytes);
+      _log.d(
+        'Queueing playback chunk seq=${_currentSequenceId ?? 'unknown'} '
+        'chunkBytes=${bytes.length} bufferTotal=${_aiAudioBuffer.length}',
+      );
       await _streamPlayer.addChunk(bytes);
       state = state.copyWith(
         isPlaying: true,
@@ -898,6 +964,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   Future<void> _ensurePlayerReady() async {
     if (_streamPlayer.hasStream) return;
+    _log.i(
+      'Starting stream player contentType=$_preferredContentType '
+      'sequence=${_currentSequenceId ?? 'unknown'}',
+    );
     await _streamPlayer.start(
       contentType: _preferredContentType,
       onComplete: _handlePlaybackComplete,
@@ -906,6 +976,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void _handlePlaybackComplete() {
+    _log.i('Playback complete for sequence=${_currentSequenceId ?? 'unknown'}');
     state = state.copyWith(
       isPlaying: false,
       currentExpression: RobotExpression.neutral,
@@ -938,6 +1009,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void _handleSocketDone() {
+    _log.i('Voice websocket closed requestId=$_currentRequestId');
     state = state.copyWith(
       isConnecting: false,
       isProcessing: false,
@@ -946,6 +1018,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   Future<void> _disposeSocket() async {
+    _log.d(
+      'Disposing voice socket requestId=$_currentRequestId '
+      'sequence=$_currentSequenceId',
+    );
     await _micStreamSubscription?.cancel();
     _micStreamSubscription = null;
     await _micStreamController?.close();
@@ -977,17 +1053,28 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   String _pickContentType(List<String> formats) {
+    if (formats.isEmpty) return 'audio/mpeg'; // default to mp3; backend TTS uses mp3
+    final lower = formats.map((f) => f.toLowerCase()).toList();
+
+    // Prefer explicit mp3/mpeg so iOS AVPlayer can decode the stream.
+    final mp3 = formats.firstWhere(
+      (f) => f.toLowerCase().contains('mpeg') || f.toLowerCase().contains('mp3'),
+      orElse: () => '',
+    );
+    if (mp3.isNotEmpty) return mp3.contains('/') ? mp3 : 'audio/mpeg';
+
     // Prefer formats that hint at 8k sample rate if present.
     final eightK = formats.firstWhere(
       (f) => f.contains('8000'),
       orElse: () => '',
     );
     if (eightK.isNotEmpty) return eightK;
-    final lower = formats.map((f) => f.toLowerCase()).toList();
-    if (lower.contains('opus')) return 'audio/ogg';
-    if (lower.contains('wav')) return 'audio/wav';
-    if (lower.contains('mp3')) return 'audio/mpeg';
-    return 'audio/wav'; // default to WAV for safety
+
+    if (lower.any((f) => f.contains('opus') || f.contains('ogg'))) {
+      return 'audio/ogg';
+    }
+    if (lower.any((f) => f.contains('wav'))) return 'audio/wav';
+    return 'audio/mpeg'; // safest default across platforms
   }
 
   String _getContentTypeForEncoding(String encoding) {
