@@ -21,16 +21,24 @@ class AppEnv {
     if (direct.isNotEmpty) {
       return _normalizeWsUrl(direct);
     }
+    return voiceRealtimeWsUrl;
+  }
+
+  static String get voiceRealtimeWsUrl {
+    final direct = _string('VOICE_REALTIME_WS_URL', '');
+    if (direct.isNotEmpty) {
+      return _normalizeWsUrl(direct);
+    }
     final api = apiBaseUrl;
     if (api.isEmpty) return '';
     final base = api.endsWith('/') ? api.substring(0, api.length - 1) : api;
     if (base.startsWith('https://')) {
-      return '${base.replaceFirst('https://', 'wss://')}/ws/voice';
+      return '${base.replaceFirst('https://', 'wss://')}/ws/realtime/voice';
     }
     if (base.startsWith('http://')) {
-      return '${base.replaceFirst('http://', 'ws://')}/ws/voice';
+      return '${base.replaceFirst('http://', 'ws://')}/ws/realtime/voice';
     }
-    return 'wss://$base/ws/voice';
+    return 'wss://$base/ws/realtime/voice';
   }
 
   static String get storyWsUrl {
