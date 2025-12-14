@@ -73,9 +73,27 @@ class ChatEnvelope {
     Map<String, dynamic>? data;
     final rawData = json['data'];
     if (rawData is Map<String, dynamic>) {
-      data = rawData;
+      data = Map<String, dynamic>.from(rawData);
     } else if (rawData is Map) {
       data = rawData.cast<String, dynamic>();
+    } else if (rawData != null) {
+      data = {'message': rawData.toString()};
+    }
+
+    void _takeTopLevel(String key) {
+      final value = json[key];
+      if (value == null) return;
+      data ??= <String, dynamic>{};
+      data!.putIfAbsent(key, () => value);
+    }
+
+    _takeTopLevel('message');
+    _takeTopLevel('code');
+    _takeTopLevel('detail');
+    _takeTopLevel('error');
+
+    if (data != null && data!.isEmpty) {
+      data = null;
     }
     return ChatEnvelope(
       type: chatEnvelopeTypeFromString((json['type'] as String?) ?? ''),

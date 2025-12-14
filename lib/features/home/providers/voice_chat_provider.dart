@@ -8,7 +8,6 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:logger/logger.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../../../core/auth/state/auth_state.dart';
 import '../../../core/env/env.dart';
 import '../models/expression_models.dart';
 import '../services/pcm_audio_player.dart';
@@ -93,10 +92,11 @@ class VoiceChatState {
 /// Controller for voice chat interactions
 class VoiceChatController extends Notifier<VoiceChatState> {
   final Logger _log = Logger();
-  final RealtimeVoiceClient _client = RealtimeVoiceClient();
-  final PcmAudioPlayer _player = PcmAudioPlayer();
+  final RealtimeVoiceClient _client;
+  final AudioChunkPlayer _player;
+  final Uri? _voiceUriOverride;
   FlutterSoundRecorder? _recorder;
-  StreamSubscription<Map<String, dynamic>>? _socketSub;
+  StreamSubscription<RealtimeIncomingMessage>? _socketSub;
   StreamController<Uint8List>? _micStreamController;
   StreamSubscription<Uint8List>? _micStreamSubscription;
   final StringBuffer _aiTextBuffer = StringBuffer();
@@ -105,9 +105,17 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   bool _commitSent = false;
   bool _socketOpen = false;
 
-  static const int _sampleRate = 16000;
+  static const int _sampleRate = 24000;
   static const String _permissionError =
       'Microphone permission is required for voice chat';
+
+  VoiceChatController({
+    RealtimeVoiceClient? client,
+    AudioChunkPlayer? player,
+    Uri? voiceUriOverride,
+  })  : _client = client ?? RealtimeVoiceClient(),
+        _player = player ?? PcmAudioPlayer(),
+        _voiceUriOverride = voiceUriOverride;
 
   @override
   VoiceChatState build() {
@@ -133,12 +141,6 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       final hasPermission = await _ensureMicrophonePermission();
       if (!hasPermission) return;
 
-      final token =
-          ref.read(authControllerProvider.notifier).tokens?.accessToken ?? '';
-      if (token.isEmpty) {
-        throw VoiceChatException('You must be logged in to use voice chat');
-      }
-
       _aiTextBuffer.clear();
       _commitSent = false;
 
@@ -153,7 +155,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         clearFace: true,
       );
 
-      await _connectSocket(token);
+      await _connectSocket();
       await _startRecorder();
       _log.i('Voice session started');
     } catch (e, st) {
@@ -169,8 +171,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     }
   }
 
-  Future<void> _connectSocket(String token) async {
-    final uri = await _voiceUri(token);
+  Future<void> _connectSocket() async {
+    final uri = await _voiceUri();
     if (uri == null) {
       throw VoiceChatException('Voice websocket URL is missing or invalid');
     }
@@ -190,7 +192,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     );
   }
 
-  Future<Uri?> _voiceUri(String token) async {
+  Future<Uri?> _voiceUri() async {
+    if (_voiceUriOverride != null) return _voiceUriOverride;
     await AppEnv.load();
     final raw = AppEnv.voiceRealtimeWsUrl.trim();
     if (raw.isEmpty) return null;
@@ -204,18 +207,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (uri.scheme == 'http') uri = uri.replace(scheme: 'ws');
     if (uri.hasFragment) uri = uri.replace(fragment: '');
     final qp = Map<String, String>.from(uri.queryParameters);
-    if (token.isNotEmpty) {
-      qp.putIfAbsent('token', () => token);
-    }
+    if (qp.isEmpty) return uri;
     return uri.replace(queryParameters: qp);
   }
 
   Future<void> _startRecorder() async {
     try {
       await _stopRecorder();
-      if (_recorder == null) {
-        _recorder = FlutterSoundRecorder();
-      }
+      _recorder ??= FlutterSoundRecorder();
       if (!_recorder!.isRecording) {
         await _recorder!.openRecorder();
       }
@@ -262,11 +261,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _handleMicChunk(Uint8List bytes) {
     if (bytes.isEmpty || !_socketOpen) return;
-    final payload = {
-      'type': 'input_audio_buffer.append',
-      'audio': base64Encode(bytes),
-    };
-    _client.send(payload);
+    _client.sendBinary(bytes);
   }
 
   /// Stop recording and tell backend the input is finished.
@@ -279,6 +274,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       await _stopRecorder();
       _commitInput();
+      await _createResponseFromAudio();
       state = state.copyWith(
         isRecording: false,
         isProcessing: true,
@@ -317,23 +313,95 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _commitSent = true;
   }
 
-  void _handleIncomingMessage(Map<String, dynamic> message) {
-    final type = (message['type'] as String?) ?? '';
+  Future<void> _createResponseFromAudio() async {
+    if (!_socketOpen) return;
+    try {
+      _client.send({
+        'type': 'response.create',
+        'response': {
+          'input': [
+            {
+              'type': 'input_audio',
+              'audio': {
+                'format': 'pcm16',
+                'sample_rate': _sampleRate,
+                'channels': 1,
+              },
+            },
+          ],
+        },
+      });
+    } catch (e, st) {
+      _log.e('Failed to send audio response.create', error: e, stackTrace: st);
+      state = state.copyWith(errorMessage: 'Failed to send audio: $e');
+    }
+  }
+
+  void _handleIncomingMessage(RealtimeIncomingMessage message) {
+    if (!ref.mounted) return;
+    if (message.isBinary && message.bytes != null) {
+      unawaited(_handleAudioBytes(message.bytes!));
+      return;
+    }
+
+    final payload = message.json;
+    if (payload == null) return;
+    final type = (payload['type'] as String?) ?? '';
     _log.t('Voice socket message type=$type');
+
     switch (type) {
-      case 'output_audio.delta':
-        final audio = message['audio'] as String?;
+      case 'response.created':
+        state = state.copyWith(isProcessing: true, isConnecting: false);
+        break;
+      case 'response.audio.delta':
+        final audio = payload['audio'] as String?;
         if (audio != null && audio.isNotEmpty) {
           unawaited(_handleAudioDelta(audio));
         }
         break;
-      case 'response.output_text.delta':
-        final text = message['text'] as String? ?? '';
+      case 'output_audio.delta': // backward compatibility
+        final audio = payload['audio'] as String?;
+        if (audio != null && audio.isNotEmpty) {
+          unawaited(_handleAudioDelta(audio));
+        }
+        break;
+      case 'response.audio_transcript.delta':
+        final text = (payload['delta'] ?? payload['text'] ?? '') as String;
         if (text.isNotEmpty) {
           _aiTextBuffer.write(text);
           state = state.copyWith(aiResponse: _aiTextBuffer.toString());
         }
         state = state.copyWith(isProcessing: false, isConnecting: false);
+        break;
+      case 'response.output_text.delta': // backward compatibility
+        final text = payload['text'] as String? ?? '';
+        if (text.isNotEmpty) {
+          _aiTextBuffer.write(text);
+          state = state.copyWith(aiResponse: _aiTextBuffer.toString());
+        }
+        state = state.copyWith(isProcessing: false, isConnecting: false);
+        break;
+      case 'response.done':
+        state = state.copyWith(
+          isProcessing: false,
+          isConnecting: false,
+        );
+        _commitSent = false;
+        break;
+      case 'response.error':
+        final error =
+            payload['error'] is Map<String, dynamic> ? payload['error'] : null;
+        final messageText = error != null
+            ? (error['message'] as String? ?? '$error')
+            : (payload['message'] as String? ?? 'Unknown error');
+        state = state.copyWith(
+          isProcessing: false,
+          isConnecting: false,
+          isPlaying: false,
+          isRecording: false,
+          clearFace: true,
+          errorMessage: messageText,
+        );
         break;
       default:
         break;
@@ -341,11 +409,40 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   Future<void> _handleAudioDelta(String base64Audio) async {
+    if (!ref.mounted) return;
     try {
       final normalized = base64.normalize(base64Audio);
       final bytes = base64Decode(normalized);
       if (bytes.isEmpty) return;
 
+      await _player.addChunk(
+        bytes,
+        sampleRate: _sampleRate,
+        onFinished: _handlePlaybackComplete,
+      );
+      state = state.copyWith(
+        isPlaying: true,
+        isProcessing: false,
+        isConnecting: false,
+        errorMessage: null,
+      );
+    } catch (e, st) {
+      _log.e('Playback error', error: e, stackTrace: st);
+      state = state.copyWith(
+        isPlaying: false,
+        isProcessing: false,
+        isConnecting: false,
+        currentExpression: RobotExpression.neutral,
+        clearFace: true,
+        errorMessage: 'Failed to play audio: $e',
+      );
+    }
+  }
+
+  Future<void> _handleAudioBytes(Uint8List bytes) async {
+    if (!ref.mounted) return;
+    try {
+      if (bytes.isEmpty) return;
       await _player.addChunk(
         bytes,
         sampleRate: _sampleRate,
@@ -379,7 +476,57 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     );
   }
 
+  /// Send a text prompt over the realtime socket using response.create.
+  Future<void> sendTextPrompt(String prompt) async {
+    final trimmed = prompt.trim();
+    if (trimmed.isEmpty) return;
+
+    try {
+      if (!_client.isOpen || !_socketOpen) {
+        await _connectSocket();
+      }
+
+      _aiTextBuffer.clear();
+      state = state.copyWith(
+        isProcessing: true,
+        isConnecting: false,
+        isRecording: false,
+        isPlaying: false,
+        aiResponse: null,
+        errorMessage: null,
+        clearFace: true,
+      );
+
+      _client.send({
+        'type': 'response.create',
+        'response': {
+          'input': [
+            {
+              'type': 'message',
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'input_text',
+                  'text': trimmed,
+                }
+              ],
+            }
+          ],
+        },
+      });
+    } catch (e, st) {
+      _log.e('Failed to send text prompt', error: e, stackTrace: st);
+      state = state.copyWith(
+        isProcessing: false,
+        isConnecting: false,
+        errorMessage: 'Failed to send prompt: $e',
+      );
+      await _teardownSocket();
+    }
+  }
+
   Future<void> _handleSocketError(Object err, [StackTrace? st]) async {
+    if (!ref.mounted) return;
     _log.e('Voice websocket error', error: err, stackTrace: st);
     state = state.copyWith(
       isProcessing: false,
@@ -389,10 +536,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       clearFace: true,
       errorMessage: '$err',
     );
+    _commitSent = false;
     await _teardownSocket();
   }
 
   void _handleSocketClosed() {
+    if (!ref.mounted) return;
     _log.i('Voice websocket closed');
     _socketOpen = false;
     unawaited(_player.stop());
@@ -403,6 +552,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isPlaying: false,
       isRecording: false,
     );
+    _commitSent = false;
   }
 
   /// Cancel current recording and tear down the current session.

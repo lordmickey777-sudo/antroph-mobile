@@ -236,7 +236,9 @@ class ChatController extends Notifier<ChatState> {
         break;
       case ChatEnvelopeType.pong:
       case ChatEnvelopeType.presence:
+        break;
       case ChatEnvelopeType.unknown:
+        _handleUnknownEnvelope(envelope);
         break;
     }
   }
@@ -337,9 +339,10 @@ class ChatController extends Notifier<ChatState> {
   }
 
   void _handleSocketError(ChatEnvelope envelope) {
-    final message =
-        envelope.data?['message']?.toString() ??
-        envelope.data?['code']?.toString() ??
+    final message = _errorMessageFromEnvelope(
+          envelope,
+          includeRawFallback: true,
+        ) ??
         'Chat socket error';
     _log.w('Chat socket error envelope: $message');
     state = state.copyWith(error: message);
@@ -588,6 +591,55 @@ class ChatController extends Notifier<ChatState> {
       updatedList[idx] = merged;
       state = state.copyWith(messages: updatedList);
     }
+  }
+
+  void _handleUnknownEnvelope(ChatEnvelope envelope) {
+    final message = _errorMessageFromEnvelope(envelope);
+    if (message != null && message.isNotEmpty) {
+      _log.w('Unknown chat envelope treated as error: $message');
+      state = state.copyWith(error: message);
+      return;
+    }
+    _log.w('Unknown chat envelope: ${envelope.raw}');
+  }
+
+  String? _errorMessageFromEnvelope(
+    ChatEnvelope envelope, {
+    bool includeRawFallback = false,
+  }) {
+    final fromData = _firstString([
+      envelope.data?['message'],
+      envelope.data?['detail'],
+      envelope.data?['error'],
+      envelope.data?['code'],
+    ]);
+    if (fromData != null) return fromData;
+
+    final raw = envelope.raw;
+    if (raw is Map) {
+      final rawMessage = _firstString([
+        raw['message'],
+        raw['detail'],
+        raw['error'],
+        raw['code'],
+      ]);
+      if (rawMessage != null) return rawMessage;
+    }
+
+    if (includeRawFallback && raw != null) {
+      final rawString = raw.toString();
+      if (rawString.isNotEmpty) return rawString;
+    }
+    return null;
+  }
+
+  String? _firstString(Iterable<dynamic> values) {
+    for (final value in values) {
+      if (value == null) continue;
+      final text = value.toString();
+      if (text.isNotEmpty) return text;
+    }
+    return null;
   }
 }
 

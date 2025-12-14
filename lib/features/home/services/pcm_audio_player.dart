@@ -1,11 +1,24 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 
+/// Interface for streaming PCM audio chunks.
+abstract class AudioChunkPlayer {
+  Future<void> addChunk(
+    Uint8List bytes, {
+    int sampleRate,
+    int bufferSize,
+    bool interleaved,
+    VoidCallback? onFinished,
+  });
+
+  Future<void> stop();
+  Future<void> dispose();
+}
+
 /// Streams PCM16 audio into a FlutterSoundPlayer.
-class PcmAudioPlayer {
+class PcmAudioPlayer implements AudioChunkPlayer {
   FlutterSoundPlayer _player = FlutterSoundPlayer();
   Future<void>? _startFuture;
   bool _stopped = true;
@@ -14,6 +27,7 @@ class PcmAudioPlayer {
 
   bool get isPlaying => _player.isPlaying;
 
+  @override
   Future<void> addChunk(
     Uint8List bytes, {
     int sampleRate = 16000,
@@ -31,6 +45,7 @@ class PcmAudioPlayer {
     _player.uint8ListSink?.add(bytes);
   }
 
+  @override
   Future<void> stop() async {
     if (_stopped) return;
     try {
@@ -48,6 +63,7 @@ class PcmAudioPlayer {
     _notifyFinished();
   }
 
+  @override
   Future<void> dispose() => stop();
 
   Future<void> _start({
