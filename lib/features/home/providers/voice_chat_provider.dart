@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:typed_data' show BytesBuilder;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_sound/flutter_sound.dart';
@@ -100,6 +101,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   StreamController<Uint8List>? _micStreamController;
   StreamSubscription<Uint8List>? _micStreamSubscription;
   final StringBuffer _aiTextBuffer = StringBuffer();
+  BytesBuilder _audioBuffer = BytesBuilder(copy: false);
   Completer<bool>? _permissionDialogCompleter;
   bool _iosPermissionDeniedOnce = false;
   bool _commitSent = false;
@@ -143,6 +145,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       _aiTextBuffer.clear();
       _commitSent = false;
+      _resetAudioBuffer();
 
       state = state.copyWith(
         isConnecting: true,
@@ -261,7 +264,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _handleMicChunk(Uint8List bytes) {
     if (bytes.isEmpty || !_socketOpen) return;
-    _client.sendBinary(bytes);
+    _audioBuffer.add(bytes);
+    final encoded = base64Encode(bytes);
+    _client.send({
+      'type': 'input_audio_buffer.append',
+      'audio': encoded,
+    });
   }
 
   /// Stop recording and tell backend the input is finished.
@@ -315,22 +323,28 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   Future<void> _createResponseFromAudio() async {
     if (!_socketOpen) return;
+    final recordedBytes = _audioBuffer.takeBytes();
+    if (recordedBytes.isEmpty) return;
+    final encoded = base64Encode(recordedBytes);
     try {
       _client.send({
         'type': 'response.create',
         'response': {
           'input': [
             {
-              'type': 'input_audio',
-              'audio': {
-                'format': 'pcm16',
-                'sample_rate': _sampleRate,
-                'channels': 1,
-              },
+              'type': 'message',
+              'role': 'user',
+              'content': [
+                {
+                  'type': 'input_audio',
+                  'audio': encoded,
+                },
+              ],
             },
           ],
         },
       });
+      _resetAudioBuffer();
     } catch (e, st) {
       _log.e('Failed to send audio response.create', error: e, stackTrace: st);
       state = state.copyWith(errorMessage: 'Failed to send audio: $e');
@@ -394,6 +408,23 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         final messageText = error != null
             ? (error['message'] as String? ?? '$error')
             : (payload['message'] as String? ?? 'Unknown error');
+        state = state.copyWith(
+          isProcessing: false,
+          isConnecting: false,
+          isPlaying: false,
+          isRecording: false,
+          clearFace: true,
+          errorMessage: messageText,
+        );
+        break;
+      case 'error':
+        final error = payload['error'] is Map<String, dynamic>
+            ? payload['error'] as Map<String, dynamic>
+            : null;
+        final messageText = error != null
+            ? (error['message'] as String? ?? '$error')
+            : (payload['message'] as String? ?? 'Unknown error');
+        _log.w('Voice socket error message: $payload');
         state = state.copyWith(
           isProcessing: false,
           isConnecting: false,
@@ -537,6 +568,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       errorMessage: '$err',
     );
     _commitSent = false;
+    _resetAudioBuffer();
     await _teardownSocket();
   }
 
@@ -562,6 +594,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     await _teardownSocket();
     _aiTextBuffer.clear();
     _commitSent = false;
+    _resetAudioBuffer();
     state = state.copyWith(
       isRecording: false,
       isProcessing: false,
@@ -579,6 +612,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Future<void> stopPlayback() async {
     await _player.stop();
     await _teardownSocket();
+    _resetAudioBuffer();
     state = state.copyWith(
       isPlaying: false,
       isProcessing: false,
@@ -703,6 +737,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     await _socketSub?.cancel();
     _socketSub = null;
     await _client.close();
+    _resetAudioBuffer();
+  }
+
+  void _resetAudioBuffer() {
+    _audioBuffer = BytesBuilder(copy: false);
   }
 }
 

@@ -61,7 +61,6 @@ class ChatController extends Notifier<ChatState> {
 
   IOWebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
-  Timer? _pingTimer;
   Timer? _retryTimer;
   Timer? _retryTicker;
   Timer? _faceThrottleTimer;
@@ -90,7 +89,6 @@ class ChatController extends Notifier<ChatState> {
       await _channel?.sink.close(ws_status.normalClosure, 'dispose');
     } catch (_) {}
     _channel = null;
-    _pingTimer?.cancel();
     _retryTimer?.cancel();
     _retryTicker?.cancel();
     _faceThrottleTimer?.cancel();
@@ -130,15 +128,13 @@ class ChatController extends Notifier<ChatState> {
         onDone: _handleDone,
         cancelOnError: true,
       );
+      _channel?.innerWebSocket?.pingInterval = const Duration(seconds: 25);
       _retryAttempt = 0;
-      _startPing();
       state = state.copyWith(
         connection: ChatConnectionStatus.connected,
         retryIn: null,
         error: null,
       );
-      // Kick off a ping to establish liveness early.
-      _sendRaw({'type': 'ping', 'ts': DateTime.now().millisecondsSinceEpoch});
     } catch (e, st) {
       _log.e('Chat connect failed', error: e, stackTrace: st);
       _scheduleReconnect(e);
@@ -185,15 +181,6 @@ class ChatController extends Notifier<ChatState> {
     qp.putIfAbsent('device_type', () => deviceType);
     parsed = parsed.replace(queryParameters: qp);
     return parsed;
-  }
-
-  void _startPing() {
-    _pingTimer?.cancel();
-    _pingTimer = Timer.periodic(const Duration(seconds: 25), (_) {
-      final ts = DateTime.now().millisecondsSinceEpoch;
-      _log.t('Sending ping $ts');
-      _sendRaw({'type': 'ping', 'ts': ts});
-    });
   }
 
   void _handleRaw(dynamic raw) {
@@ -372,7 +359,6 @@ class ChatController extends Notifier<ChatState> {
   }
 
   void _scheduleReconnect(Object? reason) {
-    _pingTimer?.cancel();
     _retryTimer?.cancel();
     _retryTicker?.cancel();
     final idx = _retryAttempt.clamp(0, _backoffSeconds.length - 1);
@@ -507,7 +493,6 @@ class ChatController extends Notifier<ChatState> {
   }
 
   void pause() {
-    _pingTimer?.cancel();
     _retryTimer?.cancel();
     _retryTicker?.cancel();
     _faceThrottleTimer?.cancel();
