@@ -14,11 +14,7 @@ const _surface = Color(0xFF111822);
 const _userBubble = Color(0xFF1C2533);
 const _assistantBubble = Color(0xFF0F1720);
 const _accent = Color(0xFF9CC6FF);
-const _pageGradient = LinearGradient(
-  colors: [Color(0xFF0F1622), Color(0xFF0B1118)],
-  begin: Alignment.topCenter,
-  end: Alignment.bottomCenter,
-);
+const _pageGradient = Colors.transparent;
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key, this.storyTitle});
@@ -29,7 +25,8 @@ class ChatPage extends ConsumerStatefulWidget {
   ConsumerState<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver {
+class _ChatPageState extends ConsumerState<ChatPage>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -45,7 +42,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final controller = ref.read(chatControllerProvider.notifier);
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
       controller.pause();
     } else if (state == AppLifecycleState.resumed) {
       controller.resume();
@@ -66,24 +64,26 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TypographyText(
-                    widget.storyTitle ?? 'Voice chat',
-                    variant: TypographyVariant.h4,
-                    color: Colors.white,
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TypographyText(
+                      widget.storyTitle ?? 'Voice chat',
+                      variant: TypographyVariant.h4,
+                      color: Colors.white,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
       ),
-      body: Container(
-        decoration: const BoxDecoration(gradient: _pageGradient),
-        child: const SafeArea(child: ChatScreen()),
-      ),
+      body: Container(child: const SafeArea(child: ChatScreen())),
     );
   }
 }
@@ -96,7 +96,10 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
-  void _handleVoicePermissionDialogs(VoiceChatState? previous, VoiceChatState next) async {
+  void _handleVoicePermissionDialogs(
+    VoiceChatState? previous,
+    VoiceChatState next,
+  ) async {
     if (!mounted || previous?.permissionDialog == next.permissionDialog) {
       return;
     }
@@ -117,11 +120,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<VoiceChatState>(voiceChatControllerProvider, (previous, next) async {
+    ref.listen<VoiceChatState>(voiceChatControllerProvider, (
+      previous,
+      next,
+    ) async {
       _handleVoicePermissionDialogs(previous, next);
       if (!mounted) return;
       final error = next.errorMessage;
-      if (error != null && error.isNotEmpty && error != (previous?.errorMessage ?? '')) {
+      if (error != null &&
+          error.isNotEmpty &&
+          error != (previous?.errorMessage ?? '')) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(error, style: const TextStyle(color: Colors.black87)),
@@ -129,7 +137,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 3),
             margin: const EdgeInsets.all(16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -138,7 +148,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ref.listen<ChatState>(chatControllerProvider, (previous, next) {
       if (!mounted) return;
       final error = next.error;
-      if (error != null && error.isNotEmpty && error != (previous?.error ?? '')) {
+      if (error != null &&
+          error.isNotEmpty &&
+          error != (previous?.error ?? '')) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(error, style: const TextStyle(color: Colors.black87)),
@@ -146,7 +158,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 3),
             margin: const EdgeInsets.all(16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -170,7 +184,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
         const SizedBox(height: 4),
         Expanded(
-          child: ChatList(messages: state.messages, onRetry: controller.retrySend),
+          child: ChatList(
+            messages: state.messages,
+            onRetry: controller.retrySend,
+          ),
         ),
         if (_VoiceStatusBar.shouldShow(voiceState))
           Padding(
@@ -253,12 +270,7 @@ class _Header extends StatelessWidget {
                       key: const ValueKey('chat-face'),
                       child: Container(
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF121A26), Color(0xFF0D131B)],
-                          ),
-                        ),
+
                         child: SizedBox(
                           width: faceSize,
                           height: faceSize,
@@ -365,15 +377,24 @@ class _ConnectionChip extends StatelessWidget {
         children: [
           Icon(icon, color: color, size: 14),
           const SizedBox(width: 8),
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
           if (state.isDisconnected) ...[
             const SizedBox(width: 12),
             TextButton(
               onPressed: onReconnect,
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 foregroundColor: Colors.white,
-                textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               child: const Text('Reconnect'),
             ),
@@ -412,7 +433,11 @@ class _StatusPill extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -507,7 +532,10 @@ class ChatList extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final message = messages[messages.length - 1 - index];
-        return _ChatBubble(message: message, onRetry: () => onRetry(message.id));
+        return _ChatBubble(
+          message: message,
+          onRetry: () => onRetry(message.id),
+        );
       },
     );
   }
@@ -521,7 +549,9 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final alignment = message.isUser ? Alignment.centerRight : Alignment.centerLeft;
+    final alignment = message.isUser
+        ? Alignment.centerRight
+        : Alignment.centerLeft;
     final bgColor = message.isUser ? _userBubble : _assistantBubble;
     final textColor = message.isUser ? Colors.white : Colors.white;
     final isStreaming = !message.isUser && message.isStreaming;
@@ -535,7 +565,10 @@ class _ChatBubble extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(message.message, style: TextStyle(color: textColor, fontSize: 15, height: 1.4)),
+              Text(
+                message.message,
+                style: TextStyle(color: textColor, fontSize: 15, height: 1.4),
+              ),
               if (isStreaming) ...[
                 const SizedBox(height: 6),
                 Row(
@@ -544,10 +577,16 @@ class _ChatBubble extends StatelessWidget {
                     SizedBox(
                       width: 14,
                       height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white70,
+                      ),
                     ),
                     SizedBox(width: 6),
-                    Text('Streaming...', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                    Text(
+                      'Streaming...',
+                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
                   ],
                 ),
               ] else if (message.isPending || message.isFailed) ...[
@@ -577,10 +616,16 @@ class _StatusRow extends StatelessWidget {
           SizedBox(
             width: 14,
             height: 14,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white70,
+            ),
           ),
           SizedBox(width: 6),
-          Text('Sending...', style: TextStyle(color: Colors.white70, fontSize: 11)),
+          Text(
+            'Sending...',
+            style: TextStyle(color: Colors.white70, fontSize: 11),
+          ),
         ],
       );
     }
@@ -589,7 +634,10 @@ class _StatusRow extends StatelessWidget {
       children: [
         const Icon(Icons.error_outline, color: Colors.redAccent, size: 16),
         const SizedBox(width: 6),
-        const Text('Failed', style: TextStyle(color: Colors.redAccent, fontSize: 11)),
+        const Text(
+          'Failed',
+          style: TextStyle(color: Colors.redAccent, fontSize: 11),
+        ),
         TextButton(
           onPressed: onRetry,
           style: TextButton.styleFrom(
@@ -597,7 +645,10 @@ class _StatusRow extends StatelessWidget {
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             foregroundColor: Colors.white,
-            textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            textStyle: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           child: const Text('Retry'),
         ),
@@ -607,7 +658,11 @@ class _StatusRow extends StatelessWidget {
 }
 
 class _VoiceStatusBar extends StatelessWidget {
-  const _VoiceStatusBar({required this.state, required this.onStop, required this.onCancel});
+  const _VoiceStatusBar({
+    required this.state,
+    required this.onStop,
+    required this.onCancel,
+  });
 
   final VoiceChatState state;
   final VoidCallback onStop;
@@ -656,9 +711,13 @@ class _VoiceStatusBar extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: hasError ? Colors.redAccent.withOpacity(0.12) : Colors.white.withOpacity(0.05),
+        color: hasError
+            ? Colors.redAccent.withOpacity(0.12)
+            : Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: hasError ? Colors.redAccent.withOpacity(0.6) : Colors.white12),
+        border: Border.all(
+          color: hasError ? Colors.redAccent.withOpacity(0.6) : Colors.white12,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -680,7 +739,10 @@ class _VoiceStatusBar extends StatelessWidget {
                   onPressed: hasError ? onCancel : onStop,
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                   ),
                   child: Text(hasError ? 'Dismiss' : 'Stop'),
                 ),
@@ -713,14 +775,22 @@ class _VoiceLine extends StatelessWidget {
       children: [
         Text(
           '$label: ',
-          style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         Expanded(
           child: Text(
             text,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.3),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              height: 1.3,
+            ),
           ),
         ),
       ],
@@ -738,10 +808,7 @@ class _EmptyState extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const SizedBox(height: 10),
-          const Text(
-            'Say hello to start chatting',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
-          ),
+          const Text('', style: TextStyle(color: Colors.white70, fontSize: 14)),
         ],
       ),
     );
