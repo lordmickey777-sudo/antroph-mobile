@@ -48,6 +48,8 @@ class TypographyText extends StatelessWidget {
         return theme.headlineMedium;
       case TypographyVariant.h3:
         return theme.headlineSmall;
+      case TypographyVariant.h4:
+        return theme.titleLarge;
       case TypographyVariant.body1:
         return theme.bodyLarge;
       case TypographyVariant.body2:
@@ -87,4 +89,4 @@ class TypographyText extends StatelessWidget {
 }
 
 /// The available typography variants for [TypographyText].
-enum TypographyVariant { h1, h2, h3, body1, body2 }
+enum TypographyVariant { h1, h2, h3, h4, body1, body2 }

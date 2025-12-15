@@ -66,39 +66,13 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              Container(
-                height: 44,
-                width: 44,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF2F4BFF), Color(0xFF6AD2FF)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 16,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: const Icon(Icons.auto_awesome, color: Colors.white),
-              ),
-              const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TypographyText(
                     widget.storyTitle ?? 'Voice chat',
-                    variant: TypographyVariant.h3,
+                    variant: TypographyVariant.h4,
                     color: Colors.white,
-                  ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Minimal AI companion',
-                    style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],
               ),
@@ -255,13 +229,13 @@ class _Header extends StatelessWidget {
         decoration: BoxDecoration(),
         child: Column(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _ConnectionChip(state: state, onReconnect: onReconnect),
-                _StatusPill(label: status.label, icon: status.icon),
-              ],
-            ),
+            // Row(
+            //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            //   children: [
+            //     _ConnectionChip(state: state, onReconnect: onReconnect),
+            //     _StatusPill(label: status.label, icon: status.icon),
+            //   ],
+            // ),
             const SizedBox(height: 12),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 240),
@@ -284,7 +258,6 @@ class _Header extends StatelessWidget {
                           gradient: const LinearGradient(
                             colors: [Color(0xFF121A26), Color(0xFF0D131B)],
                           ),
-                          border: Border.all(color: Colors.white10),
                         ),
                         child: SizedBox(
                           width: faceSize,
@@ -338,7 +311,7 @@ class _Header extends StatelessWidget {
     if (chat.messages.isNotEmpty) {
       return chat.messages.last.message;
     }
-    return 'Talk to your AI';
+    return '';
   }
 
   _StatusData _voiceStatus(VoiceChatState voice) {
