@@ -108,6 +108,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   bool _socketOpen = false;
 
   static const int _sampleRate = 24000;
+  static const String _outputAudioFormat = 'pcm16';
+  static const String _outputVoice = 'alloy';
   static const String _permissionError =
       'Microphone permission is required for voice chat';
 
@@ -116,17 +118,19 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     AudioChunkPlayer? player,
     Uri? voiceUriOverride,
   })  : _client = client ?? RealtimeVoiceClient(),
-        _player = player ?? PcmAudioPlayer(),
+        _player = player ?? createAudioChunkPlayer(),
         _voiceUriOverride = voiceUriOverride;
 
   @override
   VoiceChatState build() {
+    final keepAlive = ref.keepAlive();
     _recorder = FlutterSoundRecorder();
 
     ref.onDispose(() async {
       await _stopRecorder();
       await _teardownSocket();
       await _player.dispose();
+      keepAlive.close();
     });
 
     return const VoiceChatState();
@@ -275,6 +279,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   /// Stop recording and tell backend the input is finished.
   Future<void> stopRecordingAndSend() async {
     try {
+      if (!ref.mounted) return;
       if (!state.isRecording) {
         _log.w('Cannot stop recording: not recording');
         return;
@@ -283,6 +288,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       await _stopRecorder();
       _commitInput();
       await _createResponseFromAudio();
+      if (!ref.mounted) return;
       state = state.copyWith(
         isRecording: false,
         isProcessing: true,
@@ -292,6 +298,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       );
     } catch (e, st) {
       _log.e('Failed to stop recording', error: e, stackTrace: st);
+      if (!ref.mounted) return;
       state = state.copyWith(
         isRecording: false,
         isProcessing: false,
@@ -327,9 +334,15 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (recordedBytes.isEmpty) return;
     final encoded = base64Encode(recordedBytes);
     try {
+      _log.i(
+        'Sending response.create with ${recordedBytes.length} bytes of audio',
+      );
       _client.send({
         'type': 'response.create',
         'response': {
+          'modalities': ['text', 'audio'],
+          'output_audio_format': _outputAudioFormat,
+          'voice': _outputVoice,
           'input': [
             {
               'type': 'message',
@@ -367,16 +380,28 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       case 'response.created':
         state = state.copyWith(isProcessing: true, isConnecting: false);
         break;
+      case 'response.audio':
       case 'response.audio.delta':
-        final audio = payload['audio'] as String?;
+      case 'response.output_audio':
+      case 'response.output_audio.delta':
+      case 'output_audio.delta': // backward compatibility
+        final audio = _firstString([payload['audio'], payload['delta']]);
         if (audio != null && audio.isNotEmpty) {
+          _log.t('Voice audio payload length=${audio.length}');
           unawaited(_handleAudioDelta(audio));
+        } else {
+          _log.w('Audio event without audio field: $payload');
+        }
+        final extras = _extractAudioStrings(payload);
+        for (final extra in extras) {
+          unawaited(_handleAudioDelta(extra));
         }
         break;
-      case 'output_audio.delta': // backward compatibility
-        final audio = payload['audio'] as String?;
-        if (audio != null && audio.isNotEmpty) {
-          unawaited(_handleAudioDelta(audio));
+      case 'response.output_item.done':
+      case 'response.content_part.done':
+        final extras = _extractAudioStrings(payload);
+        for (final extra in extras) {
+          unawaited(_handleAudioDelta(extra));
         }
         break;
       case 'response.audio_transcript.delta':
@@ -435,6 +460,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         );
         break;
       default:
+        final extras = _extractAudioStrings(payload);
+        if (extras.isNotEmpty) {
+          for (final extra in extras) {
+            unawaited(_handleAudioDelta(extra));
+          }
+        }
         break;
     }
   }
@@ -445,6 +476,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       final normalized = base64.normalize(base64Audio);
       final bytes = base64Decode(normalized);
       if (bytes.isEmpty) return;
+      _log.t('Decoded audio delta ${bytes.length} bytes');
 
       await _player.addChunk(
         bytes,
@@ -474,6 +506,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (!ref.mounted) return;
     try {
       if (bytes.isEmpty) return;
+      _log.t('Received binary audio ${bytes.length} bytes');
       await _player.addChunk(
         bytes,
         sampleRate: _sampleRate,
@@ -499,12 +532,55 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void _handlePlaybackComplete() {
+    unawaited(_player.stop());
+    if (!ref.mounted) return;
     state = state.copyWith(
       isPlaying: false,
       isProcessing: false,
       currentExpression: RobotExpression.neutral,
       clearFace: true,
     );
+  }
+
+  List<String> _extractAudioStrings(Map<String, dynamic> payload) {
+    final results = <String>[];
+    void take(dynamic value) {
+      if (value is String && value.isNotEmpty) {
+        results.add(value);
+      }
+    }
+
+    take(payload['audio']);
+    final output = payload['output'];
+    if (output is List) {
+      for (final item in output) {
+        if (item is Map<String, dynamic>) {
+          take(item['audio']);
+          final content = item['content'];
+          if (content is List) {
+            for (final part in content) {
+              if (part is Map<String, dynamic>) take(part['audio']);
+            }
+          }
+        }
+      }
+    }
+    final content = payload['content'];
+    if (content is List) {
+      for (final part in content) {
+        if (part is Map<String, dynamic>) take(part['audio']);
+      }
+    }
+    return results;
+  }
+
+  String? _firstString(Iterable<dynamic> values) {
+    for (final value in values) {
+      if (value == null) continue;
+      final text = value.toString();
+      if (text.isNotEmpty) return text;
+    }
+    return null;
   }
 
   /// Send a text prompt over the realtime socket using response.create.
@@ -531,6 +607,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _client.send({
         'type': 'response.create',
         'response': {
+          'modalities': ['text', 'audio'],
+          'output_audio_format': _outputAudioFormat,
+          'voice': _outputVoice,
           'input': [
             {
               'type': 'message',
