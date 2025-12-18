@@ -65,6 +65,7 @@ class ChatController extends Notifier<ChatState> {
   Timer? _retryTicker;
   Timer? _faceThrottleTimer;
   Timer? _faceIdleTimer;
+  bool _manualClose = false;
   int _retryAttempt = 0;
   FaceState? _pendingFace;
   DateTime? _lastFaceAt;
@@ -83,6 +84,9 @@ class ChatController extends Notifier<ChatState> {
   }
 
   Future<void> _dispose() async {
+    if (_channel != null) {
+      _manualClose = true;
+    }
     await _subscription?.cancel();
     _subscription = null;
     try {
@@ -96,6 +100,7 @@ class ChatController extends Notifier<ChatState> {
   }
 
   Future<void> _connect() async {
+    _manualClose = false;
     _retryTimer?.cancel();
     _retryTicker?.cancel();
     await _subscription?.cancel();
@@ -343,6 +348,10 @@ class ChatController extends Notifier<ChatState> {
 
   void _handleDone() {
     _log.w('Chat socket stream done');
+    if (_manualClose) {
+      _manualClose = false;
+      return;
+    }
     _scheduleReconnect('socket_closed');
   }
 
@@ -493,6 +502,9 @@ class ChatController extends Notifier<ChatState> {
   }
 
   void pause() {
+    if (_channel != null) {
+      _manualClose = true;
+    }
     _retryTimer?.cancel();
     _retryTicker?.cancel();
     _faceThrottleTimer?.cancel();

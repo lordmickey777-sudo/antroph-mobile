@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:antroph_mobile/core/navigation/app_route_observer.dart';
 
 import 'package:antroph_mobile/features/home/models/chat_models.dart';
 import 'package:antroph_mobile/features/home/providers/chat_provider.dart';
@@ -28,7 +29,9 @@ class ChatPage extends ConsumerStatefulWidget {
 }
 
 class _ChatPageState extends ConsumerState<ChatPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
+  ModalRoute<void>? _modalRoute;
+
   @override
   void initState() {
     super.initState();
@@ -36,7 +39,23 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null && route != _modalRoute) {
+      if (_modalRoute != null) {
+        appRouteObserver.unsubscribe(this);
+      }
+      _modalRoute = route;
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
   void dispose() {
+    if (_modalRoute != null) {
+      appRouteObserver.unsubscribe(this);
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -50,6 +69,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
     } else if (state == AppLifecycleState.resumed) {
       controller.resume();
     }
+  }
+
+  @override
+  void didPushNext() {
+    ref.read(chatControllerProvider.notifier).pause();
+  }
+
+  @override
+  void didPopNext() {
+    ref.read(chatControllerProvider.notifier).resume();
   }
 
   @override
@@ -824,15 +853,19 @@ class _VoiceStatusBar extends StatelessWidget {
           ],
           if (hasHeadline) ...[
             const SizedBox(height: 10),
-            Text(
-              headline,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                height: 1.35,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 180),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Text(
+                  headline,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
               ),
             ),
           ],

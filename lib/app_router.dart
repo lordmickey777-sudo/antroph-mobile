@@ -1,18 +1,19 @@
-import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import 'features/home/presentation/home_page.dart';
-import 'features/splash/presentation/splash_page.dart';
-import 'features/onboarding/presentation/onboarding_page.dart';
-import 'features/auth/pages/login_page.dart';
+import 'core/navigation/app_route_observer.dart';
 import 'features/auth/pages/forgot_password_page.dart';
+import 'features/auth/pages/login_page.dart';
 import 'features/auth/pages/signup_page.dart';
+import 'features/home/presentation/home_page.dart';
+import 'features/onboarding/presentation/onboarding_page.dart';
 import 'features/profile/presentation/customization_page.dart';
-import 'features/profile/presentation/subscription_page.dart';
-import 'features/profile/presentation/scan_page.dart';
-import 'features/profile/presentation/robot_pairing_page.dart';
-import 'features/support/presentation/support_page.dart';
 import 'features/profile/presentation/edit_profile_page.dart';
+import 'features/profile/presentation/robot_pairing_page.dart';
+import 'features/profile/presentation/scan_page.dart';
+import 'features/profile/presentation/subscription_page.dart';
+import 'features/support/presentation/support_page.dart';
+import 'features/splash/presentation/splash_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -68,5 +69,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
     ],
+    observers: [appRouteObserver],
   );
 });
