@@ -14,7 +14,7 @@ class FaceCanvas extends StatefulWidget {
     required this.bitmap,
     this.timestampMs,
     this.size = 180,
-    this.faceColor = AntrophFace.skinTone,
+    this.faceColor = AntrophFace.featureColor,
     this.backgroundColor = const Color(0xFF0D0F10),
     this.showFrame = true,
   });
@@ -64,8 +64,7 @@ class _FaceCanvasState extends State<FaceCanvas> {
       return;
     }
 
-    final sameContent =
-        _lastBitmap == bitmap || (_lastTs != null && _lastTs == ts);
+    final sameContent = _lastBitmap == bitmap || (_lastTs != null && _lastTs == ts);
     if (sameContent && _image != null) return;
 
     _lastBitmap = bitmap;
@@ -89,20 +88,14 @@ class _FaceCanvasState extends State<FaceCanvas> {
       }
     }
 
-    ui.decodeImageFromPixels(
-      rgba,
-      _gridSize,
-      _gridSize,
-      ui.PixelFormat.rgba8888,
-      (image) {
-        if (!mounted) {
-          image.dispose();
-          return;
-        }
-        _image?.dispose();
-        setState(() => _image = image);
-      },
-    );
+    ui.decodeImageFromPixels(rgba, _gridSize, _gridSize, ui.PixelFormat.rgba8888, (image) {
+      if (!mounted) {
+        image.dispose();
+        return;
+      }
+      _image?.dispose();
+      setState(() => _image = image);
+    });
   }
 
   @override
@@ -110,20 +103,7 @@ class _FaceCanvasState extends State<FaceCanvas> {
     return Container(
       width: widget.size,
       height: widget.size,
-      decoration: widget.showFrame
-          ? BoxDecoration(
-              color: widget.backgroundColor,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 20,
-                  spreadRadius: 4,
-                ),
-              ],
-            )
-          : null,
+      decoration: widget.showFrame ? BoxDecoration(color: widget.backgroundColor) : null,
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 150),
         child: _image != null
@@ -147,11 +127,7 @@ class _FacePlaceholder extends StatelessWidget {
     return Center(
       child: Opacity(
         opacity: 0.5,
-        child: Icon(
-          Icons.face_retouching_natural,
-          color: Colors.white,
-          size: 48,
-        ),
+        child: Icon(Icons.face_retouching_natural, color: Colors.white, size: 48),
       ),
     );
   }

@@ -243,8 +243,8 @@ class _Header extends StatelessWidget {
                       bitmap: voiceFace,
                       timestampMs: voiceState.faceTimestampMs,
                       size: faceSize,
-                      // faceColor: AntrophFace.skinTone,
-                      // backgroundColor: _assistantBubble,
+                      faceColor: Colors.transparent,
+                      backgroundColor: Colors.transparent,
                       showFrame: false,
                     )
                   : RepaintBoundary(
@@ -257,7 +257,7 @@ class _Header extends StatelessWidget {
                           height: faceSize,
                           child: AntrophFace(
                             faceDNA: state.face.toArray(),
-                            backgroundColor: _assistantBubble,
+                            backgroundColor: Colors.transparent,
                           ),
                         ),
                       ),

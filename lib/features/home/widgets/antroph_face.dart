@@ -10,22 +10,19 @@ class AntrophFace extends StatefulWidget {
   const AntrophFace({
     super.key,
     this.faceDNA = FaceState.neutralDna,
-    this.color = AntrophFace.skinTone,
-    this.backgroundColor = const Color(0xFF0D0F10),
+    this.backgroundColor = Colors.transparent,
   });
 
-  static const Color skinTone = Color(0xFFEBC49D);
+  static const Color featureColor = Colors.white;
 
   final List<int> faceDNA; // The [7] array from backend
-  final Color color;
   final Color backgroundColor;
 
   @override
   State<AntrophFace> createState() => _AntrophFaceState();
 }
 
-class _AntrophFaceState extends State<AntrophFace>
-    with TickerProviderStateMixin {
+class _AntrophFaceState extends State<AntrophFace> with TickerProviderStateMixin {
   late FaceState _current;
   late FaceState _target;
   late final AnimationController _morphController;
@@ -50,19 +47,14 @@ class _AntrophFaceState extends State<AntrophFace>
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
-    _morphAnimation = CurvedAnimation(
-      parent: _morphController,
-      curve: Curves.easeOut,
-    );
+    _morphAnimation = CurvedAnimation(parent: _morphController, curve: Curves.easeOut);
 
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 3200),
     );
-    _pulseAnimation = CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOutSine,
-    )..addListener(() => setState(() {}));
+    _pulseAnimation = CurvedAnimation(parent: _pulseController, curve: Curves.easeInOutSine)
+      ..addListener(() => setState(() {}));
 
     _pulseController.repeat(reverse: true);
     _morphController.addListener(() => setState(() {}));
@@ -90,10 +82,7 @@ class _AntrophFaceState extends State<AntrophFace>
     _saccadeTimer = Timer.periodic(const Duration(milliseconds: 2000), (timer) {
       if (_rand.nextDouble() > 0.7) {
         setState(() {
-          _gazeOffset = Offset(
-            (_rand.nextDouble() - 0.5) * 20,
-            (_rand.nextDouble() - 0.5) * 10,
-          );
+          _gazeOffset = Offset((_rand.nextDouble() - 0.5) * 20, (_rand.nextDouble() - 0.5) * 10);
         });
       } else {
         setState(() {
@@ -140,7 +129,6 @@ class _AntrophFaceState extends State<AntrophFace>
           child: CustomPaint(
             painter: FacePainter(
               state: state,
-              color: widget.color,
               backgroundColor: widget.backgroundColor,
               blinkOpenAmount: _blinkOpenAmount,
               gazeOffset: _gazeOffset,
@@ -156,7 +144,6 @@ class _AntrophFaceState extends State<AntrophFace>
 class FacePainter extends CustomPainter {
   FacePainter({
     required this.state,
-    required this.color,
     required this.backgroundColor,
     required this.blinkOpenAmount,
     required this.gazeOffset,
@@ -164,7 +151,6 @@ class FacePainter extends CustomPainter {
   });
 
   final FaceState state;
-  final Color color;
   final Color backgroundColor;
   final double blinkOpenAmount;
   final Offset gazeOffset;
@@ -174,8 +160,9 @@ class FacePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
     final scale = min(size.width, size.height) / 140.0;
+    final faceColor = AntrophFace.featureColor;
 
-    _drawBackdrop(canvas, rect, scale);
+    _drawBackdrop(canvas, rect);
 
     final cx = size.width / 2;
     final cy = size.height / 2;
@@ -183,10 +170,7 @@ class FacePainter extends CustomPainter {
     final eyeYOffset = -12.0 * scale;
     const gazeDampening = 0.42;
 
-    final currentEyeHeight = max(
-      2.4 * scale,
-      state.eyeHeight * blinkOpenAmount * scale,
-    );
+    final currentEyeHeight = max(2.4 * scale, state.eyeHeight * blinkOpenAmount * scale);
     final leftEyeCenter = Offset(
       cx - eyeSpacing + gazeOffset.dx * gazeDampening,
       cy + eyeYOffset + gazeOffset.dy * gazeDampening,
@@ -205,6 +189,7 @@ class FacePainter extends CustomPainter {
       isAngry: state.eyeAngle == 1,
       isLeft: true,
       scale: scale,
+      color: faceColor,
     );
 
     _drawEye(
@@ -216,6 +201,7 @@ class FacePainter extends CustomPainter {
       isAngry: state.eyeAngle == 1,
       isLeft: false,
       scale: scale,
+      color: faceColor,
     );
 
     final mouthCenter = Offset(cx, cy + 28.0 * scale + pulse * 2.2 * scale);
@@ -227,64 +213,14 @@ class FacePainter extends CustomPainter {
       height: state.mouthHeight * scale,
       mouthType: state.mouthType,
       scale: scale,
+      color: faceColor,
     );
 
-    _drawCheeks(canvas, leftEyeCenter, rightEyeCenter, mouthCenter, scale);
+    _drawCheeks(canvas, leftEyeCenter, rightEyeCenter, mouthCenter, scale, faceColor);
   }
 
-  void _drawBackdrop(Canvas canvas, Rect rect, double scale) {
+  void _drawBackdrop(Canvas canvas, Rect rect) {
     canvas.drawRect(rect, Paint()..color = backgroundColor);
-
-    final halo = RadialGradient(
-      center: const Alignment(0, -0.35),
-      radius: 1.25,
-      colors: [color.withOpacity(0.22 + pulse * 0.12), backgroundColor],
-    );
-    canvas.drawRect(rect, Paint()..shader = halo.createShader(rect));
-
-    final frame = RRect.fromRectAndRadius(
-      rect.deflate(2.5 * scale),
-      Radius.circular(18 * scale),
-    );
-    final framePaint = Paint()
-      ..color = color.withOpacity(0.18 + pulse * 0.08)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.4 * scale
-      ..maskFilter = MaskFilter.blur(BlurStyle.outer, 10 * scale);
-    canvas.drawRRect(frame, framePaint);
-
-    final gloss = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Colors.white.withOpacity(0.06 + pulse * 0.02),
-          Colors.white.withOpacity(0),
-        ],
-        stops: const [0, 0.75],
-      ).createShader(rect);
-    canvas.drawRect(rect, gloss);
-
-    final bandHeight = 12 * scale;
-    final bandRect = Rect.fromLTWH(rect.left, rect.top, rect.width, bandHeight);
-    final bandPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Colors.white.withOpacity(0.14 + pulse * 0.08),
-          Colors.white.withOpacity(0),
-        ],
-      ).createShader(bandRect);
-    canvas.drawRect(bandRect, bandPaint);
-
-    final bottomGlow = Paint()
-      ..shader = RadialGradient(
-        center: const Alignment(0, 0.9),
-        radius: 0.8,
-        colors: [color.withOpacity(0.12 + pulse * 0.1), Colors.transparent],
-      ).createShader(rect);
-    canvas.drawRect(rect, bottomGlow);
   }
 
   void _drawEye({
@@ -296,14 +232,11 @@ class FacePainter extends CustomPainter {
     required bool isAngry,
     required bool isLeft,
     required double scale,
+    required Color color,
   }) {
     final clampedHeight = max(height, 2.4 * scale);
     final corner = Radius.circular(max(radius, 4.0 * scale));
-    final eyeRect = Rect.fromCenter(
-      center: center,
-      width: width,
-      height: clampedHeight,
-    );
+    final eyeRect = Rect.fromCenter(center: center, width: width, height: clampedHeight);
     final eyeShape = RRect.fromRectAndRadius(eyeRect, corner);
 
     final glowPaint = Paint()
@@ -322,16 +255,9 @@ class FacePainter extends CustomPainter {
     canvas.drawRRect(eyeShape, eyePaint);
 
     final lidHeight = clampedHeight * (isAngry ? 0.75 : 1.0);
-    final lidRect = Rect.fromCenter(
-      center: center,
-      width: width,
-      height: lidHeight,
-    );
+    final lidRect = Rect.fromCenter(center: center, width: width, height: lidHeight);
     final lidShape = RRect.fromRectAndRadius(lidRect, corner);
-    canvas.drawRRect(
-      lidShape,
-      Paint()..color = backgroundColor.withOpacity(isAngry ? 0.2 : 0.12),
-    );
+    canvas.drawRRect(lidShape, Paint()..color = backgroundColor.withOpacity(isAngry ? 0.2 : 0.12));
 
     final pupilHeight = max(clampedHeight * 0.55, 4.5 * scale);
     final pupilWidth = width * 0.35;
@@ -340,18 +266,12 @@ class FacePainter extends CustomPainter {
       width: pupilWidth,
       height: pupilHeight,
     );
-    final pupilShape = RRect.fromRectAndRadius(
-      pupilRect,
-      Radius.circular(corner.x * 0.7),
-    );
+    final pupilShape = RRect.fromRectAndRadius(pupilRect, Radius.circular(corner.x * 0.7));
     final pupilGlowPaint = Paint()
       ..color = color.withOpacity(0.18 + pulse * 0.1)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 6 * scale);
     canvas.drawRRect(pupilShape.inflate(3 * scale), pupilGlowPaint);
-    canvas.drawRRect(
-      pupilShape,
-      Paint()..color = backgroundColor.withOpacity(0.25),
-    );
+    canvas.drawRRect(pupilShape, Paint()..color = backgroundColor.withOpacity(0.25));
     canvas.drawRRect(
       pupilShape.inflate(1.4 * scale),
       Paint()
@@ -361,10 +281,7 @@ class FacePainter extends CustomPainter {
     );
 
     canvas.drawCircle(
-      Offset(
-        pupilRect.left + pupilRect.width * 0.35,
-        pupilRect.top + pupilRect.height * 0.32,
-      ),
+      Offset(pupilRect.left + pupilRect.width * 0.35, pupilRect.top + pupilRect.height * 0.32),
       1.6 * scale,
       Paint()..color = Colors.white.withOpacity(0.82),
     );
@@ -375,10 +292,7 @@ class FacePainter extends CustomPainter {
       ..strokeWidth = 3 * scale
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(
-      Offset(
-        center.dx - width * 0.55,
-        center.dy - clampedHeight * (isAngry ? 0.9 : 1.05),
-      ),
+      Offset(center.dx - width * 0.55, center.dy - clampedHeight * (isAngry ? 0.9 : 1.05)),
       Offset(
         center.dx + width * 0.55,
         center.dy - clampedHeight * (isAngry ? 0.9 : 1.05) + browTilt,
@@ -394,6 +308,7 @@ class FacePainter extends CustomPainter {
     required double height,
     required int mouthType,
     required double scale,
+    required Color color,
   }) {
     final isSmile = height >= 0;
     final mouthHeight = max(height.abs(), 4.0 * scale);
@@ -423,17 +338,11 @@ class FacePainter extends CustomPainter {
       );
     } else {
       final mouthRect = Rect.fromCenter(
-        center: Offset(
-          center.dx,
-          center.dy + (isSmile ? -mouthHeight * 0.1 : mouthHeight * 0.05),
-        ),
+        center: Offset(center.dx, center.dy + (isSmile ? -mouthHeight * 0.1 : mouthHeight * 0.05)),
         width: width,
         height: mouthHeight * (isSmile ? 1.0 : 0.85),
       );
-      final shape = RRect.fromRectAndRadius(
-        mouthRect,
-        Radius.circular(6 * scale),
-      );
+      final shape = RRect.fromRectAndRadius(mouthRect, Radius.circular(6 * scale));
       canvas.drawRRect(shape.inflate(1.4 * scale), glowPaint);
       canvas.drawRRect(
         shape,
@@ -464,6 +373,7 @@ class FacePainter extends CustomPainter {
     Offset rightEye,
     Offset mouthCenter,
     double scale,
+    Color color,
   ) {
     final cheekPaint = Paint()
       ..color = color.withOpacity(0.12 + pulse * 0.1)
@@ -482,7 +392,6 @@ class FacePainter extends CustomPainter {
         oldDelegate.state.mouthType != state.mouthType ||
         oldDelegate.state.mouthWidth != state.mouthWidth ||
         oldDelegate.state.mouthHeight != state.mouthHeight ||
-        oldDelegate.color != color ||
         oldDelegate.backgroundColor != backgroundColor ||
         oldDelegate.blinkOpenAmount != blinkOpenAmount ||
         oldDelegate.gazeOffset != gazeOffset ||
