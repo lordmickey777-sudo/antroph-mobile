@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:typed_data' show BytesBuilder;
 
@@ -100,6 +101,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   StreamSubscription<RealtimeIncomingMessage>? _socketSub;
   StreamController<Uint8List>? _micStreamController;
   StreamSubscription<Uint8List>? _micStreamSubscription;
+  StreamController<double>? _micLevelController;
   final StringBuffer _aiTextBuffer = StringBuffer();
   BytesBuilder _audioBuffer = BytesBuilder(copy: false);
   Completer<bool>? _permissionDialogCompleter;
@@ -122,15 +124,21 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         _player = player ?? createAudioChunkPlayer(),
         _voiceUriOverride = voiceUriOverride;
 
+  Stream<double> get micLevelStream =>
+      _micLevelController?.stream ?? Stream<double>.empty();
+
   @override
   VoiceChatState build() {
     _recorder = FlutterSoundRecorder();
+    _micLevelController ??= StreamController<double>.broadcast();
 
     ref.onDispose(() async {
       _disableAudio();
       await _stopRecorder();
       await _teardownSocket();
       await _player.dispose();
+      await _micLevelController?.close();
+      _micLevelController = null;
     });
 
     return const VoiceChatState();
@@ -268,7 +276,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void _handleMicChunk(Uint8List bytes) {
-    if (bytes.isEmpty || !_socketOpen) return;
+    if (bytes.isEmpty) return;
+    _emitMicLevel(bytes);
+    if (!_socketOpen) return;
     _audioBuffer.add(bytes);
     final encoded = base64Encode(bytes);
     _client.send({
@@ -321,6 +331,34 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _micStreamSubscription = null;
     await _micStreamController?.close();
     _micStreamController = null;
+    _emitMicLevelValue(0.0);
+  }
+
+  void _emitMicLevel(Uint8List bytes) {
+    final controller = _micLevelController;
+    if (controller == null || controller.isClosed) return;
+    controller.add(_computeRms(bytes));
+  }
+
+  void _emitMicLevelValue(double value) {
+    final controller = _micLevelController;
+    if (controller == null || controller.isClosed) return;
+    controller.add(value);
+  }
+
+  double _computeRms(Uint8List buffer) {
+    final sampleCount = buffer.lengthInBytes ~/ 2;
+    if (sampleCount == 0) return 0.0;
+    final samples = buffer.buffer.asInt16List(
+      buffer.offsetInBytes,
+      sampleCount,
+    );
+    double sumSquares = 0.0;
+    for (final sample in samples) {
+      final normalized = sample / 32768.0;
+      sumSquares += normalized * normalized;
+    }
+    return math.sqrt(sumSquares / samples.length);
   }
 
   void _commitInput() {

@@ -7,10 +7,9 @@ import 'package:antroph_mobile/core/navigation/app_route_observer.dart';
 import 'package:antroph_mobile/features/home/models/chat_models.dart';
 import 'package:antroph_mobile/features/home/providers/chat_provider.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
-import 'package:antroph_mobile/features/home/widgets/antroph_face.dart';
-import 'package:antroph_mobile/features/home/widgets/face_canvas.dart';
 import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
+import 'package:antroph_mobile/widgets/voice_activity_face.dart';
 
 const _chatBg = Color(0xFF0B1118);
 const _surface = Color(0xFF111822);
@@ -231,8 +230,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 4,
               ),
               child: _Header(
-                state: state,
                 voiceState: voiceState,
+                micLevelStream: voiceController.micLevelStream,
                 onReconnect: controller.forceReconnect,
                 onStartVoice: voiceController.startRecording,
                 onStopVoice: voiceController.stopRecordingAndSend,
@@ -317,8 +316,8 @@ String _chatHeadline(ChatState chat, VoiceChatState voice) {
 
 class _Header extends StatelessWidget {
   const _Header({
-    required this.state,
     required this.voiceState,
+    required this.micLevelStream,
     required this.onReconnect,
     required this.onStartVoice,
     required this.onStopVoice,
@@ -326,8 +325,8 @@ class _Header extends StatelessWidget {
     required this.faceSize,
   });
 
-  final ChatState state;
   final VoiceChatState voiceState;
+  final Stream<double> micLevelStream;
   final VoidCallback onReconnect;
   final VoidCallback onStartVoice;
   final VoidCallback onStopVoice;
@@ -336,7 +335,6 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final voiceFace = voiceState.currentFaceBitmap;
     final status = _voiceStatus(voiceState);
 
     return Padding(
@@ -347,33 +345,17 @@ class _Header extends StatelessWidget {
         decoration: const BoxDecoration(),
         child: Column(
           children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 240),
-              child: voiceFace != null && voiceFace.isNotEmpty
-                  ? FaceCanvas(
-                      key: const ValueKey('voice-face'),
-                      bitmap: voiceFace,
-                      timestampMs: voiceState.faceTimestampMs,
-                      size: faceSize,
-                      faceColor: Colors.transparent,
-                      backgroundColor: Colors.transparent,
-                      showFrame: false,
-                    )
-                  : RepaintBoundary(
-                      key: const ValueKey('chat-face'),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-
-                        child: SizedBox(
-                          width: faceSize,
-                          height: faceSize,
-                          child: AntrophFace(
-                            faceDNA: state.face.toArray(),
-                            backgroundColor: Colors.transparent,
-                          ),
-                        ),
-                      ),
-                    ),
+            RepaintBoundary(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                child: SizedBox(
+                  width: faceSize,
+                  height: faceSize,
+                  child: VoiceActivityFace(
+                    levelStream: micLevelStream,
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 14),
             Row(
