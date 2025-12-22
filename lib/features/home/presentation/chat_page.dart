@@ -353,6 +353,7 @@ class _Header extends StatelessWidget {
                   height: faceSize,
                   child: VoiceActivityFace(
                     levelStream: micLevelStream,
+                    threshold: 0.008,
                   ),
                 ),
               ),
