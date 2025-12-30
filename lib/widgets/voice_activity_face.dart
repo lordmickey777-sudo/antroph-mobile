@@ -10,7 +10,7 @@ class VoiceActivityFace extends StatefulWidget {
   const VoiceActivityFace({
     super.key,
     this.assetPath = 'assets/antroph_face.riv',
-    this.stateMachineName = 'State Machine 1',
+    this.stateMachineName = 'FaceSm',
     this.threshold = 0.02,
     this.silenceDelay = const Duration(milliseconds: 300),
     required this.levelStream,

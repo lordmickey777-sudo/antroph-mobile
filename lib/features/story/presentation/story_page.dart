@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
-import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 import 'package:antroph_mobile/features/story/models/story_models.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
@@ -54,7 +54,10 @@ class StoryPage extends ConsumerWidget {
                         ),
                       ),
                       for (final section in sections)
-                        _SectionSliver(section: section, onTap: (card) => _openStory(context, card)),
+                        _SectionSliver(
+                          section: section,
+                          onTap: (card) => _openStory(context, card),
+                        ),
                       const SliverToBoxAdapter(child: SizedBox(height: 120)),
                     ],
                   ),
@@ -103,7 +106,7 @@ class _SectionSliver extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: ListView.separated(
-                padding: const EdgeInsets.only(right: 20),
+                padding: const EdgeInsets.only(right: 10),
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 itemBuilder: (context, index) {
@@ -134,8 +137,14 @@ class _SideLabel extends StatelessWidget {
         child: Align(
           alignment: Alignment.center,
           child: Padding(
-            padding: const EdgeInsets.only(left: 40.0),
-            child: TypographyText(text, variant: TypographyVariant.body1, color: Colors.white),
+            padding: const EdgeInsets.only(left: 100.0),
+            child: TypographyText(
+              text,
+              variant: TypographyVariant.body1,
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       ),
@@ -163,111 +172,100 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
     return GestureDetector(
       onTap: widget.onTap,
       child: SizedBox(
-        width: 220,
+        width: 125,
         child: Column(
           children: [
             // Card visual
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF1B1E20),
-                borderRadius: BorderRadius.circular(20),
+            ClipRRect(
+              clipBehavior: Clip.antiAlias,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(cardRadius),
+                topRight: Radius.circular(cardRadius),
+                bottomLeft: Radius.circular(cardRadius),
+                bottomRight: Radius.circular(cardRadius),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              child: AspectRatio(
+                aspectRatio: 0.8,
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(cardRadius),
-                        topRight: Radius.circular(cardRadius),
-                      ),
-                      child: AspectRatio(aspectRatio: 1.2, child: _StoryImage(image: item.image)),
-                    ),
-                    const SizedBox(height: 10),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          TypographyText(
-                            item.title,
-                            variant: TypographyVariant.body1,
+                    Positioned.fill(child: _StoryImage(image: item.image)),
+                    Positioned(
+                      right: 6,
+                      bottom: 6,
+                      child: GestureDetector(
+                        onTap: _isAdding
+                            ? null
+                            : () {
+                                HapticFeedback.lightImpact();
+                                _handleAddToPlaylist();
+                              },
+                        child: DecoratedBox(
+                          decoration: const BoxDecoration(
                             color: Colors.white,
+                            shape: BoxShape.circle,
                           ),
-                          // const SizedBox(height: 4),
-                          // TypographyText(
-                          //   item.subtitle,
-                          //   maxLines: 1,
-                          //   overflow: TextOverflow.ellipsis,
-                          //   variant: TypographyVariant.body2,
-                          //   color: Colors.white70,
-                          // ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(
-                                    CupertinoIcons.person_2,
-                                    size: 14,
-                                    color: Colors.white60,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  TypographyText(
-                                    '${item.users}',
-                                    variant: TypographyVariant.body2,
-                                    color: Colors.white70,
-                                  ),
-                                  const SizedBox(width: 14),
-                                  const Icon(CupertinoIcons.eye, size: 14, color: Colors.white60),
-                                  const SizedBox(width: 6),
-                                  TypographyText(
-                                    '${item.views}',
-                                    variant: TypographyVariant.body2,
-                                    color: Colors.white70,
-                                  ),
-                                ],
-                              ),
-                              AppButton(
-                                onPressed: _isAdding ? null : _handleAddToPlaylist,
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: Colors.black,
-                                  elevation: 0,
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (_isAdding)
-                                      const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CupertinoActivityIndicator(radius: 8),
-                                      )
-                                    else
-                                      const Icon(CupertinoIcons.add, size: 18, color: Colors.black),
-                                    const SizedBox(width: 6),
-                                    TypographyText(
-                                      _isAdding ? 'Adding...' : 'Add',
-                                      variant: TypographyVariant.body2,
-                                      color: Colors.black,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: _isAdding
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CupertinoActivityIndicator(radius: 8),
+                                  )
+                                : const Icon(CupertinoIcons.add, size: 18, color: Colors.black),
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TypographyText(
+                    item.title,
+                    variant: TypographyVariant.body1,
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(CupertinoIcons.person_2, size: 10, color: Colors.white60),
+                          const SizedBox(width: 6),
+                          TypographyText(
+                            '${item.users}',
+                            variant: TypographyVariant.body2,
+                            color: Colors.white70,
+                            fontSize: 10,
+                          ),
+                          const SizedBox(width: 14),
+                          const Icon(CupertinoIcons.eye, size: 10, color: Colors.white60),
+                          const SizedBox(width: 6),
+                          TypographyText(
+                            '${item.views}',
+                            variant: TypographyVariant.body2,
+                            color: Colors.white70,
+                            fontSize: 10,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -308,7 +306,7 @@ class _StoryImage extends StatelessWidget {
     if (_isNetwork) {
       return Image.network(
         image,
-        fit: BoxFit.cover,
+        fit: BoxFit.fitWidth,
         errorBuilder: (context, error, stackTrace) {
           return Image.asset('assets/images/default.png', fit: BoxFit.cover);
         },
@@ -318,7 +316,7 @@ class _StoryImage extends StatelessWidget {
     final assetPath = image.isNotEmpty ? image : 'assets/images/default.png';
     return Image.asset(
       assetPath,
-      fit: BoxFit.cover,
+      fit: BoxFit.fill,
       errorBuilder: (context, error, stackTrace) {
         return Image.asset('assets/images/default.png', fit: BoxFit.cover);
       },

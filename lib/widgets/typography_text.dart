@@ -20,6 +20,7 @@ class TypographyText extends StatelessWidget {
     this.overflow,
     this.fontWeight,
     this.height,
+    this.fontSize,
     this.style,
     this.softWrap,
     this.textScaleFactor,
@@ -35,6 +36,7 @@ class TypographyText extends StatelessWidget {
   final TextOverflow? overflow;
   final FontWeight? fontWeight;
   final double? height;
+  final double? fontSize;
   final TextStyle? style;
   final bool? softWrap;
   final double? textScaleFactor;
@@ -71,6 +73,9 @@ class TypographyText extends StatelessWidget {
     }
     if (height != null) {
       base = base?.copyWith(height: height) ?? TextStyle(height: height);
+    }
+    if (fontSize != null) {
+      base = base?.copyWith(fontSize: fontSize) ?? TextStyle(fontSize: fontSize);
     }
     if (style != null) {
       base = base?.merge(style) ?? style;
