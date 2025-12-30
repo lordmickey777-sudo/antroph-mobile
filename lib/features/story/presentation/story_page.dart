@@ -36,6 +36,13 @@ class StoryPage extends ConsumerWidget {
               data: (data) {
                 final sections = data.sections;
                 if (sections.isEmpty) return const _EmptyView();
+
+                // Pick a random story from all sections for the featured hero card
+                final allStories = sections.expand((s) => s.items).toList();
+                final featuredStory = allStories.isNotEmpty
+                    ? allStories[DateTime.now().millisecondsSinceEpoch % allStories.length]
+                    : null;
+
                 return RefreshIndicator.adaptive(
                   color: Colors.white,
                   backgroundColor: _bg,
@@ -53,6 +60,13 @@ class StoryPage extends ConsumerWidget {
                           ),
                         ),
                       ),
+                      if (featuredStory != null)
+                        SliverToBoxAdapter(
+                          child: _FeaturedStoryCard(
+                            story: featuredStory,
+                            onTap: () => _openStory(context, featuredStory),
+                          ),
+                        ),
                       for (final section in sections)
                         _SectionSliver(
                           section: section,
@@ -84,6 +98,176 @@ class StoryPage extends ConsumerWidget {
         views: card.views,
       ),
     );
+  }
+}
+
+class _FeaturedStoryCard extends ConsumerStatefulWidget {
+  const _FeaturedStoryCard({required this.story, required this.onTap});
+
+  final StoryCardDto story;
+  final VoidCallback onTap;
+
+  @override
+  ConsumerState<_FeaturedStoryCard> createState() => _FeaturedStoryCardState();
+}
+
+class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
+  bool _isAdded = false;
+  bool _isAdding = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: AspectRatio(
+            aspectRatio: 0.68,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Background image
+                _StoryImage(image: widget.story.image),
+                // Modern gradient overlay
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.0),
+                          Colors.black.withOpacity(0.1),
+                          Colors.black.withOpacity(0.6),
+                          Colors.black.withOpacity(0.95),
+                        ],
+                        stops: const [0.0, 0.3, 0.7, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+                // Content at bottom
+                Positioned(
+                  left: 20,
+                  right: 20,
+                  bottom: 24,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TypographyText(
+                        widget.story.title,
+                        variant: TypographyVariant.h2,
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      const SizedBox(height: 10),
+                      if (widget.story.subtitle.isNotEmpty)
+                        TypographyText(
+                          widget.story.subtitle,
+                          variant: TypographyVariant.body1,
+                          color: Colors.white.withOpacity(0.85),
+                          fontSize: 14,
+                          maxLines: 2,
+                        ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Icon(CupertinoIcons.person_2, size: 13, color: Colors.white70),
+                          const SizedBox(width: 6),
+                          TypographyText(
+                            '${widget.story.users}',
+                            variant: TypographyVariant.body2,
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                          const SizedBox(width: 16),
+                          const Icon(CupertinoIcons.eye, size: 13, color: Colors.white70),
+                          const SizedBox(width: 6),
+                          TypographyText(
+                            '${widget.story.views}',
+                            variant: TypographyVariant.body2,
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      GestureDetector(
+                        onTap: _isAdding || _isAdded
+                            ? null
+                            : () {
+                                HapticFeedback.mediumImpact();
+                                _handleAddToPlaylist();
+                              },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: _isAdded ? Colors.white.withOpacity(0.15) : Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: _isAdding
+                              ? const Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CupertinoActivityIndicator(radius: 10),
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      _isAdded ? CupertinoIcons.checkmark_alt : CupertinoIcons.add,
+                                      color: _isAdded ? Colors.white : Colors.black,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TypographyText(
+                                      _isAdded ? 'Added' : 'Add to Playlist',
+                                      variant: TypographyVariant.body1,
+                                      color: _isAdded ? Colors.white : Colors.black,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleAddToPlaylist() async {
+    if (_isAdding || _isAdded) return;
+    setState(() => _isAdding = true);
+    try {
+      await ref
+          .read(storiesRepositoryProvider)
+          .addStoriesToPlaylist(storyIds: [widget.story.storyId]);
+      if (!mounted) return;
+      setState(() {
+        _isAdding = false;
+        _isAdded = true;
+      });
+    } catch (err) {
+      if (!mounted) return;
+      setState(() => _isAdding = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to add story: $err')),
+      );
+    }
   }
 }
 
@@ -165,6 +349,7 @@ class _StoryCard extends ConsumerStatefulWidget {
 
 class _StoryCardState extends ConsumerState<_StoryCard> {
   bool _isAdding = false;
+  bool _isAdded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -191,34 +376,35 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
                   fit: StackFit.expand,
                   children: [
                     Positioned.fill(child: _StoryImage(image: item.image)),
-                    Positioned(
-                      right: 6,
-                      bottom: 6,
-                      child: GestureDetector(
-                        onTap: _isAdding
-                            ? null
-                            : () {
-                                HapticFeedback.lightImpact();
-                                _handleAddToPlaylist();
-                              },
-                        child: DecoratedBox(
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: _isAdding
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CupertinoActivityIndicator(radius: 8),
-                                  )
-                                : const Icon(CupertinoIcons.add, size: 18, color: Colors.black),
+                    if (!_isAdded)
+                      Positioned(
+                        right: 6,
+                        bottom: 6,
+                        child: GestureDetector(
+                          onTap: _isAdding
+                              ? null
+                              : () {
+                                  HapticFeedback.lightImpact();
+                                  _handleAddToPlaylist();
+                                },
+                          child: DecoratedBox(
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: _isAdding
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CupertinoActivityIndicator(radius: 8),
+                                    )
+                                  : const Icon(CupertinoIcons.add, size: 18, color: Colors.black),
+                            ),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -274,25 +460,26 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
   }
 
   Future<void> _handleAddToPlaylist() async {
-    if (_isAdding) return;
+    if (_isAdding || _isAdded) return;
     setState(() => _isAdding = true);
     try {
       await ref
           .read(storiesRepositoryProvider)
           .addStoriesToPlaylist(storyIds: [widget.item.storyId]);
       if (!mounted) return;
+      setState(() {
+        _isAdding = false;
+        _isAdded = true;
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Story added to playlist')));
     } catch (err) {
       if (!mounted) return;
+      setState(() => _isAdding = false);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to add story: $err')));
-    } finally {
-      if (mounted) {
-        setState(() => _isAdding = false);
-      }
     }
   }
 }
