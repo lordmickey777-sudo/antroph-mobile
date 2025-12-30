@@ -172,15 +172,6 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                     ),
                   ],
                 ),
-                if (authState.hasError)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: TypographyText(
-                      'Error: ${authState.error}',
-                      variant: TypographyVariant.body2,
-                      color: Colors.redAccent,
-                    ),
-                  ),
               ],
             ),
           ),

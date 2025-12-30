@@ -92,12 +92,13 @@ class _SectionSliver extends StatelessWidget {
 
   final StorySectionDto section;
   final Future<void> Function(StoryCardDto) onTap;
+  static const double _sectionHeight = 250;
 
   @override
   Widget build(BuildContext context) {
     return SliverToBoxAdapter(
       child: SizedBox(
-        height: 340,
+        height: _sectionHeight,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -306,7 +307,7 @@ class _StoryImage extends StatelessWidget {
     if (_isNetwork) {
       return Image.network(
         image,
-        fit: BoxFit.fitWidth,
+        fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
           return Image.asset('assets/images/default.png', fit: BoxFit.cover);
         },
@@ -316,7 +317,7 @@ class _StoryImage extends StatelessWidget {
     final assetPath = image.isNotEmpty ? image : 'assets/images/default.png';
     return Image.asset(
       assetPath,
-      fit: BoxFit.fill,
+      fit: BoxFit.cover,
       errorBuilder: (context, error, stackTrace) {
         return Image.asset('assets/images/default.png', fit: BoxFit.cover);
       },
