@@ -56,6 +56,7 @@ dependencies:
   permission_handler: ^11.0.1
   web_socket_channel: ^2.4.0
   rive: ^0.13.13
+  smooth_corner: ^1.1.1
 
 dev_dependencies:
   flutter_test:

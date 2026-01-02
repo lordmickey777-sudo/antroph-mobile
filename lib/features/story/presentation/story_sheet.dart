@@ -448,7 +448,7 @@ class _AddToPlaylistButton extends StatelessWidget {
               : const Icon(Icons.playlist_add, size: 18, color: Colors.white),
           const SizedBox(width: 6),
           TypographyText(
-            isLoading ? 'Adding...' : 'Add to playlist',
+            isLoading ? 'Adding...' : 'My List',
             variant: TypographyVariant.body2,
             color: Colors.white,
           ),

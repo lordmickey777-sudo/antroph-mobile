@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
+import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 import 'package:antroph_mobile/features/story/models/story_models.dart';
@@ -10,6 +11,7 @@ import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page_shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
+import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 
 class StoryPage extends ConsumerWidget {
   const StoryPage({super.key});
@@ -118,13 +120,15 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(30, 8, 30, 24),
       child: GestureDetector(
         onTap: widget.onTap,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+        child: SmoothClipRRect(
+          smoothness: 0.6,
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 1),
           child: AspectRatio(
-            aspectRatio: 0.68,
+            aspectRatio: 0.85,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -161,7 +165,7 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
                         widget.story.title,
                         variant: TypographyVariant.h2,
                         color: Colors.white,
-                        fontSize: 28,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
                       const SizedBox(height: 10),
@@ -173,64 +177,44 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
                           fontSize: 14,
                           maxLines: 2,
                         ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Icon(CupertinoIcons.person_2, size: 13, color: Colors.white70),
-                          const SizedBox(width: 6),
-                          TypographyText(
-                            '${widget.story.users}',
-                            variant: TypographyVariant.body2,
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                          const SizedBox(width: 16),
-                          const Icon(CupertinoIcons.eye, size: 13, color: Colors.white70),
-                          const SizedBox(width: 6),
-                          TypographyText(
-                            '${widget.story.views}',
-                            variant: TypographyVariant.body2,
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ],
-                      ),
                       const SizedBox(height: 20),
                       GestureDetector(
-                        onTap: _isAdding || _isAdded
+                        onTap: _isAdding
                             ? null
+                            : _isAdded
+                            ? () {
+                                HapticFeedback.mediumImpact();
+                                _navigateToChat();
+                              }
                             : () {
                                 HapticFeedback.mediumImpact();
                                 _handleAddToPlaylist();
                               },
                         child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
                           decoration: BoxDecoration(
-                            color: _isAdded ? Colors.white.withOpacity(0.15) : Colors.white,
-                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(100),
                           ),
                           child: _isAdding
-                              ? const Center(
-                                  child: SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CupertinoActivityIndicator(radius: 10),
-                                  ),
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CupertinoActivityIndicator(radius: 10),
                                 )
                               : Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      _isAdded ? CupertinoIcons.checkmark_alt : CupertinoIcons.add,
-                                      color: _isAdded ? Colors.white : Colors.black,
+                                      _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
+                                      color: Colors.black,
                                       size: 20,
                                     ),
                                     const SizedBox(width: 8),
                                     TypographyText(
-                                      _isAdded ? 'Added' : 'Add to Playlist',
+                                      _isAdded ? 'Play' : 'My List',
                                       variant: TypographyVariant.body1,
-                                      color: _isAdded ? Colors.white : Colors.black,
+                                      color: Colors.black,
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -264,10 +248,19 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
     } catch (err) {
       if (!mounted) return;
       setState(() => _isAdding = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to add story: $err')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to add story: $err')));
     }
+  }
+
+  void _navigateToChat() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            ChatPage(storyTitle: widget.story.title.isNotEmpty ? widget.story.title : 'Chat'),
+      ),
+    );
   }
 }
 
@@ -276,7 +269,7 @@ class _SectionSliver extends StatelessWidget {
 
   final StorySectionDto section;
   final Future<void> Function(StoryCardDto) onTap;
-  static const double _sectionHeight = 250;
+  static const double _sectionHeight = 220;
 
   @override
   Widget build(BuildContext context) {
@@ -353,7 +346,7 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
 
   @override
   Widget build(BuildContext context) {
-    const cardRadius = 8.0;
+    const cardRadius = 16.0;
     final item = widget.item;
     return GestureDetector(
       onTap: widget.onTap,
@@ -362,49 +355,55 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
         child: Column(
           children: [
             // Card visual
-            ClipRRect(
-              clipBehavior: Clip.antiAlias,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(cardRadius),
-                topRight: Radius.circular(cardRadius),
-                bottomLeft: Radius.circular(cardRadius),
-                bottomRight: Radius.circular(cardRadius),
-              ),
+            SmoothClipRRect(
+              smoothness: 0.6,
+              borderRadius: BorderRadius.circular(cardRadius),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 1),
               child: AspectRatio(
                 aspectRatio: 0.8,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
                     Positioned.fill(child: _StoryImage(image: item.image)),
-                    if (!_isAdded)
-                      Positioned(
-                        right: 6,
-                        bottom: 6,
-                        child: GestureDetector(
-                          onTap: _isAdding
-                              ? null
-                              : () {
-                                  HapticFeedback.lightImpact();
-                                  _handleAddToPlaylist();
-                                },
-                          child: DecoratedBox(
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: _isAdding
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CupertinoActivityIndicator(radius: 8),
-                                    )
-                                  : const Icon(CupertinoIcons.add, size: 18, color: Colors.black),
-                            ),
+                    Positioned(
+                      right: 6,
+                      bottom: 6,
+                      child: GestureDetector(
+                        onTap: _isAdding
+                            ? null
+                            : _isAdded
+                            ? () {
+                                HapticFeedback.lightImpact();
+                                _navigateToChat();
+                              }
+                            : () {
+                                HapticFeedback.lightImpact();
+                                _handleAddToPlaylist();
+                              },
+                        child: DecoratedBox(
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: _isAdding
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CupertinoActivityIndicator(radius: 9),
+                                  )
+                                : _isAdded
+                                ? const Icon(
+                                    CupertinoIcons.play_fill,
+                                    size: 18,
+                                    color: Colors.black,
+                                  )
+                                : const Icon(CupertinoIcons.add, size: 18, color: Colors.black),
                           ),
                         ),
                       ),
+                    ),
                   ],
                 ),
               ),
@@ -422,33 +421,6 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
                     color: Colors.white,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(CupertinoIcons.person_2, size: 10, color: Colors.white60),
-                          const SizedBox(width: 6),
-                          TypographyText(
-                            '${item.users}',
-                            variant: TypographyVariant.body2,
-                            color: Colors.white70,
-                            fontSize: 10,
-                          ),
-                          const SizedBox(width: 14),
-                          const Icon(CupertinoIcons.eye, size: 10, color: Colors.white60),
-                          const SizedBox(width: 6),
-                          TypographyText(
-                            '${item.views}',
-                            variant: TypographyVariant.body2,
-                            color: Colors.white70,
-                            fontSize: 10,
-                          ),
-                        ],
-                      ),
-                    ],
                   ),
                 ],
               ),
@@ -481,6 +453,15 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to add story: $err')));
     }
+  }
+
+  void _navigateToChat() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            ChatPage(storyTitle: widget.item.title.isNotEmpty ? widget.item.title : 'Chat'),
+      ),
+    );
   }
 }
 
