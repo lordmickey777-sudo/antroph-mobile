@@ -1,8 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
-import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
@@ -111,7 +111,6 @@ class CollectionDetailPage extends ConsumerWidget {
                   story: story,
                   onPlay: () => _startStory(context, story),
                   onStartChat: () => _startChatForStory(context, story),
-                  onLeave: () => Navigator.of(context).pop(),
                 ),
               );
             },
@@ -153,51 +152,79 @@ class _CollectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1B1D1F),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: _CollectionImage(url: collection.coverImageUrl),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TypographyText(
-                    collection.name,
-                    variant: TypographyVariant.body1,
-                    color: Colors.white,
-                  ),
-
-                  const SizedBox(height: 4),
-                  SizedBox(
-                    width: double.infinity,
-                    child: AppButton(
-                      onPressed: onStartChat,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                        elevation: 0,
-                      ),
-                      child: const TypographyText(
-                        'Start story',
-                        variant: TypographyVariant.body2,
-                        color: Colors.black,
-                      ),
+      child: SmoothClipRRect(
+        smoothness: 0.6,
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 1),
+        child: AspectRatio(
+          aspectRatio: 1.4,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Background image
+              _CollectionImage(url: collection.coverImageUrl),
+              // Gradient overlay
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.0),
+                        Colors.black.withValues(alpha: 0.1),
+                        Colors.black.withValues(alpha: 0.6),
+                        Colors.black.withValues(alpha: 0.95),
+                      ],
+                      stops: const [0.0, 0.3, 0.7, 1.0],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+              // Content at bottom
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 16,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TypographyText(
+                      collection.name,
+                      variant: TypographyVariant.h3,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: onStartChat,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(100),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(CupertinoIcons.play_fill, color: Colors.black, size: 18),
+                            SizedBox(width: 6),
+                            TypographyText(
+                              'Start story',
+                              variant: TypographyVariant.body1,
+                              color: Colors.black,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -209,124 +236,139 @@ class _CollectionStoryCard extends StatelessWidget {
     required this.story,
     required this.onPlay,
     required this.onStartChat,
-    required this.onLeave,
   });
 
   final PlaylistStoryDto story;
   final VoidCallback onPlay;
   final VoidCallback onStartChat;
-  final VoidCallback onLeave;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B1D1F),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            child: _CollectionImage(url: story.imageUrl),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TypographyText(story.title, variant: TypographyVariant.body1, color: Colors.white),
-                const SizedBox(height: 4),
-                TypographyText(
-                  story.subtitle,
-                  variant: TypographyVariant.body2,
-                  color: Colors.white70,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppButton(
-                        onPressed: onPlay,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          elevation: 0,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(CupertinoIcons.play_fill, size: 18),
-                            SizedBox(width: 6),
-                            TypographyText(
-                              'Play',
-                              variant: TypographyVariant.body2,
-                              color: Colors.black,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: AppButton(
-                        onPressed: onStartChat,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2B2F33),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          side: const BorderSide(color: Colors.white12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(CupertinoIcons.chat_bubble_2_fill, size: 18),
-                            SizedBox(width: 6),
-                            TypographyText(
-                              'Start chat',
-                              variant: TypographyVariant.body2,
-                              color: Colors.white,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: AppButton(
-                    onPressed: onLeave,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF6B7D),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                    ),
-                    child: TypographyText(
-                      'Leave story',
-                      variant: TypographyVariant.body2,
-                      color: Colors.white,
+    return GestureDetector(
+      onTap: onPlay,
+      child: SmoothClipRRect(
+        smoothness: 0.6,
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 1),
+        child: AspectRatio(
+          aspectRatio: 1.4,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Background image
+              _CollectionImage(url: story.imageUrl),
+              // Gradient overlay
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.0),
+                        Colors.black.withValues(alpha: 0.1),
+                        Colors.black.withValues(alpha: 0.6),
+                        Colors.black.withValues(alpha: 0.95),
+                      ],
+                      stops: const [0.0, 0.3, 0.7, 1.0],
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+              // Content at bottom
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 16,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TypographyText(
+                      story.title,
+                      variant: TypographyVariant.h3,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    if (story.subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      TypographyText(
+                        story.subtitle,
+                        variant: TypographyVariant.body2,
+                        color: Colors.white.withValues(alpha: 0.85),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: onPlay,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(100),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(CupertinoIcons.play_fill, color: Colors.black, size: 18),
+                                SizedBox(width: 6),
+                                TypographyText(
+                                  'Play',
+                                  variant: TypographyVariant.body1,
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        GestureDetector(
+                          onTap: onStartChat,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(CupertinoIcons.chat_bubble_2_fill, color: Colors.white, size: 18),
+                                SizedBox(width: 6),
+                                TypographyText(
+                                  'Chat',
+                                  variant: TypographyVariant.body1,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
 class _CollectionImage extends StatelessWidget {
-  const _CollectionImage({required this.url});
+  const _CollectionImage({required this.url, this.height});
 
   final String url;
+  final double? height;
 
   bool get _isNetwork => url.startsWith('http');
 
@@ -336,14 +378,15 @@ class _CollectionImage extends StatelessWidget {
       return Image.network(
         url,
         fit: BoxFit.cover,
-        height: 160,
+        height: height,
+        width: double.infinity,
         errorBuilder: (context, error, stackTrace) {
-          return Image.asset('assets/images/default.png', fit: BoxFit.cover, height: 160);
+          return Image.asset('assets/images/default.png', fit: BoxFit.cover, height: height, width: double.infinity);
         },
       );
     }
     final assetPath = url.isNotEmpty ? url : 'assets/images/default.png';
-    return Image.asset(assetPath, fit: BoxFit.cover, height: 160);
+    return Image.asset(assetPath, fit: BoxFit.cover, height: height, width: double.infinity);
   }
 }
 

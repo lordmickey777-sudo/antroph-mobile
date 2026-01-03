@@ -27,7 +27,7 @@ class StorySheet extends ConsumerStatefulWidget {
   final int? users;
   final int? views;
 
-  static const _panel = Color(0xFF2A2D2F);
+  static const _panel = Color(0xFF121516);
 
   @override
   ConsumerState<StorySheet> createState() => _StorySheetState();
@@ -50,9 +50,11 @@ class _StorySheetState extends ConsumerState<StorySheet> {
     final bottom = MediaQuery.of(context).padding.bottom;
     final sessionState = ref.watch(storySessionProvider);
 
-    return CupertinoPageScaffold(
-      backgroundColor: StorySheet._panel,
-      child: SafeArea(
+    return SizedBox(
+      height: size.height * 0.7,
+      child: CupertinoPageScaffold(
+        backgroundColor: StorySheet._panel,
+        child: SafeArea(
         top: false,
         bottom: false,
         child: Stack(
@@ -114,6 +116,7 @@ class _StorySheetState extends ConsumerState<StorySheet> {
               ),
           ],
         ),
+      ),
       ),
     );
   }

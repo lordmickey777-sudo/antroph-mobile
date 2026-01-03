@@ -52,16 +52,22 @@ class StoryPage extends ConsumerWidget {
                   child: CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                     slivers: [
-                      const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
-                          child: TypographyText(
-                            'Stories',
-                            variant: TypographyVariant.h1,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
+                      // SliverToBoxAdapter(
+                      //   child: Padding(
+                      //     padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                      //     child: Row(
+                      //       children: [
+                      //         Image.asset('assets/images/app_logo.png', width: 38, height: 38),
+                      //         const SizedBox(width: 2),
+                      //         const TypographyText(
+                      //           'Stories',
+                      //           variant: TypographyVariant.h3,
+                      //           color: Colors.white,
+                      //         ),
+                      //       ],
+                      //     ),
+                      //   ),
+                      // ),
                       if (featuredStory != null)
                         SliverToBoxAdapter(
                           child: _FeaturedStoryCard(
@@ -80,6 +86,24 @@ class StoryPage extends ConsumerWidget {
                 );
               },
             ),
+            // Top gradient overlay
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Container(
+                  height: 100,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [_bg, _bg.withValues(alpha: 0.0)],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -89,7 +113,7 @@ class StoryPage extends ConsumerWidget {
   Future<void> _openStory(BuildContext context, StoryCardDto card) async {
     await showCupertinoModalBottomSheet(
       context: context,
-      expand: true,
+      expand: false,
       backgroundColor: Colors.transparent,
       builder: (_) => StorySheet(
         storyId: card.storyId,
