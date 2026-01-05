@@ -466,11 +466,7 @@ class _HeroMicButton extends StatelessWidget {
     final recording = voiceState.isRecording;
     final waiting = voiceState.isProcessing || voiceState.isConnecting;
     final playing = voiceState.isPlaying;
-    final action = recording
-        ? onStop
-        : waiting || playing
-        ? onStopPlayback
-        : onStart;
+    final canRecord = !recording && !waiting && !playing;
     final gradient = LinearGradient(
       colors: recording
           ? [Colors.white, _accent]
@@ -480,7 +476,12 @@ class _HeroMicButton extends StatelessWidget {
     );
 
     return GestureDetector(
-      onTap: action,
+      // Push to speak: press down to start, release to send
+      onTapDown: canRecord ? (_) => onStart() : null,
+      onTapUp: recording ? (_) => onStop() : null,
+      onTapCancel: recording ? onStop : null,
+      // Tap to stop playback when AI is speaking
+      onTap: (waiting || playing) ? onStopPlayback : null,
       child: Container(
         width: 76,
         height: 76,
@@ -504,10 +505,10 @@ class _HeroMicButton extends StatelessWidget {
           ),
           child: Icon(
             recording
-                ? Icons.stop_rounded
+                ? Icons.mic
                 : waiting || playing
-                ? Icons.pause_rounded
-                : Icons.mic_rounded,
+                    ? Icons.stop_rounded
+                    : Icons.mic_rounded,
             color: Colors.white,
             size: 30,
           ),
