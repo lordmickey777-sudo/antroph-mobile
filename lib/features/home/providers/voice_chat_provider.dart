@@ -102,6 +102,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   StreamController<Uint8List>? _micStreamController;
   StreamSubscription<Uint8List>? _micStreamSubscription;
   StreamController<double>? _micLevelController;
+  StreamController<double>? _aiAudioLevelController;
   final StringBuffer _aiTextBuffer = StringBuffer();
   BytesBuilder _audioBuffer = BytesBuilder(copy: false);
   Completer<bool>? _permissionDialogCompleter;
@@ -127,10 +128,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Stream<double> get micLevelStream =>
       _micLevelController?.stream ?? Stream<double>.empty();
 
+  Stream<double> get aiAudioLevelStream =>
+      _aiAudioLevelController?.stream ?? Stream<double>.empty();
+
   @override
   VoiceChatState build() {
     _recorder = FlutterSoundRecorder();
     _micLevelController ??= StreamController<double>.broadcast();
+    _aiAudioLevelController ??= StreamController<double>.broadcast();
 
     ref.onDispose(() async {
       _disableAudio();
@@ -139,6 +144,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       await _player.dispose();
       await _micLevelController?.close();
       _micLevelController = null;
+      await _aiAudioLevelController?.close();
+      _aiAudioLevelController = null;
     });
 
     return const VoiceChatState();
@@ -346,6 +353,18 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     controller.add(value);
   }
 
+  void _emitAiAudioLevel(Uint8List bytes) {
+    final controller = _aiAudioLevelController;
+    if (controller == null || controller.isClosed) return;
+    controller.add(_computeRms(bytes));
+  }
+
+  void _emitAiAudioLevelValue(double value) {
+    final controller = _aiAudioLevelController;
+    if (controller == null || controller.isClosed) return;
+    controller.add(value);
+  }
+
   double _computeRms(Uint8List buffer) {
     final sampleCount = buffer.lengthInBytes ~/ 2;
     if (sampleCount == 0) return 0.0;
@@ -518,6 +537,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       if (bytes.isEmpty) return;
       _log.t('Decoded audio delta ${bytes.length} bytes');
 
+      _emitAiAudioLevel(bytes);
+
       await _player.addChunk(
         bytes,
         sampleRate: _sampleRate,
@@ -531,6 +552,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       );
     } catch (e, st) {
       _log.e('Playback error', error: e, stackTrace: st);
+      _emitAiAudioLevelValue(0.0);
       state = state.copyWith(
         isPlaying: false,
         isProcessing: false,
@@ -548,6 +570,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     try {
       if (bytes.isEmpty) return;
       _log.t('Received binary audio ${bytes.length} bytes');
+
+      _emitAiAudioLevel(bytes);
+
       await _player.addChunk(
         bytes,
         sampleRate: _sampleRate,
@@ -561,6 +586,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       );
     } catch (e, st) {
       _log.e('Playback error', error: e, stackTrace: st);
+      _emitAiAudioLevelValue(0.0);
       state = state.copyWith(
         isPlaying: false,
         isProcessing: false,
@@ -576,6 +602,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     unawaited(_player.stop());
     if (!ref.mounted) return;
     _disableAudio();
+    _emitAiAudioLevelValue(0.0);
     state = state.copyWith(
       isPlaying: false,
       isProcessing: false,
@@ -682,6 +709,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (!ref.mounted) return;
     _log.e('Voice websocket error', error: err, stackTrace: st);
     _disableAudio();
+    _emitAiAudioLevelValue(0.0);
     state = state.copyWith(
       isProcessing: false,
       isConnecting: false,
@@ -701,6 +729,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _socketOpen = false;
     unawaited(_player.stop());
     _disableAudio();
+    _emitAiAudioLevelValue(0.0);
     _socketSub = null;
     state = state.copyWith(
       isConnecting: false,
@@ -714,6 +743,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   /// Cancel current recording and tear down the current session.
   Future<void> cancelRecording() async {
     _disableAudio();
+    _emitAiAudioLevelValue(0.0);
     await _stopRecorder();
     await _player.stop();
     await _teardownSocket();
@@ -736,6 +766,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   /// Stop audio playback
   Future<void> stopPlayback() async {
     _disableAudio();
+    _emitAiAudioLevelValue(0.0);
     await _player.stop();
     await _teardownSocket();
     _resetAudioBuffer();

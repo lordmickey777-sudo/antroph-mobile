@@ -197,7 +197,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         final availableWidth = math.max(0, constraints.maxWidth - horizontalPadding * 2);
         final bubbleMaxWidth = math.min(460.0, availableWidth * 0.95);
         const bottomPadding = 200.0;
-        final showVoicePanel = _VoiceStatusBar.shouldShow(voiceState) || headline.isNotEmpty;
 
         return Column(
           children: [
@@ -205,7 +204,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 4),
               child: _Header(
                 voiceState: voiceState,
-                micLevelStream: voiceController.micLevelStream,
+                aiAudioLevelStream: voiceController.aiAudioLevelStream,
                 onReconnect: controller.forceReconnect,
                 onStartVoice: voiceController.startRecording,
                 onStopVoice: voiceController.stopRecordingAndSend,
@@ -224,36 +223,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
               ),
             ),
-            if (showVoicePanel)
-              Padding(
-                padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 0),
-                child: _VoiceStatusBar(
-                  state: voiceState,
-                  headline: headline,
-                  onStop: () {
-                    if (voiceState.isRecording) {
-                      voiceController.stopRecordingAndSend();
-                    } else {
-                      voiceController.stopPlayback();
-                    }
-                  },
-                  onCancel: () {
-                    voiceController.cancelRecording();
-                    voiceController.clearError();
-                  },
-                ),
-              ),
             SafeArea(
               top: false,
               child: Padding(
                 padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 16),
-                child: Center(
-                  child: _HeroMicButton(
-                    voiceState: voiceState,
-                    onStart: voiceController.startRecording,
-                    onStop: voiceController.stopRecordingAndSend,
-                    onStopPlayback: voiceController.stopPlayback,
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _TranscriptButton(
+                      voiceState: voiceState,
+                      headline: headline,
+                      onStop: () {
+                        if (voiceState.isRecording) {
+                          voiceController.stopRecordingAndSend();
+                        } else {
+                          voiceController.stopPlayback();
+                        }
+                      },
+                      onCancel: () {
+                        voiceController.cancelRecording();
+                        voiceController.clearError();
+                      },
+                    ),
+                    const SizedBox(width: 24),
+                    _HeroMicButton(
+                      voiceState: voiceState,
+                      onStart: voiceController.startRecording,
+                      onStop: voiceController.stopRecordingAndSend,
+                      onStopPlayback: voiceController.stopPlayback,
+                    ),
+                    const SizedBox(width: 24 + 48),
+                  ],
                 ),
               ),
             ),
@@ -281,7 +281,7 @@ String _chatHeadline(ChatState chat, VoiceChatState voice) {
 class _Header extends StatelessWidget {
   const _Header({
     required this.voiceState,
-    required this.micLevelStream,
+    required this.aiAudioLevelStream,
     required this.onReconnect,
     required this.onStartVoice,
     required this.onStopVoice,
@@ -290,7 +290,7 @@ class _Header extends StatelessWidget {
   });
 
   final VoiceChatState voiceState;
-  final Stream<double> micLevelStream;
+  final Stream<double> aiAudioLevelStream;
   final VoidCallback onReconnect;
   final VoidCallback onStartVoice;
   final VoidCallback onStopVoice;
@@ -315,7 +315,7 @@ class _Header extends StatelessWidget {
                 child: SizedBox(
                   width: faceSize,
                   height: faceSize,
-                  child: VoiceActivityFace(levelStream: micLevelStream, threshold: 0.008),
+                  child: VoiceActivityFace(levelStream: aiAudioLevelStream, threshold: 0.008),
                 ),
               ),
             ),
@@ -648,148 +648,213 @@ class _StatusRow extends StatelessWidget {
   }
 }
 
-class _VoiceStatusBar extends StatelessWidget {
-  const _VoiceStatusBar({
-    required this.state,
+class _TranscriptButton extends StatelessWidget {
+  const _TranscriptButton({
+    required this.voiceState,
+    required this.headline,
     required this.onStop,
     required this.onCancel,
-    required this.headline,
   });
 
-  final VoiceChatState state;
+  final VoiceChatState voiceState;
+  final String headline;
   final VoidCallback onStop;
   final VoidCallback onCancel;
-  final String headline;
 
-  static bool shouldShow(VoiceChatState state) {
-    return state.isRecording ||
-        state.isProcessing ||
-        state.isPlaying ||
-        (state.userTranscription?.isNotEmpty ?? false) ||
-        (state.aiResponse?.isNotEmpty ?? false) ||
-        (state.errorMessage?.isNotEmpty ?? false);
-  }
+  bool get _hasContent =>
+      (voiceState.userTranscription?.isNotEmpty ?? false) ||
+      (voiceState.aiResponse?.isNotEmpty ?? false) ||
+      headline.trim().isNotEmpty ||
+      (voiceState.errorMessage?.isNotEmpty ?? false);
 
   @override
   Widget build(BuildContext context) {
-    final hasError = state.errorMessage?.isNotEmpty ?? false;
-    final active = state.isRecording || state.isProcessing || state.isPlaying;
-    final iconColor = hasError
-        ? Colors.redAccent
-        : state.isRecording
-        ? Colors.redAccent
-        : state.isPlaying
-        ? Colors.lightGreenAccent
-        : Colors.white70;
-    final icon = state.isRecording
-        ? Icons.mic
-        : state.isProcessing
-        ? Icons.cloud_sync
-        : state.isPlaying
-        ? Icons.graphic_eq
-        : hasError
-        ? Icons.error_outline
-        : Icons.mic_none;
-    final hasHeadline = headline.trim().isNotEmpty;
-    final title = state.isRecording
-        ? 'Listening...'
-        : state.isProcessing
-        ? 'Processing voice...'
-        : state.isPlaying
-        ? 'Playing reply...'
-        : hasError
-        ? 'Voice chat issue'
-        : 'Voice chat ready';
+    final hasError = voiceState.errorMessage?.isNotEmpty ?? false;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: hasError ? Colors.redAccent.withOpacity(0.12) : Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: hasError ? Colors.redAccent.withOpacity(0.6) : Colors.white12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: iconColor, size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              if (active || hasError)
-                TextButton(
-                  onPressed: hasError ? onCancel : onStop,
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  ),
-                  child: Text(hasError ? 'Dismiss' : 'Stop'),
-                ),
-            ],
+    return GestureDetector(
+      onTap: _hasContent ? () => _showTranscriptSheet(context) : null,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: _hasContent
+              ? Colors.white.withOpacity(0.1)
+              : Colors.white.withOpacity(0.05),
+          border: Border.all(
+            color: hasError
+                ? Colors.redAccent.withOpacity(0.6)
+                : _hasContent
+                    ? Colors.white.withOpacity(0.2)
+                    : Colors.white.withOpacity(0.1),
           ),
-          if (state.userTranscription?.isNotEmpty ?? false) ...[
-            const SizedBox(height: 6),
-            _VoiceLine(label: 'You', text: state.userTranscription!),
-          ],
-          if (state.aiResponse?.isNotEmpty ?? false) ...[
-            const SizedBox(height: 6),
-            _VoiceLine(label: 'AI', text: state.aiResponse!),
-          ],
-          if (hasHeadline) ...[
-            const SizedBox(height: 10),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 180),
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Text(
-                  headline,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    height: 1.35,
+        ),
+        child: Icon(
+          hasError ? Icons.error_outline : Icons.chat_bubble_outline,
+          color: hasError
+              ? Colors.redAccent
+              : _hasContent
+                  ? Colors.white
+                  : Colors.white38,
+          size: 22,
+        ),
+      ),
+    );
+  }
+
+  void _showTranscriptSheet(BuildContext context) {
+    final hasError = voiceState.errorMessage?.isNotEmpty ?? false;
+    final active = voiceState.isRecording || voiceState.isProcessing || voiceState.isPlaying;
+    final title = voiceState.isRecording
+        ? 'Listening...'
+        : voiceState.isProcessing
+            ? 'Processing voice...'
+            : voiceState.isPlaying
+                ? 'Playing reply...'
+                : hasError
+                    ? 'Voice chat issue'
+                    : 'Transcript';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF111822),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.4,
+        minChildSize: 0.2,
+        maxChildSize: 0.8,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
                   ),
-                ),
+                  if (active || hasError)
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        if (hasError) {
+                          onCancel();
+                        } else {
+                          onStop();
+                        }
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: hasError ? Colors.redAccent : Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      ),
+                      child: Text(hasError ? 'Dismiss' : 'Stop'),
+                    ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white12, height: 1),
+            Expanded(
+              child: ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.all(20),
+                children: [
+                  if (voiceState.userTranscription?.isNotEmpty ?? false) ...[
+                    _TranscriptLine(label: 'You', text: voiceState.userTranscription!),
+                    const SizedBox(height: 16),
+                  ],
+                  if (voiceState.aiResponse?.isNotEmpty ?? false) ...[
+                    _TranscriptLine(label: 'AI', text: voiceState.aiResponse!),
+                    const SizedBox(height: 16),
+                  ],
+                  if (headline.trim().isNotEmpty &&
+                      headline != voiceState.userTranscription &&
+                      headline != voiceState.aiResponse) ...[
+                    Text(
+                      headline,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                  if (hasError && voiceState.errorMessage != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              voiceState.errorMessage!,
+                              style: const TextStyle(color: Colors.white70, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
-class _VoiceLine extends StatelessWidget {
-  const _VoiceLine({required this.label, required this.text});
+class _TranscriptLine extends StatelessWidget {
+  const _TranscriptLine({required this.label, required this.text});
 
   final String label;
   final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '$label: ',
-          style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+          label,
+          style: TextStyle(
+            color: label == 'You' ? _accent : Colors.lightGreenAccent,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-        Expanded(
-          child: Text(
-            text,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.3),
+        const SizedBox(height: 4),
+        Text(
+          text,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            height: 1.4,
           ),
         ),
       ],
