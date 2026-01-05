@@ -103,6 +103,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   StreamSubscription<Uint8List>? _micStreamSubscription;
   StreamController<double>? _micLevelController;
   StreamController<double>? _aiAudioLevelController;
+  Timer? _aiAudioLevelTimer;
+  final List<double> _pendingAiRmsValues = [];
   final StringBuffer _aiTextBuffer = StringBuffer();
   BytesBuilder _audioBuffer = BytesBuilder(copy: false);
   Completer<bool>? _permissionDialogCompleter;
@@ -139,6 +141,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
     ref.onDispose(() async {
       _disableAudio();
+      _stopAiAudioLevelTimer();
       await _stopRecorder();
       await _teardownSocket();
       await _player.dispose();
@@ -353,10 +356,49 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     controller.add(value);
   }
 
-  void _emitAiAudioLevel(Uint8List bytes) {
-    final controller = _aiAudioLevelController;
-    if (controller == null || controller.isClosed) return;
-    controller.add(_computeRms(bytes));
+  /// Queue RMS values from audio chunks for synchronized playback animation.
+  /// Each chunk is broken into smaller segments to match playback timing.
+  void _queueAiAudioLevel(Uint8List bytes) {
+    if (bytes.isEmpty) return;
+
+    // Calculate RMS for segments of audio (~50ms each for smooth animation)
+    // At 24000 Hz, 16-bit samples: 50ms = 1200 samples = 2400 bytes
+    const segmentBytes = 2400;
+
+    for (var offset = 0; offset < bytes.length; offset += segmentBytes) {
+      final end = (offset + segmentBytes).clamp(0, bytes.length);
+      final segment = Uint8List.sublistView(bytes, offset, end);
+      final rms = _computeRms(segment);
+      _pendingAiRmsValues.add(rms);
+    }
+
+    // Start the timer if not running
+    _startAiAudioLevelTimer();
+  }
+
+  /// Start timer that emits RMS values at playback rate (~50ms intervals)
+  void _startAiAudioLevelTimer() {
+    if (_aiAudioLevelTimer != null && _aiAudioLevelTimer!.isActive) return;
+
+    // Emit RMS values every 50ms to match audio segment duration
+    _aiAudioLevelTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      if (_pendingAiRmsValues.isEmpty) {
+        // No more audio to play, stop and emit silence
+        _stopAiAudioLevelTimer();
+        _emitAiAudioLevelValue(0.0);
+        return;
+      }
+
+      final rms = _pendingAiRmsValues.removeAt(0);
+      _emitAiAudioLevelValue(rms);
+    });
+  }
+
+  /// Stop the RMS emission timer and clear pending values
+  void _stopAiAudioLevelTimer() {
+    _aiAudioLevelTimer?.cancel();
+    _aiAudioLevelTimer = null;
+    _pendingAiRmsValues.clear();
   }
 
   void _emitAiAudioLevelValue(double value) {
@@ -537,7 +579,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       if (bytes.isEmpty) return;
       _log.t('Decoded audio delta ${bytes.length} bytes');
 
-      _emitAiAudioLevel(bytes);
+      _queueAiAudioLevel(bytes);
 
       await _player.addChunk(
         bytes,
@@ -552,6 +594,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       );
     } catch (e, st) {
       _log.e('Playback error', error: e, stackTrace: st);
+      _stopAiAudioLevelTimer();
       _emitAiAudioLevelValue(0.0);
       state = state.copyWith(
         isPlaying: false,
@@ -571,7 +614,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       if (bytes.isEmpty) return;
       _log.t('Received binary audio ${bytes.length} bytes');
 
-      _emitAiAudioLevel(bytes);
+      _queueAiAudioLevel(bytes);
 
       await _player.addChunk(
         bytes,
@@ -586,6 +629,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       );
     } catch (e, st) {
       _log.e('Playback error', error: e, stackTrace: st);
+      _stopAiAudioLevelTimer();
       _emitAiAudioLevelValue(0.0);
       state = state.copyWith(
         isPlaying: false,
@@ -602,6 +646,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     unawaited(_player.stop());
     if (!ref.mounted) return;
     _disableAudio();
+    _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
     state = state.copyWith(
       isPlaying: false,
@@ -709,6 +754,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (!ref.mounted) return;
     _log.e('Voice websocket error', error: err, stackTrace: st);
     _disableAudio();
+    _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
     state = state.copyWith(
       isProcessing: false,
@@ -729,6 +775,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _socketOpen = false;
     unawaited(_player.stop());
     _disableAudio();
+    _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
     _socketSub = null;
     state = state.copyWith(
@@ -743,6 +790,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   /// Cancel current recording and tear down the current session.
   Future<void> cancelRecording() async {
     _disableAudio();
+    _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
     await _stopRecorder();
     await _player.stop();
@@ -766,6 +814,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   /// Stop audio playback
   Future<void> stopPlayback() async {
     _disableAudio();
+    _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
     await _player.stop();
     await _teardownSocket();
