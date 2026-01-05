@@ -37,13 +37,8 @@ class StoryPage extends ConsumerWidget {
               },
               data: (data) {
                 final sections = data.sections;
-                if (sections.isEmpty) return const _EmptyView();
-
-                // Pick a random story from all sections for the featured hero card
-                final allStories = sections.expand((s) => s.items).toList();
-                final featuredStory = allStories.isNotEmpty
-                    ? allStories[DateTime.now().millisecondsSinceEpoch % allStories.length]
-                    : null;
+                final featuredStory = data.featuredStory;
+                if (sections.isEmpty && featuredStory == null) return const _EmptyView();
 
                 return RefreshIndicator.adaptive(
                   color: Colors.white,
@@ -52,27 +47,27 @@ class StoryPage extends ConsumerWidget {
                   child: CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                     slivers: [
-                      // SliverToBoxAdapter(
-                      //   child: Padding(
-                      //     padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                      //     child: Row(
-                      //       children: [
-                      //         Image.asset('assets/images/app_logo.png', width: 38, height: 38),
-                      //         const SizedBox(width: 2),
-                      //         const TypographyText(
-                      //           'Stories',
-                      //           variant: TypographyVariant.h3,
-                      //           color: Colors.white,
-                      //         ),
-                      //       ],
-                      //     ),
-                      //   ),
-                      // ),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                          child: Row(
+                            children: [
+                              Image.asset('assets/images/app_logo.png', width: 38, height: 38),
+                              const SizedBox(width: 2),
+                              const TypographyText(
+                                'Stories',
+                                variant: TypographyVariant.h3,
+                                color: Colors.white,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                       if (featuredStory != null)
                         SliverToBoxAdapter(
                           child: _FeaturedStoryCard(
                             story: featuredStory,
-                            onTap: () => _openStory(context, featuredStory),
+                            onTap: () => _openFeaturedStory(context, featuredStory),
                           ),
                         ),
                       for (final section in sections)
@@ -85,24 +80,6 @@ class StoryPage extends ConsumerWidget {
                   ),
                 );
               },
-            ),
-            // Top gradient overlay
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
-                child: Container(
-                  height: 100,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [_bg, _bg.withValues(alpha: 0.0)],
-                    ),
-                  ),
-                ),
-              ),
             ),
           ],
         ),
@@ -125,12 +102,28 @@ class StoryPage extends ConsumerWidget {
       ),
     );
   }
+
+  Future<void> _openFeaturedStory(BuildContext context, FeaturedStoryDto story) async {
+    await showCupertinoModalBottomSheet(
+      context: context,
+      expand: false,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StorySheet(
+        storyId: story.id,
+        title: story.title,
+        subtitle: story.description,
+        imageAsset: story.coverImageUrl,
+        users: 0,
+        views: 0,
+      ),
+    );
+  }
 }
 
 class _FeaturedStoryCard extends ConsumerStatefulWidget {
   const _FeaturedStoryCard({required this.story, required this.onTap});
 
-  final StoryCardDto story;
+  final FeaturedStoryDto story;
   final VoidCallback onTap;
 
   @override
@@ -138,7 +131,7 @@ class _FeaturedStoryCard extends ConsumerStatefulWidget {
 }
 
 class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
-  bool _isAdded = false;
+  late bool _isAdded = widget.story.isAdded;
   bool _isAdding = false;
 
   @override
@@ -157,7 +150,7 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
               fit: StackFit.expand,
               children: [
                 // Background image
-                _StoryImage(image: widget.story.image),
+                _StoryImage(image: widget.story.coverImageUrl),
                 // Modern gradient overlay
                 Positioned.fill(
                   child: DecoratedBox(
@@ -193,9 +186,9 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
                         fontWeight: FontWeight.bold,
                       ),
                       const SizedBox(height: 10),
-                      if (widget.story.subtitle.isNotEmpty)
+                      if (widget.story.description.isNotEmpty)
                         TypographyText(
-                          widget.story.subtitle,
+                          widget.story.description,
                           variant: TypographyVariant.body1,
                           color: Colors.white.withOpacity(0.85),
                           fontSize: 14,
@@ -261,9 +254,7 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
     if (_isAdding || _isAdded) return;
     setState(() => _isAdding = true);
     try {
-      await ref
-          .read(storiesRepositoryProvider)
-          .addStoriesToPlaylist(storyIds: [widget.story.storyId]);
+      await ref.read(storiesRepositoryProvider).addStoriesToPlaylist(storyIds: [widget.story.id]);
       if (!mounted) return;
       setState(() {
         _isAdding = false;

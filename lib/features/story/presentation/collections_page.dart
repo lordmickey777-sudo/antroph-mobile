@@ -9,6 +9,7 @@ import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 import 'package:antroph_mobile/features/story/models/story_playlists_models.dart';
 import 'package:antroph_mobile/features/story/presentation/story_player_page.dart';
 import '../providers/story_playlists_provider.dart';
+import '../providers/story_providers.dart';
 
 class CollectionsPage extends ConsumerWidget {
   const CollectionsPage({super.key});
@@ -55,6 +56,7 @@ class CollectionsPage extends ConsumerWidget {
                   MaterialPageRoute(builder: (_) => CollectionDetailPage(collection: collection)),
                 ),
                 onStartChat: () => _startChatForCollection(context, collection.name),
+                onRemove: () => _removeCollectionStories(context, ref, collection),
               );
             },
           );
@@ -67,6 +69,44 @@ class CollectionsPage extends ConsumerWidget {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => ChatPage(storyTitle: title.isNotEmpty ? title : 'Chat')),
     );
+  }
+
+  Future<void> _removeCollectionStories(
+    BuildContext context,
+    WidgetRef ref,
+    PlaylistDto collection,
+  ) async {
+    if (collection.storyIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No stories to remove'),
+          backgroundColor: Color(0xFF2A2A2A),
+        ),
+      );
+      return;
+    }
+    final repo = ref.read(storiesRepositoryProvider);
+    try {
+      await repo.removeStoriesFromPlaylist(storyIds: collection.storyIds);
+      ref.invalidate(storyPlaylistsProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Stories removed from playlist'),
+            backgroundColor: Color(0xFF2A2A2A),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to remove stories'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 
@@ -111,6 +151,7 @@ class CollectionDetailPage extends ConsumerWidget {
                   story: story,
                   onPlay: () => _startStory(context, story),
                   onStartChat: () => _startChatForStory(context, story),
+                  onRemove: () => _removeStoryFromPlaylist(context, ref, story),
                 ),
               );
             },
@@ -134,19 +175,45 @@ class CollectionDetailPage extends ConsumerWidget {
     );
   }
 
-  void _startChatForCollection(BuildContext context, String title) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ChatPage(storyTitle: title.isNotEmpty ? title : 'Chat')),
-    );
+  Future<void> _removeStoryFromPlaylist(BuildContext context, WidgetRef ref, PlaylistStoryDto story) async {
+    final repo = ref.read(storiesRepositoryProvider);
+    try {
+      await repo.removeStoriesFromPlaylist(storyIds: [story.storyId]);
+      ref.invalidate(playlistDetailProvider(collection.id));
+      ref.invalidate(storyPlaylistsProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Story removed from playlist'),
+            backgroundColor: Color(0xFF2A2A2A),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to remove story'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 
 class _CollectionCard extends StatelessWidget {
-  const _CollectionCard({required this.collection, required this.onTap, required this.onStartChat});
+  const _CollectionCard({
+    required this.collection,
+    required this.onTap,
+    required this.onStartChat,
+    required this.onRemove,
+  });
 
   final PlaylistDto collection;
   final VoidCallback onTap;
   final VoidCallback onStartChat;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -179,6 +246,42 @@ class _CollectionCard extends StatelessWidget {
                       stops: const [0.0, 0.3, 0.7, 1.0],
                     ),
                   ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: PopupMenuButton<String>(
+                  icon: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+                  ),
+                  color: const Color(0xFF2A2A2A),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onSelected: (value) {
+                    if (value == 'remove') {
+                      onRemove();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem<String>(
+                      value: 'remove',
+                      child: Row(
+                        children: const [
+                          Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Remove from playlist',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
               // Content at bottom
@@ -236,11 +339,13 @@ class _CollectionStoryCard extends StatelessWidget {
     required this.story,
     required this.onPlay,
     required this.onStartChat,
+    required this.onRemove,
   });
 
   final PlaylistStoryDto story;
   final VoidCallback onPlay;
   final VoidCallback onStartChat;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -273,6 +378,43 @@ class _CollectionStoryCard extends StatelessWidget {
                       stops: const [0.0, 0.3, 0.7, 1.0],
                     ),
                   ),
+                ),
+              ),
+              // More options menu at top right
+              Positioned(
+                top: 8,
+                right: 8,
+                child: PopupMenuButton<String>(
+                  icon: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+                  ),
+                  color: const Color(0xFF2A2A2A),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onSelected: (value) {
+                    if (value == 'remove') {
+                      onRemove();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem<String>(
+                      value: 'remove',
+                      child: Row(
+                        children: const [
+                          Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'Remove from playlist',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
               // Content at bottom

@@ -56,15 +56,58 @@ class StoryCardDto {
   };
 }
 
+class FeaturedStoryDto {
+  FeaturedStoryDto({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.coverImageUrl,
+    required this.author,
+    required this.isAdded,
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final String coverImageUrl;
+  final String author;
+  final bool isAdded;
+
+  factory FeaturedStoryDto.fromJson(Map<String, dynamic> json) => FeaturedStoryDto(
+    id: (json['id'] as String?)?.trim() ?? '',
+    title: (json['title'] as String?)?.trim() ?? '',
+    description: (json['description'] as String?)?.trim() ?? '',
+    coverImageUrl: (json['cover_image_url'] as String?)?.trim() ?? '',
+    author: (json['author'] as String?)?.trim() ?? '',
+    isAdded: json['is_added'] as bool? ?? false,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'description': description,
+    'cover_image_url': coverImageUrl,
+    'author': author,
+    'is_added': isAdded,
+  };
+}
+
 class StoriesHomeResponse {
-  StoriesHomeResponse({required this.sections});
+  StoriesHomeResponse({required this.sections, this.featuredStory});
   final List<StorySectionDto> sections;
+  final FeaturedStoryDto? featuredStory;
 
   factory StoriesHomeResponse.fromJson(Map<String, dynamic> json) => StoriesHomeResponse(
     sections: ((json['sections'] as List?) ?? const [])
         .map((e) => StorySectionDto.fromJson(e as Map<String, dynamic>))
         .toList(),
+    featuredStory: json['featured_story'] != null
+        ? FeaturedStoryDto.fromJson(json['featured_story'] as Map<String, dynamic>)
+        : null,
   );
 
-  Map<String, dynamic> toJson() => {'sections': sections.map((e) => e.toJson()).toList()};
+  Map<String, dynamic> toJson() => {
+    'sections': sections.map((e) => e.toJson()).toList(),
+    if (featuredStory != null) 'featured_story': featuredStory!.toJson(),
+  };
 }

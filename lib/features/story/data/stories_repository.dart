@@ -90,6 +90,18 @@ class StoriesRepository {
     }
   }
 
+  Future<void> removeStoriesFromPlaylist({
+    required List<String> storyIds,
+  }) async {
+    try {
+      await _dio.delete('/playlists/stories', data: {
+        'story_ids': storyIds,
+      });
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
   /// Fetch detailed story information by ID.
   /// Public endpoint; no auth required.
   Future<StoryDetailDto> fetchStoryDetail(String storyId) async {
