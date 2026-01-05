@@ -91,10 +91,11 @@ class StoriesRepository {
   }
 
   Future<void> removeStoriesFromPlaylist({
+    required String playlistId,
     required List<String> storyIds,
   }) async {
     try {
-      await _dio.delete('/playlists/stories', data: {
+      await _dio.delete('/playlists/$playlistId/stories', data: {
         'story_ids': storyIds,
       });
     } on DioException catch (e) {

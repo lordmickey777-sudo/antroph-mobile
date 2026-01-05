@@ -87,7 +87,10 @@ class CollectionsPage extends ConsumerWidget {
     }
     final repo = ref.read(storiesRepositoryProvider);
     try {
-      await repo.removeStoriesFromPlaylist(storyIds: collection.storyIds);
+      await repo.removeStoriesFromPlaylist(
+        playlistId: collection.id,
+        storyIds: collection.storyIds,
+      );
       ref.invalidate(storyPlaylistsProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -178,7 +181,10 @@ class CollectionDetailPage extends ConsumerWidget {
   Future<void> _removeStoryFromPlaylist(BuildContext context, WidgetRef ref, PlaylistStoryDto story) async {
     final repo = ref.read(storiesRepositoryProvider);
     try {
-      await repo.removeStoriesFromPlaylist(storyIds: [story.storyId]);
+      await repo.removeStoriesFromPlaylist(
+        playlistId: collection.id,
+        storyIds: [story.storyId],
+      );
       ref.invalidate(playlistDetailProvider(collection.id));
       ref.invalidate(storyPlaylistsProvider);
       if (context.mounted) {
@@ -251,37 +257,9 @@ class _CollectionCard extends StatelessWidget {
               Positioned(
                 top: 8,
                 right: 8,
-                child: PopupMenuButton<String>(
-                  icon: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
-                  ),
-                  color: const Color(0xFF2A2A2A),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  onSelected: (value) {
-                    if (value == 'remove') {
-                      onRemove();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem<String>(
-                      value: 'remove',
-                      child: Row(
-                        children: const [
-                          Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
-                          SizedBox(width: 12),
-                          Text(
-                            'Remove from playlist',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                child: _StyledPopupMenu(
+                  onRemove: onRemove,
+                  removeLabel: 'Remove collection',
                 ),
               ),
               // Content at bottom
@@ -384,37 +362,9 @@ class _CollectionStoryCard extends StatelessWidget {
               Positioned(
                 top: 8,
                 right: 8,
-                child: PopupMenuButton<String>(
-                  icon: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
-                  ),
-                  color: const Color(0xFF2A2A2A),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  onSelected: (value) {
-                    if (value == 'remove') {
-                      onRemove();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem<String>(
-                      value: 'remove',
-                      child: Row(
-                        children: const [
-                          Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
-                          SizedBox(width: 12),
-                          Text(
-                            'Remove from playlist',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                child: _StyledPopupMenu(
+                  onRemove: onRemove,
+                  removeLabel: 'Remove from playlist',
                 ),
               ),
               // Content at bottom
@@ -507,10 +457,9 @@ class _CollectionStoryCard extends StatelessWidget {
 }
 
 class _CollectionImage extends StatelessWidget {
-  const _CollectionImage({required this.url, this.height});
+  const _CollectionImage({required this.url});
 
   final String url;
-  final double? height;
 
   bool get _isNetwork => url.startsWith('http');
 
@@ -520,15 +469,87 @@ class _CollectionImage extends StatelessWidget {
       return Image.network(
         url,
         fit: BoxFit.cover,
-        height: height,
         width: double.infinity,
         errorBuilder: (context, error, stackTrace) {
-          return Image.asset('assets/images/default.png', fit: BoxFit.cover, height: height, width: double.infinity);
+          return Image.asset('assets/images/default.png', fit: BoxFit.cover, width: double.infinity);
         },
       );
     }
     final assetPath = url.isNotEmpty ? url : 'assets/images/default.png';
-    return Image.asset(assetPath, fit: BoxFit.cover, height: height, width: double.infinity);
+    return Image.asset(assetPath, fit: BoxFit.cover, width: double.infinity);
+  }
+}
+
+class _StyledPopupMenu extends StatelessWidget {
+  const _StyledPopupMenu({
+    required this.onRemove,
+    required this.removeLabel,
+  });
+
+  final VoidCallback onRemove;
+  final String removeLabel;
+
+  Future<void> _showRemoveConfirmation(BuildContext context) async {
+    final confirmed = await showCupertinoModalPopup<bool>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: Text(
+          removeLabel,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        message: const Text(
+          'This action cannot be undone.',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(context).pop(true),
+            isDestructiveAction: true,
+            child: const Text('Remove'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+      ),
+    );
+    if (confirmed == true) {
+      onRemove();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _showRemoveConfirmation(context),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.6),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.1),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Icon(
+          Icons.more_vert,
+          color: Colors.white,
+          size: 20,
+        ),
+      ),
+    );
   }
 }
 
@@ -565,11 +586,6 @@ class CollectionsPageShimmer extends StatelessWidget {
       itemBuilder: (context, index) => const _CollectionCardShimmer(),
     );
   }
-}
-
-String _storiesLabel(int count) {
-  if (count <= 0) return '1 story';
-  return count == 1 ? '1 story' : '$count stories';
 }
 
 class _CollectionCardShimmer extends StatelessWidget {
