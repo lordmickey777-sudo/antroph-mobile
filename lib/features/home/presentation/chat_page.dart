@@ -476,12 +476,16 @@ class _HeroMicButton extends StatelessWidget {
     );
 
     return GestureDetector(
-      // Push to speak: press down to start, release to send
-      onTapDown: canRecord ? (_) => onStart() : null,
-      onTapUp: recording ? (_) => onStop() : null,
-      onTapCancel: recording ? onStop : null,
-      // Tap to stop playback when AI is speaking
-      onTap: (waiting || playing) ? onStopPlayback : null,
+      // Tap to toggle recording or stop playback
+      onTap: () {
+        if (canRecord) {
+          onStart();
+        } else if (recording) {
+          onStop();
+        } else if (waiting || playing) {
+          onStopPlayback();
+        }
+      },
       child: Container(
         width: 76,
         height: 76,

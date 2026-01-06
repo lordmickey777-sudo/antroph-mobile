@@ -104,6 +104,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   StreamController<double>? _micLevelController;
   StreamController<double>? _aiAudioLevelController;
   Timer? _aiAudioLevelTimer;
+  Timer? _silenceTimer;
   final List<double> _pendingAiRmsValues = [];
   final StringBuffer _aiTextBuffer = StringBuffer();
   BytesBuilder _audioBuffer = BytesBuilder(copy: false);
@@ -118,6 +119,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   static const String _outputVoice = 'alloy';
   static const String _permissionError =
       'Microphone permission is required for voice chat';
+  static const double _silenceThreshold = 0.01;
+  static const Duration _silenceDuration = Duration(seconds: 2);
 
   VoiceChatController({
     RealtimeVoiceClient? client,
@@ -141,6 +144,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
     ref.onDispose(() async {
       _disableAudio();
+      _cancelSilenceTimer();
       _stopAiAudioLevelTimer();
       await _stopRecorder();
       await _teardownSocket();
@@ -287,7 +291,16 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _handleMicChunk(Uint8List bytes) {
     if (bytes.isEmpty) return;
-    _emitMicLevel(bytes);
+    final rms = _computeRms(bytes);
+    _emitMicLevelValue(rms);
+
+    // Silence detection: if audio level is below threshold, start/continue silence timer
+    if (rms < _silenceThreshold) {
+      _startSilenceTimer();
+    } else {
+      _cancelSilenceTimer();
+    }
+
     if (!_socketOpen) return;
     _audioBuffer.add(bytes);
     final encoded = base64Encode(bytes);
@@ -295,6 +308,22 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       'type': 'input_audio_buffer.append',
       'audio': encoded,
     });
+  }
+
+  void _startSilenceTimer() {
+    // Only start if not already running
+    if (_silenceTimer != null && _silenceTimer!.isActive) return;
+    _silenceTimer = Timer(_silenceDuration, () {
+      if (state.isRecording) {
+        _log.i('Silence detected for $_silenceDuration, auto-stopping recording');
+        stopRecordingAndSend();
+      }
+    });
+  }
+
+  void _cancelSilenceTimer() {
+    _silenceTimer?.cancel();
+    _silenceTimer = null;
   }
 
   /// Stop recording and tell backend the input is finished.
@@ -334,6 +363,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   Future<void> _stopRecorder() async {
+    _cancelSilenceTimer();
     try {
       await _recorder?.stopRecorder();
     } catch (_) {}
@@ -342,12 +372,6 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     await _micStreamController?.close();
     _micStreamController = null;
     _emitMicLevelValue(0.0);
-  }
-
-  void _emitMicLevel(Uint8List bytes) {
-    final controller = _micLevelController;
-    if (controller == null || controller.isClosed) return;
-    controller.add(_computeRms(bytes));
   }
 
   void _emitMicLevelValue(double value) {
