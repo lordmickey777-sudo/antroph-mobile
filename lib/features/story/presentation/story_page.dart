@@ -272,8 +272,10 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
   void _navigateToChat() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            ChatPage(storyTitle: widget.story.title.isNotEmpty ? widget.story.title : 'Chat'),
+        builder: (_) => ChatPage(
+          storyTitle: widget.story.title.isNotEmpty ? widget.story.title : 'Chat',
+          storyId: widget.story.id,
+        ),
       ),
     );
   }
@@ -473,8 +475,10 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
   void _navigateToChat() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            ChatPage(storyTitle: widget.item.title.isNotEmpty ? widget.item.title : 'Chat'),
+        builder: (_) => ChatPage(
+          storyTitle: widget.item.title.isNotEmpty ? widget.item.title : 'Chat',
+          storyId: widget.item.storyId,
+        ),
       ),
     );
   }

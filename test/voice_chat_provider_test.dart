@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:antroph_mobile/features/home/models/realtime_voice_bridge_models.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/home/services/pcm_audio_player.dart';
 import 'package:antroph_mobile/features/home/services/realtime_voice_client.dart';
@@ -113,7 +114,7 @@ class FakeRealtimeVoiceClient extends RealtimeVoiceClient {
   bool get isOpen => _open;
 
   @override
-  Future<void> connect(Uri uri) async {
+  Future<void> connect(Uri uri, {RealtimeVoiceConfig? config}) async {
     connectCalls++;
     _open = true;
   }
@@ -134,7 +135,9 @@ class FakeRealtimeVoiceClient extends RealtimeVoiceClient {
   }
 
   void emitJson(Map<String, dynamic> payload) {
-    _controller.add(RealtimeIncomingMessage.json(payload));
+    final typeStr = (payload['type'] as String?) ?? '';
+    final type = RealtimeServerMessageType.fromString(typeStr);
+    _controller.add(RealtimeIncomingMessage.json(payload, type));
   }
 
   void emitBinary(Uint8List bytes) {

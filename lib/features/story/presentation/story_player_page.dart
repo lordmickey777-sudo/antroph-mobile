@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 import 'package:antroph_mobile/features/story/models/story_playlists_models.dart';
 import 'package:antroph_mobile/features/story/providers/story_socket_provider.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
@@ -36,6 +37,20 @@ class _StoryPlayerPageState extends ConsumerState<StoryPlayerPage> {
     super.dispose();
   }
 
+  void _openVoiceMode(BuildContext context) {
+    // End the current text-based story session before switching to voice mode
+    ref.read(storySocketProvider.notifier).endStory();
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => ChatPage(
+          storyTitle: widget.story.title,
+          storyId: widget.story.storyId,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(storySocketProvider);
@@ -52,6 +67,11 @@ class _StoryPlayerPageState extends ConsumerState<StoryPlayerPage> {
           color: Colors.white,
         ),
         actions: [
+          IconButton(
+            onPressed: () => _openVoiceMode(context),
+            icon: const Icon(Icons.mic, color: Colors.white),
+            tooltip: 'Voice Mode',
+          ),
           TextButton(
             onPressed: () => notifier.endStory(),
             child: const TypographyText('End', variant: TypographyVariant.body2, color: Colors.white),

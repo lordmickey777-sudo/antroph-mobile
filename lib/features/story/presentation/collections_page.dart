@@ -55,7 +55,7 @@ class CollectionsPage extends ConsumerWidget {
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => CollectionDetailPage(collection: collection)),
                 ),
-                onStartChat: () => _startChatForCollection(context, collection.name),
+                onStartChat: () => _startChatForCollection(context, collection),
                 onRemove: () => _removeCollectionStories(context, ref, collection),
               );
             },
@@ -65,9 +65,25 @@ class CollectionsPage extends ConsumerWidget {
     );
   }
 
-  void _startChatForCollection(BuildContext context, String title) {
+  void _startChatForCollection(BuildContext context, PlaylistDto collection) {
+    // Use the collection id as the story id since each playlist item is a story
+    final storyId = collection.id;
+    if (storyId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to start story'),
+          backgroundColor: Color(0xFF2A2A2A),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ChatPage(storyTitle: title.isNotEmpty ? title : 'Chat')),
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          storyTitle: collection.name.isNotEmpty ? collection.name : 'Chat',
+          storyId: storyId,
+        ),
+      ),
     );
   }
 
@@ -173,7 +189,10 @@ class CollectionDetailPage extends ConsumerWidget {
   void _startChatForStory(BuildContext context, PlaylistStoryDto story) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatPage(storyTitle: story.title.isNotEmpty ? story.title : 'Chat'),
+        builder: (_) => ChatPage(
+          storyTitle: story.title.isNotEmpty ? story.title : 'Chat',
+          storyId: story.storyId,
+        ),
       ),
     );
   }
