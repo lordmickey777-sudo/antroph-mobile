@@ -35,12 +35,14 @@ class AppDropdown extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Container(
+          constraints: const BoxConstraints(minHeight: 64),
           padding: const EdgeInsets.symmetric(horizontal: 20),
           decoration: BoxDecoration(
             color: const Color(0xFF1F2223),
             borderRadius: BorderRadius.circular(40),
           ),
-          child: DropdownButtonFormField<String>(
+          child: Center(
+            child: DropdownButtonFormField<String>(
             value: options.containsKey(value) ? value : null,
             decoration: InputDecoration(
               border: InputBorder.none,
@@ -62,6 +64,7 @@ class AppDropdown extends StatelessWidget {
             ],
             onChanged: enabled ? onChanged : null,
             validator: validator,
+          ),
           ),
         ),
       ],

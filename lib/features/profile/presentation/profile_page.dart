@@ -90,7 +90,7 @@ class _ProfileMenu extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     const items = [
       (Icons.person_outline, 'Profile', true),
-      // (Icons.settings_outlined, 'Customization', true),
+      (Icons.settings_outlined, 'Customization', true),
       (Icons.qr_code_scanner, 'Scan', true),
       (Icons.attach_money_outlined, 'Subscription', true),
       (Icons.lock_outline, 'Security', true),
