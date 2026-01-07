@@ -86,9 +86,13 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     if (_modalRoute != null) {
       appRouteObserver.unsubscribe(this);
     }
-    // End story session when leaving if in story mode
+    // Stop voice playback and end session when leaving
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
     if (widget.isStoryMode) {
-      ref.read(voiceChatControllerProvider.notifier).endStorySession();
+      voiceController.pauseStorySession();
+      voiceController.endStorySession();
+    } else {
+      voiceController.stopPlayback();
     }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -97,21 +101,43 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final controller = ref.read(chatControllerProvider.notifier);
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       controller.pause();
+      // Pause voice session to stop AI from talking in the background
+      if (widget.isStoryMode) {
+        voiceController.pauseStorySession();
+      } else {
+        voiceController.stopPlayback();
+      }
     } else if (state == AppLifecycleState.resumed) {
       controller.resume();
+      // Resume voice session if it was paused
+      if (widget.isStoryMode) {
+        voiceController.resumePausedSession();
+      }
     }
   }
 
   @override
   void didPushNext() {
     ref.read(chatControllerProvider.notifier).pause();
+    // Pause voice session when navigating to another page
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    if (widget.isStoryMode) {
+      voiceController.pauseStorySession();
+    } else {
+      voiceController.stopPlayback();
+    }
   }
 
   @override
   void didPopNext() {
     ref.read(chatControllerProvider.notifier).resume();
+    // Resume voice session when returning to this page
+    if (widget.isStoryMode) {
+      ref.read(voiceChatControllerProvider.notifier).resumePausedSession();
+    }
   }
 
   @override
