@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
@@ -19,6 +20,8 @@ class ProfilePage extends StatelessWidget {
         _ProfileHeader(),
         SizedBox(height: 30),
         _ProfileMenu(),
+        SizedBox(height: 40),
+        _BuildNumber(),
       ],
     );
   }
@@ -255,13 +258,24 @@ class _ProfileNudge extends ConsumerWidget {
   }
 }
 
-// class _DividerInset extends StatelessWidget {
-//   const _DividerInset();
-//   @override
-//   Widget build(BuildContext context) {
-//     return Padding(
-//       padding: const EdgeInsets.symmetric(horizontal: 20),
-//       child: Container(height: 1, color: Colors.white12),
-//     );
-//   }
-// }
+class _BuildNumber extends StatelessWidget {
+  const _BuildNumber();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<PackageInfo>(
+      future: PackageInfo.fromPlatform(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+        final info = snapshot.data!;
+        return Center(
+          child: TypographyText(
+            'v${info.version} (${info.buildNumber})',
+            variant: TypographyVariant.body2,
+            color: Colors.white.withOpacity(0.4),
+          ),
+        );
+      },
+    );
+  }
+}
