@@ -70,10 +70,7 @@ class CollectionsPage extends ConsumerWidget {
     final storyId = collection.id;
     if (storyId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to start story'),
-          backgroundColor: Color(0xFF2A2A2A),
-        ),
+        const SnackBar(content: Text('Unable to start story'), backgroundColor: Color(0xFF2A2A2A)),
       );
       return;
     }
@@ -94,10 +91,7 @@ class CollectionsPage extends ConsumerWidget {
   ) async {
     if (collection.storyIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No stories to remove'),
-          backgroundColor: Color(0xFF2A2A2A),
-        ),
+        const SnackBar(content: Text('No stories to remove'), backgroundColor: Color(0xFF2A2A2A)),
       );
       return;
     }
@@ -119,10 +113,7 @@ class CollectionsPage extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to remove stories'),
-            backgroundColor: Colors.red,
-          ),
+          const SnackBar(content: Text('Failed to remove stories'), backgroundColor: Colors.red),
         );
       }
     }
@@ -197,13 +188,14 @@ class CollectionDetailPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _removeStoryFromPlaylist(BuildContext context, WidgetRef ref, PlaylistStoryDto story) async {
+  Future<void> _removeStoryFromPlaylist(
+    BuildContext context,
+    WidgetRef ref,
+    PlaylistStoryDto story,
+  ) async {
     final repo = ref.read(storiesRepositoryProvider);
     try {
-      await repo.removeStoriesFromPlaylist(
-        playlistId: collection.id,
-        storyIds: [story.storyId],
-      );
+      await repo.removeStoriesFromPlaylist(playlistId: collection.id, storyIds: [story.storyId]);
       ref.invalidate(playlistDetailProvider(collection.id));
       ref.invalidate(storyPlaylistsProvider);
       if (context.mounted) {
@@ -217,10 +209,7 @@ class CollectionDetailPage extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to remove story'),
-            backgroundColor: Colors.red,
-          ),
+          const SnackBar(content: Text('Failed to remove story'), backgroundColor: Colors.red),
         );
       }
     }
@@ -243,7 +232,7 @@ class _CollectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: onStartChat,
       child: SmoothClipRRect(
         smoothness: 0.6,
         borderRadius: BorderRadius.circular(20),
@@ -276,10 +265,7 @@ class _CollectionCard extends StatelessWidget {
               Positioned(
                 top: 8,
                 right: 8,
-                child: _StyledPopupMenu(
-                  onRemove: onRemove,
-                  removeLabel: 'Remove collection',
-                ),
+                child: _StyledPopupMenu(onRemove: onRemove, removeLabel: 'Remove collection'),
               ),
               // Content at bottom
               Positioned(
@@ -381,10 +367,7 @@ class _CollectionStoryCard extends StatelessWidget {
               Positioned(
                 top: 8,
                 right: 8,
-                child: _StyledPopupMenu(
-                  onRemove: onRemove,
-                  removeLabel: 'Remove from playlist',
-                ),
+                child: _StyledPopupMenu(onRemove: onRemove, removeLabel: 'Remove from playlist'),
               ),
               // Content at bottom
               Positioned(
@@ -450,7 +433,11 @@ class _CollectionStoryCard extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: const [
-                                Icon(CupertinoIcons.chat_bubble_2_fill, color: Colors.white, size: 18),
+                                Icon(
+                                  CupertinoIcons.chat_bubble_2_fill,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
                                 SizedBox(width: 6),
                                 TypographyText(
                                   'Chat',
@@ -490,7 +477,11 @@ class _CollectionImage extends StatelessWidget {
         fit: BoxFit.cover,
         width: double.infinity,
         errorBuilder: (context, error, stackTrace) {
-          return Image.asset('assets/images/default.png', fit: BoxFit.cover, width: double.infinity);
+          return Image.asset(
+            'assets/images/default.png',
+            fit: BoxFit.cover,
+            width: double.infinity,
+          );
         },
       );
     }
@@ -500,10 +491,7 @@ class _CollectionImage extends StatelessWidget {
 }
 
 class _StyledPopupMenu extends StatelessWidget {
-  const _StyledPopupMenu({
-    required this.onRemove,
-    required this.removeLabel,
-  });
+  const _StyledPopupMenu({required this.onRemove, required this.removeLabel});
 
   final VoidCallback onRemove;
   final String removeLabel;
@@ -512,17 +500,8 @@ class _StyledPopupMenu extends StatelessWidget {
     final confirmed = await showCupertinoModalPopup<bool>(
       context: context,
       builder: (context) => CupertinoActionSheet(
-        title: Text(
-          removeLabel,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        message: const Text(
-          'This action cannot be undone.',
-          style: TextStyle(fontSize: 13),
-        ),
+        title: Text(removeLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        message: const Text('This action cannot be undone.', style: TextStyle(fontSize: 13)),
         actions: [
           CupertinoActionSheetAction(
             onPressed: () => Navigator.of(context).pop(true),
@@ -550,10 +529,7 @@ class _StyledPopupMenu extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.6),
           shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.1),
-            width: 1,
-          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.3),
@@ -562,11 +538,7 @@ class _StyledPopupMenu extends StatelessWidget {
             ),
           ],
         ),
-        child: const Icon(
-          Icons.more_vert,
-          color: Colors.white,
-          size: 20,
-        ),
+        child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
       ),
     );
   }

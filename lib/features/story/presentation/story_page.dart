@@ -359,7 +359,7 @@ class _StoryCard extends ConsumerStatefulWidget {
 
 class _StoryCardState extends ConsumerState<_StoryCard> {
   bool _isAdding = false;
-  bool _isAdded = false;
+  late bool _isAdded = widget.item.isAdded;
 
   @override
   Widget build(BuildContext context) {

@@ -12,7 +12,7 @@ class StoriesRepository {
   final Dio _dio;
 
   /// Fetch home sections for stories page.
-  /// Public endpoint; no auth required.
+  /// Sends auth header if available to get personalized data (My Playlist, is_added flags).
   Future<StoriesHomeResponse> fetchHomeSections({
     int limitPerSection = 6,
     int collectionsPage = 1,
@@ -26,7 +26,6 @@ class StoriesRepository {
           'collections_page': collectionsPage,
           'collections_page_size': collectionsPageSize,
         },
-        options: Options(extra: const {'skipAuth': true}),
       );
       final data = res.data as Map<String, dynamic>;
       return StoriesHomeResponse.fromJson(data);
