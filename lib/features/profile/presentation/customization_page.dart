@@ -17,6 +17,21 @@ const Map<String, String> _defaultLanguageOptions = {
   'es': 'Spanish',
   'de': 'German',
   'it': 'Italian',
+  'pt': 'Portuguese',
+  'nl': 'Dutch',
+  'pl': 'Polish',
+  'ru': 'Russian',
+  'ja': 'Japanese',
+  'ko': 'Korean',
+  'zh': 'Chinese',
+  'ar': 'Arabic',
+  'hi': 'Hindi',
+  'tr': 'Turkish',
+  'sv': 'Swedish',
+  'da': 'Danish',
+  'no': 'Norwegian',
+  'fi': 'Finnish',
+  'el': 'Greek',
 };
 
 const List<String> _personalityTypeKeys = [
