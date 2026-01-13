@@ -49,11 +49,12 @@ class StoriesRepository {
       return payload.whereType<Map<String, dynamic>>().toList();
     }
     if (payload is Map<String, dynamic>) {
-      final nestedList = (payload['data'] as List?)
-              ?? (payload['playlists'] as List?)
-              ?? (payload['collections'] as List?)
-              ?? (payload['items'] as List?)
-              ?? (payload['results'] as List?);
+      final nestedList =
+          (payload['data'] as List?) ??
+          (payload['playlists'] as List?) ??
+          (payload['collections'] as List?) ??
+          (payload['items'] as List?) ??
+          (payload['results'] as List?);
       if (nestedList != null) {
         return nestedList.whereType<Map<String, dynamic>>().toList();
       }
@@ -77,9 +78,7 @@ class StoriesRepository {
     int? position,
   }) async {
     try {
-      final payload = <String, dynamic>{
-        'story_ids': storyIds,
-      };
+      final payload = <String, dynamic>{'story_ids': storyIds};
       if (position != null) {
         payload['position'] = position;
       }
@@ -89,14 +88,11 @@ class StoriesRepository {
     }
   }
 
-  Future<void> removeStoriesFromPlaylist({
-    required String playlistId,
+  Future<void> removeStoriesFromCollection({
     required List<String> storyIds,
   }) async {
     try {
-      await _dio.delete('/playlists/$playlistId/stories', data: {
-        'story_ids': storyIds,
-      });
+      await _dio.delete('/playlists/stories', data: {'story_ids': storyIds});
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }

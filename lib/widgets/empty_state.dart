@@ -23,35 +23,34 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: margin,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Image.asset(assetPath, height: 140, fit: BoxFit.contain),
-            const SizedBox(height: 20),
+    return Padding(
+      padding: margin,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 100),
+          Image.asset(assetPath, height: 80, fit: BoxFit.contain),
+          const SizedBox(height: 20),
+          TypographyText(
+            title,
+            variant: TypographyVariant.h3,
+            color: Colors.white,
+            textAlign: TextAlign.center,
+          ),
+          if (description != null) ...[
+            const SizedBox(height: 12),
             TypographyText(
-              title,
-              variant: TypographyVariant.h3,
-              color: Colors.white,
+              description!,
+              variant: TypographyVariant.body2,
+              color: Colors.white70,
               textAlign: TextAlign.center,
             ),
-            if (description != null) ...[
-              const SizedBox(height: 12),
-              TypographyText(
-                description!,
-                variant: TypographyVariant.body2,
-                color: Colors.white70,
-                textAlign: TextAlign.center,
-              ),
-            ],
-            if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: 18),
-              AppButton(onPressed: onAction, child: Text(actionLabel!)),
-            ],
           ],
-        ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: 18),
+            AppButton(onPressed: onAction, child: Text(actionLabel!)),
+          ],
+        ],
       ),
     );
   }
