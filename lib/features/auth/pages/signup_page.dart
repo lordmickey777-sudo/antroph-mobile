@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../../../widgets/typography_text.dart';
 import '../widgets/auth_input.dart';
 import '../../../core/auth/state/auth_state.dart';
@@ -53,6 +54,14 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
     if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(v)) return 'Invalid email';
     if (_emailExists) return 'Email already registered';
     return null;
+  }
+
+  void _openWebPage(BuildContext context, String title, String url) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _WebViewPage(title: title, url: url),
+      ),
+    );
   }
 
   Future<void> _submit() async {
@@ -172,6 +181,33 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _openWebPage(context, 'Privacy Policy', 'https://www.antroph.com/privacy/'),
+                      child: const TypographyText(
+                        'Privacy Policy',
+                        variant: TypographyVariant.body2,
+                        color: Colors.white54,
+                      ),
+                    ),
+                    const TypographyText(
+                      '  •  ',
+                      variant: TypographyVariant.body2,
+                      color: Colors.white38,
+                    ),
+                    GestureDetector(
+                      onTap: () => _openWebPage(context, 'Terms of Service', 'https://www.antroph.com/terms/'),
+                      child: const TypographyText(
+                        'Terms of Service',
+                        variant: TypographyVariant.body2,
+                        color: Colors.white54,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -236,6 +272,55 @@ class _PasswordPolicyChecklist extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _WebViewPage extends StatefulWidget {
+  const _WebViewPage({required this.title, required this.url});
+
+  final String title;
+  final String url;
+
+  @override
+  State<_WebViewPage> createState() => _WebViewPageState();
+}
+
+class _WebViewPageState extends State<_WebViewPage> {
+  late final WebViewController _controller;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0xFF101214))
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) => setState(() => _isLoading = false),
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF101214),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF101214),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(widget.title),
+      ),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator(color: Colors.white)),
+        ],
+      ),
     );
   }
 }

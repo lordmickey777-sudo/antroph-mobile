@@ -3,15 +3,17 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:typed_data' show BytesBuilder;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:logger/logger.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../../core/auth/state/auth_state.dart';
 import '../../../core/env/env.dart';
+import '../../../core/services/device_id_service.dart';
 import '../models/expression_models.dart';
+import '../models/realtime_voice_bridge_models.dart';
 import '../services/pcm_audio_player.dart';
 import '../services/realtime_voice_client.dart';
 
@@ -34,6 +36,13 @@ class VoiceChatState {
   final Uint8List? currentFaceBitmap;
   final int? faceTimestampMs;
 
+  // Story-specific state
+  final RealtimeVoicePhase phase;
+  final StorySessionInfo? storySession;
+  final RoomState? roomState;
+  final bool isStoryMode;
+  final List<ConversationItem> conversationHistory;
+
   const VoiceChatState({
     this.currentExpression = RobotExpression.neutral,
     this.isRecording = false,
@@ -49,6 +58,11 @@ class VoiceChatState {
     this.audioFormats = const [],
     this.currentFaceBitmap,
     this.faceTimestampMs,
+    this.phase = RealtimeVoicePhase.idle,
+    this.storySession,
+    this.roomState,
+    this.isStoryMode = false,
+    this.conversationHistory = const [],
   });
 
   VoiceChatState copyWith({
@@ -68,6 +82,12 @@ class VoiceChatState {
     int? faceTimestampMs,
     bool clearFace = false,
     bool clearAiAudio = false,
+    RealtimeVoicePhase? phase,
+    StorySessionInfo? storySession,
+    RoomState? roomState,
+    bool? isStoryMode,
+    List<ConversationItem>? conversationHistory,
+    bool clearStorySession = false,
   }) {
     return VoiceChatState(
       currentExpression: currentExpression ?? this.currentExpression,
@@ -84,14 +104,30 @@ class VoiceChatState {
       audioFormats: audioFormats ?? this.audioFormats,
       currentFaceBitmap:
           clearFace ? null : (currentFaceBitmap ?? this.currentFaceBitmap),
-      faceTimestampMs: clearFace ? null : (faceTimestampMs ?? this.faceTimestampMs),
+      faceTimestampMs:
+          clearFace ? null : (faceTimestampMs ?? this.faceTimestampMs),
+      phase: phase ?? this.phase,
+      storySession:
+          clearStorySession ? null : (storySession ?? this.storySession),
+      roomState: roomState ?? this.roomState,
+      isStoryMode: isStoryMode ?? this.isStoryMode,
+      conversationHistory: conversationHistory ?? this.conversationHistory,
     );
   }
 
   bool get isBusy => isRecording || isProcessing || isPlaying || isConnecting;
+
+  bool get isSessionReady =>
+      phase == RealtimeVoicePhase.ready ||
+      phase == RealtimeVoicePhase.recording ||
+      phase == RealtimeVoicePhase.processing ||
+      phase == RealtimeVoicePhase.playing;
+
+  bool get canRecord =>
+      phase == RealtimeVoicePhase.ready && !isRecording && !isProcessing;
 }
 
-/// Controller for voice chat interactions
+/// Controller for voice chat interactions with story support
 class VoiceChatController extends Notifier<VoiceChatState> {
   final Logger _log = Logger();
   final RealtimeVoiceClient _client;
@@ -113,10 +149,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   bool _commitSent = false;
   bool _socketOpen = false;
   bool _audioEnabled = true;
+  String? _pendingStorySessionId;
 
   static const int _sampleRate = 24000;
   static const String _outputAudioFormat = 'pcm16';
   static const String _outputVoice = 'alloy';
+  static const String _deviceType = 'mobile';
   static const String _permissionError =
       'Microphone permission is required for voice chat';
   static const double _silenceThreshold = 0.01;
@@ -158,11 +196,200 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     return const VoiceChatState();
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Story Session Management
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /// Start a new story session and begin voice interaction.
+  ///
+  /// [storyId] - The story to start
+  /// Connects to the voice bridge, sends story_start, and waits for story_session_ready.
+  Future<void> startStorySession(String storyId) async {
+    try {
+      if (state.isBusy) {
+        _log.w('Cannot start story session: already busy');
+        return;
+      }
+
+      _pendingStorySessionId = null;
+      _aiTextBuffer.clear();
+      _commitSent = false;
+      _resetAudioBuffer();
+
+      state = state.copyWith(
+        isConnecting: true,
+        isProcessing: false,
+        isPlaying: false,
+        isStoryMode: true,
+        phase: RealtimeVoicePhase.connecting,
+        aiResponse: null,
+        userTranscription: null,
+        clearAiAudio: true,
+        errorMessage: null,
+        clearFace: true,
+        conversationHistory: [],
+      );
+
+      await _connectSocket();
+
+      // Send story_start after connection
+      final deviceId = await DeviceIdService.getDeviceId();
+      _client.sendStoryStart(
+        storyId: storyId,
+        deviceType: _deviceType,
+        deviceId: deviceId,
+      );
+
+      state = state.copyWith(
+        phase: RealtimeVoicePhase.waitingForReady,
+        isConnecting: true,
+      );
+
+      _log.i('Story session starting for story: $storyId');
+    } catch (e, st) {
+      _log.e('Failed to start story session', error: e, stackTrace: st);
+      state = state.copyWith(
+        isConnecting: false,
+        isProcessing: false,
+        isPlaying: false,
+        phase: RealtimeVoicePhase.error,
+        errorMessage: '$e',
+      );
+      await _teardownSocket();
+    }
+  }
+
+  /// Resume an existing story session.
+  ///
+  /// [storySessionId] - The session ID to resume
+  /// Connects with story_session_id in query params and waits for story_session_ready.
+  Future<void> resumeStorySession(String storySessionId) async {
+    try {
+      if (state.isBusy) {
+        _log.w('Cannot resume story session: already busy');
+        return;
+      }
+
+      _pendingStorySessionId = storySessionId;
+      _aiTextBuffer.clear();
+      _commitSent = false;
+      _resetAudioBuffer();
+
+      state = state.copyWith(
+        isConnecting: true,
+        isProcessing: false,
+        isPlaying: false,
+        isStoryMode: true,
+        phase: RealtimeVoicePhase.connecting,
+        aiResponse: null,
+        userTranscription: null,
+        clearAiAudio: true,
+        errorMessage: null,
+        clearFace: true,
+      );
+
+      await _connectSocket(storySessionId: storySessionId);
+
+      state = state.copyWith(
+        phase: RealtimeVoicePhase.waitingForReady,
+        isConnecting: true,
+      );
+
+      _log.i('Resuming story session: $storySessionId');
+    } catch (e, st) {
+      _log.e('Failed to resume story session', error: e, stackTrace: st);
+      state = state.copyWith(
+        isConnecting: false,
+        isProcessing: false,
+        isPlaying: false,
+        phase: RealtimeVoicePhase.error,
+        errorMessage: '$e',
+      );
+      await _teardownSocket();
+    }
+  }
+
+  /// Pause the current story session.
+  Future<void> pauseStorySession() async {
+    if (!state.isStoryMode || state.storySession == null) {
+      _log.w('Cannot pause: no active story session');
+      return;
+    }
+
+    _client.sendStoryPause();
+    state = state.copyWith(phase: RealtimeVoicePhase.paused);
+    _log.i('Story session paused');
+  }
+
+  /// Resume a paused story session.
+  Future<void> resumePausedSession() async {
+    if (!state.isStoryMode || state.phase != RealtimeVoicePhase.paused) {
+      _log.w('Cannot resume: session not paused');
+      return;
+    }
+
+    _client.sendStoryResume();
+    _log.i('Requesting story session resume');
+  }
+
+  /// Request device takeover for the current session.
+  Future<void> requestDeviceTakeover() async {
+    final session = state.storySession;
+    if (session == null || !session.isValid) {
+      _log.w('Cannot request takeover: no active session');
+      return;
+    }
+
+    final deviceId = await DeviceIdService.getDeviceId();
+    _client.sendDeviceTakeover(
+      sessionId: session.sessionId,
+      deviceType: _deviceType,
+      deviceId: deviceId,
+    );
+    _log.i('Requesting device takeover');
+  }
+
+  /// Leave the current story room.
+  void leaveRoom() {
+    if (state.roomState == null) {
+      _log.w('Cannot leave room: not in a room');
+      return;
+    }
+
+    _client.sendLeaveRoom();
+    _log.i('Leaving story room');
+  }
+
+  /// End the current story session and disconnect.
+  Future<void> endStorySession() async {
+    await cancelRecording();
+    state = state.copyWith(
+      isStoryMode: false,
+      clearStorySession: true,
+      phase: RealtimeVoicePhase.idle,
+      conversationHistory: [],
+    );
+    _log.i('Story session ended');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Recording (works in both story and non-story modes)
+  // ─────────────────────────────────────────────────────────────────────────────
+
   /// Start recording user voice and streaming it to the realtime endpoint.
   Future<void> startRecording() async {
     try {
       if (state.isBusy) {
         _log.w('Cannot start recording: already busy');
+        return;
+      }
+
+      // In story mode, ensure we have a ready session
+      if (state.isStoryMode && !state.isSessionReady) {
+        _log.w('Cannot start recording: story session not ready');
+        state = state.copyWith(
+          errorMessage: 'Story session not ready. Please wait.',
+        );
         return;
       }
 
@@ -175,7 +402,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _resetAudioBuffer();
 
       state = state.copyWith(
-        isConnecting: true,
+        isRecording: false,
+        isConnecting: !state.isStoryMode,
         isProcessing: false,
         isPlaying: false,
         aiResponse: null,
@@ -183,11 +411,16 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         clearAiAudio: true,
         errorMessage: null,
         clearFace: true,
+        phase: state.isStoryMode ? RealtimeVoicePhase.recording : state.phase,
       );
 
-      await _connectSocket();
+      // Only connect if not in story mode (story mode already connected)
+      if (!state.isStoryMode) {
+        await _connectSocket();
+      }
+
       await _startRecorder();
-      _log.i('Voice session started');
+      _log.i('Voice recording started');
     } catch (e, st) {
       _log.e('Failed to start recording', error: e, stackTrace: st);
       state = state.copyWith(
@@ -195,13 +428,16 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isProcessing: false,
         isConnecting: false,
         isPlaying: false,
+        phase: state.isStoryMode ? RealtimeVoicePhase.error : state.phase,
         errorMessage: '$e',
       );
-      await _teardownSocket();
+      if (!state.isStoryMode) {
+        await _teardownSocket();
+      }
     }
   }
 
-  Future<void> _connectSocket() async {
+  Future<void> _connectSocket({String? storySessionId}) async {
     final uri = await _voiceUri();
     if (uri == null) {
       throw VoiceChatException('Voice websocket URL is missing or invalid');
@@ -209,8 +445,22 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
     await _teardownSocket();
 
+    // Get auth token for story sessions
+    String? token;
+    if (state.isStoryMode || storySessionId != null) {
+      final authState = ref.read(authControllerProvider);
+      token = authState.value != null
+          ? ref.read(authControllerProvider.notifier).tokens?.accessToken
+          : null;
+    }
+
+    final config = RealtimeVoiceConfig(
+      token: token,
+      storySessionId: storySessionId ?? _pendingStorySessionId,
+    );
+
     _log.i('Connecting to realtime voice socket $uri');
-    await _client.connect(uri);
+    await _client.connect(uri, config: config);
     _socketOpen = true;
     _socketSub = _client.messages.listen(
       _handleIncomingMessage,
@@ -236,9 +486,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (uri.scheme == 'https') uri = uri.replace(scheme: 'wss');
     if (uri.scheme == 'http') uri = uri.replace(scheme: 'ws');
     if (uri.hasFragment) uri = uri.replace(fragment: '');
-    final qp = Map<String, String>.from(uri.queryParameters);
-    if (qp.isEmpty) return uri;
-    return uri.replace(queryParameters: qp);
+    return uri;
   }
 
   Future<void> _startRecorder() async {
@@ -273,6 +521,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isProcessing: false,
         isPlaying: false,
         errorMessage: null,
+        phase: state.isStoryMode ? RealtimeVoicePhase.recording : state.phase,
       );
     } catch (e, st) {
       _log.e('Failed to start streaming recorder', error: e, stackTrace: st);
@@ -283,9 +532,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isConnecting: false,
         isPlaying: false,
         clearFace: true,
+        phase: state.isStoryMode ? RealtimeVoicePhase.error : state.phase,
         errorMessage: 'Failed to start recording: $e',
       );
-      await _teardownSocket();
+      if (!state.isStoryMode) {
+        await _teardownSocket();
+      }
     }
   }
 
@@ -303,11 +555,18 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
     if (!_socketOpen) return;
     _audioBuffer.add(bytes);
-    final encoded = base64Encode(bytes);
-    _client.send({
-      'type': 'input_audio_buffer.append',
-      'audio': encoded,
-    });
+
+    // Use the new audio append method for story mode
+    if (state.isStoryMode) {
+      final encoded = base64Encode(bytes);
+      _client.sendAudioAppend(encoded, sampleRate: _sampleRate);
+    } else {
+      final encoded = base64Encode(bytes);
+      _client.send({
+        'type': 'input_audio_buffer.append',
+        'audio': encoded,
+      });
+    }
   }
 
   void _startSilenceTimer() {
@@ -315,7 +574,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (_silenceTimer != null && _silenceTimer!.isActive) return;
     _silenceTimer = Timer(_silenceDuration, () {
       if (state.isRecording) {
-        _log.i('Silence detected for $_silenceDuration, auto-stopping recording');
+        _log.i(
+            'Silence detected for $_silenceDuration, auto-stopping recording');
         stopRecordingAndSend();
       }
     });
@@ -337,7 +597,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       await _stopRecorder();
       _commitInput();
-      await _createResponseFromAudio();
+
+      // In story mode, just commit - server handles response
+      // In non-story mode, create response from audio
+      if (!state.isStoryMode) {
+        await _createResponseFromAudio();
+      }
+
       if (!ref.mounted) return;
       state = state.copyWith(
         isRecording: false,
@@ -345,6 +611,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isPlaying: false,
         isConnecting: false,
         errorMessage: null,
+        phase: state.isStoryMode ? RealtimeVoicePhase.processing : state.phase,
       );
     } catch (e, st) {
       _log.e('Failed to stop recording', error: e, stackTrace: st);
@@ -356,9 +623,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isPlaying: false,
         clearAiAudio: true,
         clearFace: true,
+        phase: state.isStoryMode ? RealtimeVoicePhase.error : state.phase,
         errorMessage: 'Failed to process voice: $e',
       );
-      await _teardownSocket();
+      if (!state.isStoryMode) {
+        await _teardownSocket();
+      }
     }
   }
 
@@ -381,12 +651,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   /// Queue RMS values from audio chunks for synchronized playback animation.
-  /// Each chunk is broken into smaller segments to match playback timing.
   void _queueAiAudioLevel(Uint8List bytes) {
     if (bytes.isEmpty) return;
 
-    // Calculate RMS for segments of audio (~50ms each for smooth animation)
-    // At 24000 Hz, 16-bit samples: 50ms = 1200 samples = 2400 bytes
     const segmentBytes = 2400;
 
     for (var offset = 0; offset < bytes.length; offset += segmentBytes) {
@@ -396,18 +663,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _pendingAiRmsValues.add(rms);
     }
 
-    // Start the timer if not running
     _startAiAudioLevelTimer();
   }
 
-  /// Start timer that emits RMS values at playback rate (~50ms intervals)
   void _startAiAudioLevelTimer() {
     if (_aiAudioLevelTimer != null && _aiAudioLevelTimer!.isActive) return;
 
-    // Emit RMS values every 50ms to match audio segment duration
     _aiAudioLevelTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       if (_pendingAiRmsValues.isEmpty) {
-        // No more audio to play, stop and emit silence
         _stopAiAudioLevelTimer();
         _emitAiAudioLevelValue(0.0);
         return;
@@ -418,7 +681,6 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     });
   }
 
-  /// Stop the RMS emission timer and clear pending values
   void _stopAiAudioLevelTimer() {
     _aiAudioLevelTimer?.cancel();
     _aiAudioLevelTimer = null;
@@ -448,7 +710,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _commitInput() {
     if (_commitSent || !_socketOpen) return;
-    _client.send({'type': 'input_audio_buffer.commit'});
+    if (state.isStoryMode) {
+      _client.sendAudioCommit();
+    } else {
+      _client.send({'type': 'input_audio_buffer.commit'});
+    }
     _commitSent = true;
   }
 
@@ -497,18 +763,43 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
     final payload = message.json;
     if (payload == null) return;
-    final type = (payload['type'] as String?) ?? '';
-    _log.t('Voice socket message type=$type');
+    final type = message.type;
+    final typeStr = (payload['type'] as String?) ?? '';
+    _log.t('Voice socket message type=$typeStr');
 
     switch (type) {
-      case 'response.created':
+      // Story-specific messages
+      case RealtimeServerMessageType.storySessionReady:
+        _handleStorySessionReady(payload);
+        break;
+      case RealtimeServerMessageType.storyStarted:
+        _handleStoryStarted(payload);
+        break;
+      case RealtimeServerMessageType.storyResponse:
+        _handleStoryResponse(payload);
+        break;
+      case RealtimeServerMessageType.takeoverGranted:
+        _handleTakeoverResult(payload, true);
+        break;
+      case RealtimeServerMessageType.takeoverDenied:
+        _handleTakeoverResult(payload, false);
+        break;
+      case RealtimeServerMessageType.roomJoined:
+        _handleRoomJoined(payload);
+        break;
+      case RealtimeServerMessageType.conversationItemCreate:
+        _handleConversationItem(payload);
+        break;
+
+      // Audio/transcript messages
+      case RealtimeServerMessageType.responseCreated:
         state = state.copyWith(isProcessing: true, isConnecting: false);
         break;
-      case 'response.audio':
-      case 'response.audio.delta':
-      case 'response.output_audio':
-      case 'response.output_audio.delta':
-      case 'output_audio.delta': // backward compatibility
+      case RealtimeServerMessageType.responseAudio:
+      case RealtimeServerMessageType.responseAudioDelta:
+      case RealtimeServerMessageType.responseOutputAudio:
+      case RealtimeServerMessageType.responseOutputAudioDelta:
+      case RealtimeServerMessageType.outputAudioDelta:
         final audio = _firstString([payload['audio'], payload['delta']]);
         if (audio != null && audio.isNotEmpty) {
           _log.t('Voice audio payload length=${audio.length}');
@@ -521,22 +812,28 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           unawaited(_handleAudioDelta(extra));
         }
         break;
-      case 'response.output_item.done':
-      case 'response.content_part.done':
-        final extras = _extractAudioStrings(payload);
-        for (final extra in extras) {
-          unawaited(_handleAudioDelta(extra));
-        }
-        break;
-      case 'response.audio_transcript.delta':
+      case RealtimeServerMessageType.responseAudioTranscriptDelta:
         final text = (payload['delta'] ?? payload['text'] ?? '') as String;
         if (text.isNotEmpty) {
           _aiTextBuffer.write(text);
           state = state.copyWith(aiResponse: _aiTextBuffer.toString());
         }
-        state = state.copyWith(isProcessing: false, isConnecting: false);
+        state = state.copyWith(
+          isProcessing: false,
+          isConnecting: false,
+          phase: state.isStoryMode ? RealtimeVoicePhase.playing : state.phase,
+        );
         break;
-      case 'response.output_text.delta': // backward compatibility
+      case RealtimeServerMessageType.responseAudioTranscriptDone:
+      case RealtimeServerMessageType.responseTextDone:
+        final text = (payload['text'] ?? payload['transcript'] ?? '') as String;
+        if (text.isNotEmpty) {
+          _aiTextBuffer.clear();
+          _aiTextBuffer.write(text);
+          state = state.copyWith(aiResponse: text);
+        }
+        break;
+      case RealtimeServerMessageType.responseTextDelta:
         final text = payload['text'] as String? ?? '';
         if (text.isNotEmpty) {
           _aiTextBuffer.write(text);
@@ -544,54 +841,129 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         }
         state = state.copyWith(isProcessing: false, isConnecting: false);
         break;
-      case 'response.done':
+      case RealtimeServerMessageType.responseDone:
         state = state.copyWith(
           isProcessing: false,
           isConnecting: false,
+          phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
         );
         _commitSent = false;
         break;
-      case 'response.error':
-        final error =
-            payload['error'] is Map<String, dynamic> ? payload['error'] : null;
-        final messageText = error != null
-            ? (error['message'] as String? ?? '$error')
-            : (payload['message'] as String? ?? 'Unknown error');
-        state = state.copyWith(
-          isProcessing: false,
-          isConnecting: false,
-          isPlaying: false,
-          isRecording: false,
-          clearFace: true,
-          errorMessage: messageText,
-        );
+      case RealtimeServerMessageType.responseError:
+      case RealtimeServerMessageType.error:
+        _handleErrorMessage(payload);
         break;
-      case 'error':
-        final error = payload['error'] is Map<String, dynamic>
-            ? payload['error'] as Map<String, dynamic>
-            : null;
-        final messageText = error != null
-            ? (error['message'] as String? ?? '$error')
-            : (payload['message'] as String? ?? 'Unknown error');
-        _log.w('Voice socket error message: $payload');
-        state = state.copyWith(
-          isProcessing: false,
-          isConnecting: false,
-          isPlaying: false,
-          isRecording: false,
-          clearFace: true,
-          errorMessage: messageText,
-        );
-        break;
-      default:
+      case RealtimeServerMessageType.unknown:
+        // Handle backward compatibility and extract any audio
         final extras = _extractAudioStrings(payload);
         if (extras.isNotEmpty) {
           for (final extra in extras) {
             unawaited(_handleAudioDelta(extra));
           }
         }
+        // Also check for output_text.delta backward compatibility
+        if (typeStr == 'response.output_text.delta') {
+          final text = payload['text'] as String? ?? '';
+          if (text.isNotEmpty) {
+            _aiTextBuffer.write(text);
+            state = state.copyWith(aiResponse: _aiTextBuffer.toString());
+          }
+          state = state.copyWith(isProcessing: false, isConnecting: false);
+        }
         break;
     }
+  }
+
+  void _handleStorySessionReady(Map<String, dynamic> payload) {
+    _log.i('Story session ready');
+    final sessionInfo = StorySessionInfo.fromJson(payload);
+    state = state.copyWith(
+      phase: RealtimeVoicePhase.ready,
+      isConnecting: false,
+      isProcessing: false,
+      storySession: sessionInfo.isValid ? sessionInfo : state.storySession,
+      errorMessage: null,
+    );
+  }
+
+  void _handleStoryStarted(Map<String, dynamic> payload) {
+    _log.i('Story started: $payload');
+    final sessionInfo = StorySessionInfo.fromJson(payload);
+    final roomData = payload['room'] as Map<String, dynamic>?;
+    RoomState? roomState;
+    if (roomData != null) {
+      roomState = RoomState.fromJson(roomData);
+    }
+    state = state.copyWith(
+      storySession: sessionInfo,
+      roomState: roomState,
+      // Don't set ready yet - wait for story_session_ready
+    );
+  }
+
+  void _handleStoryResponse(Map<String, dynamic> payload) {
+    _log.i('Story response: $payload');
+    final action = payload['action'] as String?;
+    if (action == 'paused') {
+      state = state.copyWith(phase: RealtimeVoicePhase.paused);
+    } else if (action == 'resumed') {
+      state = state.copyWith(phase: RealtimeVoicePhase.ready);
+    }
+  }
+
+  void _handleTakeoverResult(Map<String, dynamic> payload, bool granted) {
+    _log.i('Device takeover ${granted ? 'granted' : 'denied'}: $payload');
+    if (granted) {
+      state = state.copyWith(
+        phase: RealtimeVoicePhase.ready,
+        errorMessage: null,
+      );
+    } else {
+      final reason = payload['reason'] as String? ?? 'Takeover denied';
+      state = state.copyWith(errorMessage: reason);
+    }
+  }
+
+  void _handleRoomJoined(Map<String, dynamic> payload) {
+    _log.i('Room joined: $payload');
+    final roomState = RoomState.fromJson(payload);
+    state = state.copyWith(roomState: roomState);
+  }
+
+  void _handleConversationItem(Map<String, dynamic> payload) {
+    _log.i('Conversation item: $payload');
+    final item = ConversationItem.fromJson(payload);
+    final history = [...state.conversationHistory, item];
+    state = state.copyWith(conversationHistory: history);
+  }
+
+  void _handleErrorMessage(Map<String, dynamic> payload) {
+    final error = RealtimeVoiceError.fromJson(payload);
+    _log.w('Voice socket error: ${error.code} - ${error.message}');
+
+    // Check for story-specific errors
+    if (error.isStoryContextRequired || error.isStorySessionRequired) {
+      state = state.copyWith(
+        isProcessing: false,
+        isConnecting: false,
+        isPlaying: false,
+        isRecording: false,
+        clearFace: true,
+        phase: RealtimeVoicePhase.error,
+        errorMessage: 'Story session required. Please start a story first.',
+      );
+      return;
+    }
+
+    state = state.copyWith(
+      isProcessing: false,
+      isConnecting: false,
+      isPlaying: false,
+      isRecording: false,
+      clearFace: true,
+      phase: state.isStoryMode ? RealtimeVoicePhase.error : state.phase,
+      errorMessage: error.message,
+    );
   }
 
   Future<void> _handleAudioDelta(String base64Audio) async {
@@ -615,6 +987,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isProcessing: false,
         isConnecting: false,
         errorMessage: null,
+        phase: state.isStoryMode ? RealtimeVoicePhase.playing : state.phase,
       );
     } catch (e, st) {
       _log.e('Playback error', error: e, stackTrace: st);
@@ -650,6 +1023,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isProcessing: false,
         isConnecting: false,
         errorMessage: null,
+        phase: state.isStoryMode ? RealtimeVoicePhase.playing : state.phase,
       );
     } catch (e, st) {
       _log.e('Playback error', error: e, stackTrace: st);
@@ -677,6 +1051,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isProcessing: false,
       currentExpression: RobotExpression.neutral,
       clearFace: true,
+      phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
     );
   }
 
@@ -741,6 +1116,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         aiResponse: null,
         errorMessage: null,
         clearFace: true,
+        phase: state.isStoryMode ? RealtimeVoicePhase.processing : state.phase,
       );
 
       _client.send({
@@ -768,9 +1144,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       state = state.copyWith(
         isProcessing: false,
         isConnecting: false,
+        phase: state.isStoryMode ? RealtimeVoicePhase.error : state.phase,
         errorMessage: 'Failed to send prompt: $e',
       );
-      await _teardownSocket();
+      if (!state.isStoryMode) {
+        await _teardownSocket();
+      }
     }
   }
 
@@ -786,6 +1165,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isPlaying: false,
       isRecording: false,
       clearFace: true,
+      phase: RealtimeVoicePhase.error,
       errorMessage: '$err',
     );
     _commitSent = false;
@@ -807,6 +1187,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isProcessing: false,
       isPlaying: false,
       isRecording: false,
+      phase: RealtimeVoicePhase.closed,
     );
     _commitSent = false;
   }
@@ -822,6 +1203,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _aiTextBuffer.clear();
     _commitSent = false;
     _resetAudioBuffer();
+    _pendingStorySessionId = null;
     state = state.copyWith(
       isRecording: false,
       isProcessing: false,
@@ -832,6 +1214,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       clearAiAudio: true,
       clearFace: true,
       errorMessage: null,
+      phase: RealtimeVoicePhase.idle,
+      isStoryMode: false,
+      clearStorySession: true,
     );
   }
 
@@ -841,7 +1226,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
     await _player.stop();
-    await _teardownSocket();
+
+    // In story mode, don't tear down socket
+    if (!state.isStoryMode) {
+      await _teardownSocket();
+    }
+
     _resetAudioBuffer();
     state = state.copyWith(
       isPlaying: false,
@@ -849,6 +1239,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isConnecting: false,
       currentExpression: RobotExpression.neutral,
       clearFace: true,
+      phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
     );
   }
 
@@ -980,7 +1371,6 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _disableAudio() {
     _audioEnabled = false;
-    // Stop any ongoing playback immediately.
     unawaited(_player.stop());
   }
 }
@@ -997,5 +1387,5 @@ class VoiceChatException implements Exception {
 /// Provider for voice chat controller
 final voiceChatControllerProvider =
     NotifierProvider.autoDispose<VoiceChatController, VoiceChatState>(
-      VoiceChatController.new,
-    );
+  VoiceChatController.new,
+);

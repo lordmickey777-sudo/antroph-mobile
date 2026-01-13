@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
@@ -10,6 +11,7 @@ import 'package:antroph_mobile/features/story/models/story_playlists_models.dart
 import 'package:antroph_mobile/features/story/presentation/story_player_page.dart';
 import '../providers/story_playlists_provider.dart';
 import '../providers/story_providers.dart';
+import '../data/stories_cache.dart';
 
 class CollectionsPage extends ConsumerWidget {
   const CollectionsPage({super.key});
@@ -39,7 +41,8 @@ class CollectionsPage extends ConsumerWidget {
           if (items.isEmpty) {
             return const EmptyState(
               title: 'No collections yet',
-              description: 'Keep an eye out for curated series coming your way.',
+              description:
+                  'Keep an eye out for curated series coming your way.',
               assetPath: 'assets/images/antroph_smile.png',
             );
           }
@@ -53,10 +56,14 @@ class CollectionsPage extends ConsumerWidget {
               return _CollectionCard(
                 collection: collection,
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => CollectionDetailPage(collection: collection)),
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        CollectionDetailPage(collection: collection),
+                  ),
                 ),
-                onStartChat: () => _startChatForCollection(context, collection.name),
-                onRemove: () => _removeCollectionStories(context, ref, collection),
+                onStartChat: () => _startChatForCollection(context, collection),
+                onRemove: () =>
+                    _removeCollectionStories(context, ref, collection),
               );
             },
           );
@@ -65,9 +72,25 @@ class CollectionsPage extends ConsumerWidget {
     );
   }
 
-  void _startChatForCollection(BuildContext context, String title) {
+  void _startChatForCollection(BuildContext context, PlaylistDto collection) {
+    // Use the collection id as the story id since each playlist item is a story
+    final storyId = collection.id;
+    if (storyId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to start story'),
+          backgroundColor: Color(0xFF2A2A2A),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ChatPage(storyTitle: title.isNotEmpty ? title : 'Chat')),
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          storyTitle: collection.name.isNotEmpty ? collection.name : 'Chat',
+          storyId: storyId,
+        ),
+      ),
     );
   }
 
@@ -76,7 +99,8 @@ class CollectionsPage extends ConsumerWidget {
     WidgetRef ref,
     PlaylistDto collection,
   ) async {
-    if (collection.storyIds.isEmpty) {
+    final id = collection.id;
+    if (id.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No stories to remove'),
@@ -87,19 +111,14 @@ class CollectionsPage extends ConsumerWidget {
     }
     final repo = ref.read(storiesRepositoryProvider);
     try {
-      await repo.removeStoriesFromPlaylist(
-        playlistId: collection.id,
-        storyIds: collection.storyIds,
-      );
+      // Optimistically refresh to remove it from UI quickly.
       ref.invalidate(storyPlaylistsProvider);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Stories removed from playlist'),
-            backgroundColor: Color(0xFF2A2A2A),
-          ),
-        );
-      }
+      await StoriesCacheService.clear();
+      ref.invalidate(storiesHomeSectionsProvider);
+      await repo.removeStoriesFromCollection(storyIds: [id]);
+      ref.invalidate(storyPlaylistsProvider);
+      await StoriesCacheService.clear();
+      ref.invalidate(storiesHomeSectionsProvider);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -126,10 +145,16 @@ class CollectionDetailPage extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: TypographyText(collection.name, variant: TypographyVariant.h2, color: Colors.white),
+        title: TypographyText(
+          collection.name,
+          variant: TypographyVariant.h2,
+          color: Colors.white,
+        ),
       ),
       body: asyncDetail.when(
-        loading: () => const Center(child: CupertinoActivityIndicator(color: Colors.white)),
+        loading: () => const Center(
+          child: CupertinoActivityIndicator(color: Colors.white),
+        ),
         error: (err, st) => _PageError(
           message: 'Unable to load stories for this collection.',
           onRetry: () => ref.refresh(playlistDetailProvider(collection.id)),
@@ -138,7 +163,8 @@ class CollectionDetailPage extends ConsumerWidget {
           if (detail.stories.isEmpty) {
             return const EmptyState(
               title: 'Nothing to show yet',
-              description: 'This collection does not have stories ready for play.',
+              description:
+                  'This collection does not have stories ready for play.',
               assetPath: 'assets/images/antroph_neutral.png',
             );
           }
@@ -154,7 +180,8 @@ class CollectionDetailPage extends ConsumerWidget {
                   story: story,
                   onPlay: () => _startStory(context, story),
                   onStartChat: () => _startChatForStory(context, story),
-                  onRemove: () => _removeStoryFromPlaylist(context, ref, story),
+                  onRemove: () =>
+                      _removeStoryFromCollection(context, ref, story),
                 ),
               );
             },
@@ -173,24 +200,30 @@ class CollectionDetailPage extends ConsumerWidget {
   void _startChatForStory(BuildContext context, PlaylistStoryDto story) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatPage(storyTitle: story.title.isNotEmpty ? story.title : 'Chat'),
+        builder: (_) => ChatPage(
+          storyTitle: story.title.isNotEmpty ? story.title : 'Chat',
+          storyId: story.storyId,
+        ),
       ),
     );
   }
 
-  Future<void> _removeStoryFromPlaylist(BuildContext context, WidgetRef ref, PlaylistStoryDto story) async {
+  Future<void> _removeStoryFromCollection(
+    BuildContext context,
+    WidgetRef ref,
+    PlaylistStoryDto story,
+  ) async {
     final repo = ref.read(storiesRepositoryProvider);
     try {
-      await repo.removeStoriesFromPlaylist(
-        playlistId: collection.id,
-        storyIds: [story.storyId],
-      );
+      await repo.removeStoriesFromCollection(storyIds: [story.storyId]);
       ref.invalidate(playlistDetailProvider(collection.id));
       ref.invalidate(storyPlaylistsProvider);
+      await StoriesCacheService.clear();
+      ref.invalidate(storiesHomeSectionsProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Story removed from playlist'),
+            content: Text('Story removed from collection'),
             backgroundColor: Color(0xFF2A2A2A),
           ),
         );
@@ -219,12 +252,12 @@ class _CollectionCard extends StatelessWidget {
   final PlaylistDto collection;
   final VoidCallback onTap;
   final VoidCallback onStartChat;
-  final VoidCallback onRemove;
+  final Future<void> Function() onRemove;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: onStartChat,
       child: SmoothClipRRect(
         smoothness: 0.6,
         borderRadius: BorderRadius.circular(20),
@@ -259,7 +292,7 @@ class _CollectionCard extends StatelessWidget {
                 right: 8,
                 child: _StyledPopupMenu(
                   onRemove: onRemove,
-                  removeLabel: 'Remove collection',
+                  removeLabel: 'Remove from collection',
                 ),
               ),
               // Content at bottom
@@ -281,7 +314,10 @@ class _CollectionCard extends StatelessWidget {
                     GestureDetector(
                       onTap: onStartChat,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 20,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(100),
@@ -289,7 +325,11 @@ class _CollectionCard extends StatelessWidget {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: const [
-                            Icon(CupertinoIcons.play_fill, color: Colors.black, size: 18),
+                            Icon(
+                              CupertinoIcons.play_fill,
+                              color: Colors.black,
+                              size: 18,
+                            ),
                             SizedBox(width: 6),
                             TypographyText(
                               'Start story',
@@ -323,7 +363,7 @@ class _CollectionStoryCard extends StatelessWidget {
   final PlaylistStoryDto story;
   final VoidCallback onPlay;
   final VoidCallback onStartChat;
-  final VoidCallback onRemove;
+  final Future<void> Function() onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -364,7 +404,7 @@ class _CollectionStoryCard extends StatelessWidget {
                 right: 8,
                 child: _StyledPopupMenu(
                   onRemove: onRemove,
-                  removeLabel: 'Remove from playlist',
+                  removeLabel: 'Remove from collection',
                 ),
               ),
               // Content at bottom
@@ -398,7 +438,10 @@ class _CollectionStoryCard extends StatelessWidget {
                         GestureDetector(
                           onTap: onPlay,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 20,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(100),
@@ -406,7 +449,11 @@ class _CollectionStoryCard extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: const [
-                                Icon(CupertinoIcons.play_fill, color: Colors.black, size: 18),
+                                Icon(
+                                  CupertinoIcons.play_fill,
+                                  color: Colors.black,
+                                  size: 18,
+                                ),
                                 SizedBox(width: 6),
                                 TypographyText(
                                   'Play',
@@ -422,16 +469,25 @@ class _CollectionStoryCard extends StatelessWidget {
                         GestureDetector(
                           onTap: onStartChat,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 20,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(100),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.2),
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: const [
-                                Icon(CupertinoIcons.chat_bubble_2_fill, color: Colors.white, size: 18),
+                                Icon(
+                                  CupertinoIcons.chat_bubble_2_fill,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
                                 SizedBox(width: 6),
                                 TypographyText(
                                   'Chat',
@@ -471,7 +527,11 @@ class _CollectionImage extends StatelessWidget {
         fit: BoxFit.cover,
         width: double.infinity,
         errorBuilder: (context, error, stackTrace) {
-          return Image.asset('assets/images/default.png', fit: BoxFit.cover, width: double.infinity);
+          return Image.asset(
+            'assets/images/default.png',
+            fit: BoxFit.cover,
+            width: double.infinity,
+          );
         },
       );
     }
@@ -481,51 +541,25 @@ class _CollectionImage extends StatelessWidget {
 }
 
 class _StyledPopupMenu extends StatelessWidget {
-  const _StyledPopupMenu({
-    required this.onRemove,
-    required this.removeLabel,
-  });
+  const _StyledPopupMenu({required this.onRemove, required this.removeLabel});
 
-  final VoidCallback onRemove;
+  final Future<void> Function() onRemove;
   final String removeLabel;
 
-  Future<void> _showRemoveConfirmation(BuildContext context) async {
-    final confirmed = await showCupertinoModalPopup<bool>(
+  Future<void> _showActionsSheet(BuildContext context) async {
+    await showCupertinoModalBottomSheet(
       context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: Text(
-          removeLabel,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        message: const Text(
-          'This action cannot be undone.',
-          style: TextStyle(fontSize: 13),
-        ),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(context).pop(true),
-            isDestructiveAction: true,
-            child: const Text('Remove'),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-      ),
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.7),
+      builder: (_) =>
+          _CollectionActionsSheet(onRemove: onRemove, removeLabel: removeLabel),
     );
-    if (confirmed == true) {
-      onRemove();
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => _showRemoveConfirmation(context),
+      onTap: () => _showActionsSheet(context),
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
@@ -543,10 +577,114 @@ class _StyledPopupMenu extends StatelessWidget {
             ),
           ],
         ),
-        child: const Icon(
-          Icons.more_vert,
-          color: Colors.white,
-          size: 20,
+        child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+      ),
+    );
+  }
+}
+
+class _CollectionActionsSheet extends StatelessWidget {
+  const _CollectionActionsSheet({
+    required this.onRemove,
+    required this.removeLabel,
+  });
+
+  final Future<void> Function() onRemove;
+  final String removeLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).padding.bottom;
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF101214),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(20, 12, 20, bottom + 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(50),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).maybePop(),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        CupertinoIcons.xmark,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _MinimalActionTile(
+                icon: CupertinoIcons.trash,
+                label: removeLabel,
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  await onRemove();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MinimalActionTile extends StatelessWidget {
+  const _MinimalActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+                fontSize: 16,
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ],
         ),
       ),
     );

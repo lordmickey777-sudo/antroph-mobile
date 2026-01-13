@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/navigation/app_route_observer.dart';
 
 import 'package:antroph_mobile/features/home/models/chat_models.dart';
+import 'package:antroph_mobile/features/home/models/realtime_voice_bridge_models.dart';
 import 'package:antroph_mobile/features/home/providers/chat_provider.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
@@ -19,9 +20,21 @@ const _accent = Color(0xFF9CC6FF);
 const _pageGradient = Colors.transparent;
 
 class ChatPage extends ConsumerStatefulWidget {
-  const ChatPage({super.key, this.storyTitle});
+  const ChatPage({
+    super.key,
+    this.storyTitle,
+    this.storyId,
+    this.storySessionId,
+  });
 
   final String? storyTitle;
+  /// If provided, starts a new story voice session with this story ID
+  final String? storyId;
+  /// If provided, resumes an existing story voice session
+  final String? storySessionId;
+
+  /// Whether this chat page is in story mode
+  bool get isStoryMode => storyId != null || storySessionId != null;
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -29,11 +42,30 @@ class ChatPage extends ConsumerStatefulWidget {
 
 class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver, RouteAware {
   ModalRoute<void>? _modalRoute;
+  bool _storySessionStarted = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Start story session if in story mode
+    if (widget.isStoryMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _initStorySession();
+      });
+    }
+  }
+
+  void _initStorySession() {
+    if (_storySessionStarted) return;
+    _storySessionStarted = true;
+
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    if (widget.storySessionId != null) {
+      voiceController.resumeStorySession(widget.storySessionId!);
+    } else if (widget.storyId != null) {
+      voiceController.startStorySession(widget.storyId!);
+    }
   }
 
   @override
@@ -54,6 +86,14 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     if (_modalRoute != null) {
       appRouteObserver.unsubscribe(this);
     }
+    // Stop voice playback and end session when leaving
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    if (widget.isStoryMode) {
+      voiceController.pauseStorySession();
+      voiceController.endStorySession();
+    } else {
+      voiceController.stopPlayback();
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -61,21 +101,43 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final controller = ref.read(chatControllerProvider.notifier);
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       controller.pause();
+      // Pause voice session to stop AI from talking in the background
+      if (widget.isStoryMode) {
+        voiceController.pauseStorySession();
+      } else {
+        voiceController.stopPlayback();
+      }
     } else if (state == AppLifecycleState.resumed) {
       controller.resume();
+      // Resume voice session if it was paused
+      if (widget.isStoryMode) {
+        voiceController.resumePausedSession();
+      }
     }
   }
 
   @override
   void didPushNext() {
     ref.read(chatControllerProvider.notifier).pause();
+    // Pause voice session when navigating to another page
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    if (widget.isStoryMode) {
+      voiceController.pauseStorySession();
+    } else {
+      voiceController.stopPlayback();
+    }
   }
 
   @override
   void didPopNext() {
     ref.read(chatControllerProvider.notifier).resume();
+    // Resume voice session when returning to this page
+    if (widget.isStoryMode) {
+      ref.read(voiceChatControllerProvider.notifier).resumePausedSession();
+    }
   }
 
   @override
@@ -343,6 +405,30 @@ class _Header extends StatelessWidget {
   }
 
   _StatusData _voiceStatus(VoiceChatState voice) {
+    // Story mode status
+    if (voice.isStoryMode) {
+      switch (voice.phase) {
+        case RealtimeVoicePhase.connecting:
+        case RealtimeVoicePhase.waitingForReady:
+          return const _StatusData('Connecting', Icons.wifi);
+        case RealtimeVoicePhase.ready:
+          return const _StatusData('Story Ready', Icons.auto_stories);
+        case RealtimeVoicePhase.recording:
+          return const _StatusData('Listening', Icons.mic);
+        case RealtimeVoicePhase.processing:
+          return const _StatusData('Processing', Icons.cloud_sync);
+        case RealtimeVoicePhase.playing:
+          return const _StatusData('Narrating', Icons.graphic_eq);
+        case RealtimeVoicePhase.paused:
+          return const _StatusData('Paused', Icons.pause_circle);
+        case RealtimeVoicePhase.error:
+          return const _StatusData('Error', Icons.error_outline);
+        case RealtimeVoicePhase.closed:
+        case RealtimeVoicePhase.idle:
+          return const _StatusData('Disconnected', Icons.cloud_off);
+      }
+    }
+    // Regular voice chat status
     if (voice.isRecording) {
       return const _StatusData('Listening', Icons.mic);
     }

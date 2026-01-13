@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -54,9 +53,12 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
     try {
       final file = await _picker.pickImage(source: source, maxWidth: 512, imageQuality: 75);
       if (file == null) return; // user canceled
-      final bytes = await file.readAsBytes();
-      final base64Data = base64Encode(bytes);
-      final url = await _repo.uploadAvatar(avatarBase64: base64Data);
+
+      final url = await _repo.uploadAvatar(
+        filePath: file.path,
+        fileName: file.name,
+      );
+
       // Update state with new avatar url
       final current = state.value;
       if (current != null) {

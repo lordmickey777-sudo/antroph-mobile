@@ -17,27 +17,41 @@ const Map<String, String> _defaultLanguageOptions = {
   'es': 'Spanish',
   'de': 'German',
   'it': 'Italian',
+  'pt': 'Portuguese',
+  'nl': 'Dutch',
+  'pl': 'Polish',
+  'ru': 'Russian',
+  'ja': 'Japanese',
+  'ko': 'Korean',
+  'zh': 'Chinese',
+  'ar': 'Arabic',
+  'hi': 'Hindi',
+  'tr': 'Turkish',
+  'sv': 'Swedish',
+  'da': 'Danish',
+  'no': 'Norwegian',
+  'fi': 'Finnish',
+  'el': 'Greek',
 };
 
 const List<String> _personalityTypeKeys = [
   'friendly_guide',
-  'storyteller',
-  'mentor',
-  'playful_pal',
+  'wise_storyteller',
+  'playful_companion',
+  'curious_explorer',
 ];
 
 const Map<String, String> _personalityTypeOptions = {
   'friendly_guide': 'Friendly guide',
-  'storyteller': 'Storyteller',
-  'mentor': 'Mentor',
-  'playful_pal': 'Playful pal',
+  'wise_storyteller': 'Wise storyteller',
+  'playful_companion': 'Playful companion',
+  'curious_explorer': 'Curious explorer',
 };
 
 const Map<String, String> _toneOptions = {
+  'formal': 'Formal',
   'casual': 'Casual',
-  'warm': 'Warm',
-  'confident': 'Confident',
-  'soothing': 'Soothing',
+  'playful': 'Playful',
 };
 
 const Map<String, String> _verbosityOptions = {
@@ -54,15 +68,21 @@ const Map<String, String> _languageComplexityOptions = {
 
 const Map<String, String> _ttsVoiceOptions = {
   'alloy': 'Alloy',
-  'nova': 'Nova',
-  'ember': 'Ember',
-  'aurora': 'Aurora',
+  'ash': 'Ash',
+  'ballad': 'Ballad',
+  'coral': 'Coral',
+  'echo': 'Echo',
+  'sage': 'Sage',
+  'shimmer': 'Shimmer',
+  'verse': 'Verse',
+  'marin': 'Marin',
+  'cedar': 'Cedar',
 };
 
 const Map<String, String> _filterLevelOptions = {
-  'lenient': 'Lenient',
-  'moderate': 'Moderate',
   'strict': 'Strict',
+  'moderate': 'Moderate',
+  'minimal': 'Minimal',
 };
 
 String _normalizeOption(Map<String, String> options, String value) {

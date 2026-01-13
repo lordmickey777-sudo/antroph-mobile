@@ -8,6 +8,7 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 import 'package:antroph_mobile/features/story/models/story_models.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
+import 'package:antroph_mobile/features/story/data/stories_cache.dart';
 import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page_shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
@@ -135,6 +136,14 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
   bool _isAdding = false;
 
   @override
+  void didUpdateWidget(covariant _FeaturedStoryCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.story.isAdded != widget.story.isAdded) {
+      _isAdded = widget.story.isAdded;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(30, 8, 30, 24),
@@ -260,6 +269,8 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
         _isAdding = false;
         _isAdded = true;
       });
+      await StoriesCacheService.clear();
+      ref.invalidate(storiesHomeSectionsProvider);
     } catch (err) {
       if (!mounted) return;
       setState(() => _isAdding = false);
@@ -272,8 +283,10 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
   void _navigateToChat() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            ChatPage(storyTitle: widget.story.title.isNotEmpty ? widget.story.title : 'Chat'),
+        builder: (_) => ChatPage(
+          storyTitle: widget.story.title.isNotEmpty ? widget.story.title : 'Chat',
+          storyId: widget.story.id,
+        ),
       ),
     );
   }
@@ -357,7 +370,15 @@ class _StoryCard extends ConsumerStatefulWidget {
 
 class _StoryCardState extends ConsumerState<_StoryCard> {
   bool _isAdding = false;
-  bool _isAdded = false;
+  late bool _isAdded = widget.item.isAdded;
+
+  @override
+  void didUpdateWidget(covariant _StoryCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item.isAdded != widget.item.isAdded) {
+      _isAdded = widget.item.isAdded;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -406,7 +427,10 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
                                 ? const SizedBox(
                                     width: 18,
                                     height: 18,
-                                    child: CupertinoActivityIndicator(radius: 9),
+                                    child: CupertinoActivityIndicator(
+                                      radius: 9,
+                                      color: Colors.black,
+                                    ),
                                   )
                                 : _isAdded
                                 ? const Icon(
@@ -458,9 +482,8 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
         _isAdding = false;
         _isAdded = true;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Story added to playlist')));
+      await StoriesCacheService.clear();
+      ref.invalidate(storiesHomeSectionsProvider);
     } catch (err) {
       if (!mounted) return;
       setState(() => _isAdding = false);
@@ -473,8 +496,10 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
   void _navigateToChat() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            ChatPage(storyTitle: widget.item.title.isNotEmpty ? widget.item.title : 'Chat'),
+        builder: (_) => ChatPage(
+          storyTitle: widget.item.title.isNotEmpty ? widget.item.title : 'Chat',
+          storyId: widget.item.storyId,
+        ),
       ),
     );
   }

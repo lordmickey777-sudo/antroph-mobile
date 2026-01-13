@@ -18,14 +18,31 @@ class ProfileRepository {
     }
   }
 
-  /// Upload avatar image as base64 string to /users/me/avatar
-  /// Returns the avatar URL or opaque response string depending on backend.
-  Future<String> uploadAvatar({required String avatarBase64}) async {
+  /// Upload avatar image via multipart/form-data to /users/me/avatar
+  /// Returns the avatar URL from the response.
+  Future<String> uploadAvatar({
+    required String filePath,
+    required String fileName,
+  }) async {
     try {
-      final res = await _dio.post('/users/me/avatar', data: {'avatar_data': avatarBase64});
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(
+          filePath,
+          filename: fileName,
+        ),
+      });
+      final res = await _dio.post(
+        '/users/me/avatar',
+        data: formData,
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
+      );
       final data = res.data;
       if (data is String) return data;
-      if (data is Map && data['avatar_url'] is String) return data['avatar_url'] as String;
+      if (data is Map && data['avatar_url'] is String) {
+        return data['avatar_url'] as String;
+      }
       return data?.toString() ?? '';
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
