@@ -598,16 +598,9 @@ class _CollectionActionsSheet extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF101214),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 20,
-              offset: const Offset(0, -2),
-            ),
-          ],
+        decoration: const BoxDecoration(
+          color: Color(0xFF101214),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Padding(
           padding: EdgeInsets.fromLTRB(20, 12, 20, bottom + 16),
@@ -622,21 +615,35 @@ class _CollectionActionsSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(50),
                 ),
               ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).maybePop(),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        CupertinoIcons.xmark,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
-              _SheetActionTile(
+              _MinimalActionTile(
                 icon: CupertinoIcons.trash,
                 label: removeLabel,
-                isDestructive: true,
                 onTap: () async {
                   Navigator.of(context).pop();
                   await onRemove();
                 },
-              ),
-              const SizedBox(height: 12),
-              _SheetActionTile(
-                icon: CupertinoIcons.xmark,
-                label: 'Cancel',
-                onTap: () => Navigator.of(context).maybePop(),
               ),
             ],
           ),
@@ -646,60 +653,38 @@ class _CollectionActionsSheet extends StatelessWidget {
   }
 }
 
-class _SheetActionTile extends StatelessWidget {
-  const _SheetActionTile({
+class _MinimalActionTile extends StatelessWidget {
+  const _MinimalActionTile({
     required this.icon,
     required this.label,
     required this.onTap,
-    this.isDestructive = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final bool isDestructive;
 
   @override
   Widget build(BuildContext context) {
-    final color = isDestructive ? Colors.redAccent : Colors.white;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(
-                    alpha: isDestructive ? 0.06 : 0.08,
-                  ),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: color, size: 18),
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+                fontSize: 16,
+                decoration: TextDecoration.none,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

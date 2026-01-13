@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
@@ -98,6 +99,8 @@ class _ProfileMenu extends ConsumerWidget {
       (Icons.attach_money_outlined, 'Subscription', true),
       (Icons.lock_outline, 'Security', true),
       (Icons.help_outline, 'Support', true),
+      (Icons.privacy_tip_outlined, 'Privacy Policy', true),
+      (Icons.description_outlined, 'Terms of Service', true),
       (Icons.delete_outline, 'Delete account', false),
       (Icons.logout, 'Logout', false),
     ];
@@ -121,8 +124,27 @@ class _ProfileMenu extends ConsumerWidget {
                   context.pushNamed('scan');
                   break;
                 case 'Support':
-                  // showToast(context, 'Opening support…');
                   context.pushNamed('support');
+                  break;
+                case 'Privacy Policy':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const _WebViewPage(
+                        title: 'Privacy Policy',
+                        url: 'https://www.antroph.com/privacy/',
+                      ),
+                    ),
+                  );
+                  break;
+                case 'Terms of Service':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const _WebViewPage(
+                        title: 'Terms of Service',
+                        url: 'https://www.antroph.com/terms/',
+                      ),
+                    ),
+                  );
                   break;
                 case 'Delete account':
                   final confirmed = await showDialog<bool>(
@@ -276,6 +298,55 @@ class _BuildNumber extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _WebViewPage extends StatefulWidget {
+  const _WebViewPage({required this.title, required this.url});
+
+  final String title;
+  final String url;
+
+  @override
+  State<_WebViewPage> createState() => _WebViewPageState();
+}
+
+class _WebViewPageState extends State<_WebViewPage> {
+  late final WebViewController _controller;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0xFF101214))
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) => setState(() => _isLoading = false),
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF101214),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF101214),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(widget.title),
+      ),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator(color: Colors.white)),
+        ],
+      ),
     );
   }
 }

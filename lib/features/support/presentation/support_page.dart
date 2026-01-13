@@ -31,7 +31,7 @@ class _SupportPageState extends State<SupportPage> {
       ..setNavigationDelegate(
         NavigationDelegate(onPageFinished: (_) => setState(() => _isLoading = false)),
       )
-      ..loadRequest(Uri.parse('https://antroph.com'));
+      ..loadRequest(Uri.parse('https://www.antroph.com/support/'));
   }
 
   @override
@@ -80,7 +80,7 @@ class _DisabledPlaceholder extends StatelessWidget {
       child: const Padding(
         padding: EdgeInsets.all(24.0),
         child: TypographyText(
-          'Support page (webview disabled in test)\nhttps://antroph.com',
+          'Support page (webview disabled in test)\nhttps://www.antroph.com/support/',
           variant: TypographyVariant.body2,
           color: Colors.white70,
           textAlign: TextAlign.center,
