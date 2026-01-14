@@ -8,6 +8,7 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/features/story/providers/story_session_provider.dart';
+import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 
 class StorySheet extends ConsumerStatefulWidget {
   const StorySheet({
@@ -18,6 +19,7 @@ class StorySheet extends ConsumerStatefulWidget {
     required this.imageAsset,
     this.users,
     this.views,
+    this.isAdded = false,
   });
 
   final String storyId;
@@ -26,6 +28,7 @@ class StorySheet extends ConsumerStatefulWidget {
   final String imageAsset;
   final int? users;
   final int? views;
+  final bool isAdded;
 
   static const _panel = Color(0xFF121516);
 
@@ -34,6 +37,17 @@ class StorySheet extends ConsumerStatefulWidget {
 }
 
 class _StorySheetState extends ConsumerState<StorySheet> {
+  late bool _isAdded = widget.isAdded;
+  bool _isAddingToPlaylist = false;
+
+  @override
+  void didUpdateWidget(covariant StorySheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isAdded != widget.isAdded) {
+      _isAdded = widget.isAdded;
+    }
+  }
+
   @override
   void dispose() {
     // Clear session when sheet is closed
@@ -41,8 +55,6 @@ class _StorySheetState extends ConsumerState<StorySheet> {
 
     super.dispose();
   }
-
-  bool _isAddingToPlaylist = false;
 
   @override
   Widget build(BuildContext context) {
@@ -74,19 +86,24 @@ class _StorySheetState extends ConsumerState<StorySheet> {
                         const SizedBox(height: 16),
                         _HeroCard(
                           size: size,
-                          storyId: widget.storyId,
-                          title: widget.title,
-                          subtitle: widget.subtitle,
                           imageAsset: widget.imageAsset,
                           sessionState: sessionState,
+                          isAdded: _isAdded,
                           isAddingToPlaylist: _isAddingToPlaylist,
                           onAddToPlaylist: _handleAddToPlaylist,
+                          onPlayPressed: _navigateToChat,
                         ),
                         const SizedBox(height: 20),
                         TypographyText(
+                          widget.title,
+                          variant: TypographyVariant.h2,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(height: 8),
+                        TypographyText(
                           widget.subtitle,
                           variant: TypographyVariant.body1,
-                          color: Colors.white,
+                          color: Colors.white70,
                           height: 1.35,
                         ),
                         const SizedBox(height: 16),
@@ -129,6 +146,7 @@ class _StorySheetState extends ConsumerState<StorySheet> {
           .read(storiesRepositoryProvider)
           .addStoriesToPlaylist(storyIds: [widget.storyId]);
       if (!mounted) return;
+      setState(() => _isAdded = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Story added to playlist')),
       );
@@ -144,6 +162,16 @@ class _StorySheetState extends ConsumerState<StorySheet> {
     }
   }
 
+  void _navigateToChat() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          storyTitle: widget.title.isNotEmpty ? widget.title : 'Chat',
+          storyId: widget.storyId,
+        ),
+      ),
+    );
+  }
 }
 
 class _GrabHandle extends StatelessWidget {
@@ -168,30 +196,25 @@ class _GrabHandle extends StatelessWidget {
 class _HeroCard extends ConsumerWidget {
   const _HeroCard({
     required this.size,
-    required this.storyId,
-    required this.title,
-    required this.subtitle,
     required this.imageAsset,
     required this.sessionState,
+    required this.isAdded,
     required this.isAddingToPlaylist,
     required this.onAddToPlaylist,
+    required this.onPlayPressed,
   });
 
   final Size size;
-  final String storyId;
-  final String title;
-  final String subtitle;
   final String imageAsset;
   final StorySessionState sessionState;
+  final bool isAdded;
   final bool isAddingToPlaylist;
   final VoidCallback onAddToPlaylist;
+  final VoidCallback onPlayPressed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cardRadius = 28.0;
-    final session = sessionState.session;
-    final hasSession = session != null;
-    final isPaused = hasSession && session.isPaused;
 
     return Container(
       decoration: BoxDecoration(
@@ -221,100 +244,41 @@ class _HeroCard extends ConsumerWidget {
               ),
             ),
 
-            // Bottom gradient for legibility
+            // Bottom gradient for button legibility
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               child: Container(
-                height: 160,
+                height: 80,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0x00000000), Color(0x99000000), Color(0xCC000000)],
+                    colors: [Color(0x00000000), Color(0x99000000)],
                   ),
                 ),
               ),
             ),
 
-            // Content
+            // Button only
             Positioned(
               left: 16,
               right: 16,
               bottom: 16,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TypographyText(title, variant: TypographyVariant.h2, color: Colors.white),
-                  const SizedBox(height: 6),
-                  TypographyText(subtitle, variant: TypographyVariant.body2, color: Colors.white70),
-                  const SizedBox(height: 14),
-                  if (sessionState.isLoading)
-                    const Center(
+              child: sessionState.isLoading
+                  ? const Center(
                       child: Padding(
                         padding: EdgeInsets.symmetric(vertical: 10),
                         child: CupertinoActivityIndicator(color: Colors.white),
                       ),
+                    )
+                  : _ActionButton(
+                      isAdded: isAdded,
+                      isLoading: isAddingToPlaylist,
+                      onAddPressed: isAddingToPlaylist ? null : onAddToPlaylist,
+                      onPlayPressed: onPlayPressed,
                     ),
-                  // else if (!hasSession)
-                  //   Row(
-                  //     children: [
-                  //       _GlassButton(
-                  //         label: 'Play',
-                  //         icon: CupertinoIcons.play_fill,
-                  //         onPressed: () =>
-                  //             ref.read(storySessionProvider.notifier).startSession(storyId),
-                  //       ),
-                  //       const SizedBox(width: 12),
-                  //       _PrimaryPillButton(
-                  //         label: 'Leave story',
-                  //         // Pop using the root navigator to reliably close the sheet even with nested navigators
-                  //         onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
-                  //       ),
-                  //     ],
-                  //   )
-                  // else if (isPaused)
-                  //   Row(
-                  //     children: [
-                  //       _GlassButton(
-                  //         label: 'Resume',
-                  //         icon: CupertinoIcons.play_fill,
-                  //         onPressed: () =>
-                  //             ref.read(storySessionProvider.notifier).playSession(storyId),
-                  //       ),
-                  //       const SizedBox(width: 12),
-                  //       _PrimaryPillButton(
-                  //         label: 'Leave story',
-                  //         onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
-                  //       ),
-                  //     ],
-                  //   )
-                  // else
-                  //   Row(
-                  //     children: [
-                  //       _GlassButton(
-                  //         label: 'Pause',
-                  //         icon: CupertinoIcons.pause_fill,
-                  //         onPressed: () =>
-                  //             ref.read(storySessionProvider.notifier).pauseSession(storyId),
-                  //       ),
-                  //       const SizedBox(width: 12),
-                  //       _PrimaryPillButton(
-                  //         label: 'Continue',
-                  //         onPressed: () {
-                  //           // TODO: Navigate to story playback screen
-                  //         },
-                  //       ),
-                  //     ],
-                  //   ),
-                  const SizedBox(height: 12),
-                  _AddToPlaylistButton(
-                    onPressed: isAddingToPlaylist ? null : onAddToPlaylist,
-                    isLoading: isAddingToPlaylist,
-                  ),
-                ],
-              ),
             ),
           ],
         ),
@@ -419,41 +383,58 @@ class _PrimaryPillButton extends StatelessWidget {
   }
 }
 
-class _AddToPlaylistButton extends StatelessWidget {
-  const _AddToPlaylistButton({
-    required this.onPressed,
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.isAdded,
     required this.isLoading,
+    required this.onAddPressed,
+    required this.onPlayPressed,
   });
 
-  final VoidCallback? onPressed;
+  final bool isAdded;
   final bool isLoading;
+  final VoidCallback? onAddPressed;
+  final VoidCallback onPlayPressed;
 
   @override
   Widget build(BuildContext context) {
     return AppButton(
-      onPressed: onPressed,
+      onPressed: isLoading
+          ? null
+          : isAdded
+              ? onPlayPressed
+              : onAddPressed,
       style: ElevatedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        backgroundColor: const Color.fromARGB(255, 15, 9, 9).withOpacity(0.78),
-        foregroundColor: Colors.white,
+        backgroundColor: isAdded
+            ? Colors.white
+            : const Color.fromARGB(255, 15, 9, 9).withValues(alpha: 0.78),
+        foregroundColor: isAdded ? Colors.black : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         elevation: 0,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          isLoading
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CupertinoActivityIndicator(color: Colors.white),
-                )
-              : const Icon(Icons.playlist_add, size: 18, color: Colors.white),
+          if (isLoading)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CupertinoActivityIndicator(color: Colors.white),
+            )
+          else if (isAdded)
+            Icon(CupertinoIcons.play_fill, size: 18, color: Colors.black)
+          else
+            const Icon(Icons.playlist_add, size: 18, color: Colors.white),
           const SizedBox(width: 6),
           TypographyText(
-            isLoading ? 'Adding...' : 'My List',
+            isLoading
+                ? 'Adding...'
+                : isAdded
+                    ? 'Play'
+                    : 'My List',
             variant: TypographyVariant.body2,
-            color: Colors.white,
+            color: isAdded ? Colors.black : Colors.white,
           ),
         ],
       ),
