@@ -15,23 +15,49 @@ const Map<String, String> _defaultLanguageOptions = {
   'en': 'English',
   'fr': 'French',
   'es': 'Spanish',
-  'de': 'German',
-  'it': 'Italian',
   'pt': 'Portuguese',
-  'nl': 'Dutch',
-  'pl': 'Polish',
+  'ar': 'Arabic',
+  'zh': 'Chinese',
+  'hi': 'Hindi',
+  'bn': 'Bengali',
   'ru': 'Russian',
   'ja': 'Japanese',
   'ko': 'Korean',
-  'zh': 'Chinese',
-  'ar': 'Arabic',
-  'hi': 'Hindi',
+  'de': 'German',
+  'it': 'Italian',
+  'nl': 'Dutch',
   'tr': 'Turkish',
-  'sv': 'Swedish',
-  'da': 'Danish',
-  'no': 'Norwegian',
-  'fi': 'Finnish',
+  'sw': 'Swahili',
+  'ha': 'Hausa',
+  'yo': 'Yoruba',
+  'ig': 'Igbo',
+  'zu': 'Zulu',
+  'am': 'Amharic',
+  'th': 'Thai',
+  'vi': 'Vietnamese',
+  'id': 'Indonesian',
+  'ms': 'Malay',
+  'fil': 'Filipino',
+  'ur': 'Urdu',
+  'fa': 'Persian (Farsi)',
+  'he': 'Hebrew',
   'el': 'Greek',
+  'pl': 'Polish',
+  'cs': 'Czech',
+  'ro': 'Romanian',
+  'hu': 'Hungarian',
+  'fi': 'Finnish',
+  'sv': 'Swedish',
+  'no': 'Norwegian',
+  'da': 'Danish',
+  'uk': 'Ukrainian',
+  'ta': 'Tamil',
+  'te': 'Telugu',
+  'mr': 'Marathi',
+  'gu': 'Gujarati',
+  'kn': 'Kannada',
+  'ml': 'Malayalam',
+  'pa': 'Punjabi',
 };
 
 const List<String> _personalityTypeKeys = [
@@ -146,6 +172,25 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
         title: const Text('Customization'),
         backgroundColor: theme.scaffoldBackgroundColor,
         leading: const BackButton(),
+        actions: [
+          if (state.asData != null)
+            IconButton(
+              icon: controller.isResetting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white70,
+                      ),
+                    )
+                  : const Icon(Icons.restore, color: Colors.white70),
+              tooltip: 'Reset to defaults',
+              onPressed: controller.isResetting || controller.isSaving
+                  ? null
+                  : () => _handleReset(controller),
+            ),
+        ],
       ),
       body: state.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -375,18 +420,56 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
 
   Future<void> _handleSave(CustomizationController controller) async {
     if (!_formKey.currentState!.validate()) return;
-    final actionContext = context;
-    FocusScope.of(actionContext).unfocus();
+    FocusScope.of(context).unfocus();
     try {
       await controller.saveSettings(_buildPayload());
       if (!mounted) return;
-      showToast(actionContext, 'Preferences saved', success: true);
+      showToast(context, 'Preferences saved', success: true);
     } on ApiError catch (apiError) {
       if (!mounted) return;
-      showToast(actionContext, apiError.message);
+      showToast(context, apiError.message);
     } catch (e) {
       if (!mounted) return;
-      showToast(actionContext, e.toString());
+      showToast(context, e.toString());
+    }
+  }
+
+  Future<void> _handleReset(CustomizationController controller) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F2223),
+        title: const Text(
+          'Reset to defaults?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'This will restore all AI settings to their default values.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await controller.resetSettings();
+      if (!mounted) return;
+      showToast(context, 'Settings reset to defaults', success: true);
+    } on ApiError catch (apiError) {
+      if (!mounted) return;
+      showToast(context, apiError.message);
+    } catch (e) {
+      if (!mounted) return;
+      showToast(context, e.toString());
     }
   }
 

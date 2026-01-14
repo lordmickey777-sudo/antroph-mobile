@@ -27,4 +27,13 @@ class AiSettingsRepository {
       throw ErrorFormatter.fromDio(e);
     }
   }
+
+  Future<AiSettings> resetSettings() async {
+    try {
+      final response = await _dio.post('$_endpoint/reset');
+      return AiSettings.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
 }

@@ -9,6 +9,7 @@ import 'package:antroph_mobile/features/home/models/realtime_voice_bridge_models
 import 'package:antroph_mobile/features/home/providers/chat_provider.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
+import 'package:antroph_mobile/features/profile/providers/profile_controller.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/voice_activity_face.dart';
 
@@ -265,6 +266,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final voiceState = ref.watch(voiceChatControllerProvider);
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
     final headline = _chatHeadline(chatState, voiceState);
+    final userProfile = ref.watch(profileControllerProvider).value;
+    final userName = userProfile?.displayName ?? userProfile?.username;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -313,6 +316,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     _TranscriptButton(
                       voiceState: voiceState,
                       headline: headline,
+                      userName: userName,
                       onStop: () {
                         if (voiceState.isRecording) {
                           voiceController.stopRecordingAndSend();
@@ -763,12 +767,14 @@ class _TranscriptButton extends StatelessWidget {
     required this.headline,
     required this.onStop,
     required this.onCancel,
+    this.userName,
   });
 
   final VoiceChatState voiceState;
   final String headline;
   final VoidCallback onStop;
   final VoidCallback onCancel;
+  final String? userName;
 
   bool get _hasContent =>
       (voiceState.userTranscription?.isNotEmpty ?? false) ||
@@ -887,7 +893,7 @@ class _TranscriptButton extends StatelessWidget {
                 padding: const EdgeInsets.all(20),
                 children: [
                   if (voiceState.userTranscription?.isNotEmpty ?? false) ...[
-                    _TranscriptLine(label: 'You', text: voiceState.userTranscription!),
+                    _TranscriptLine(label: userName ?? 'You', text: voiceState.userTranscription!, isUser: true),
                     const SizedBox(height: 16),
                   ],
                   if (voiceState.aiResponse?.isNotEmpty ?? false) ...[
@@ -939,10 +945,11 @@ class _TranscriptButton extends StatelessWidget {
 }
 
 class _TranscriptLine extends StatelessWidget {
-  const _TranscriptLine({required this.label, required this.text});
+  const _TranscriptLine({required this.label, required this.text, this.isUser = false});
 
   final String label;
   final String text;
+  final bool isUser;
 
   @override
   Widget build(BuildContext context) {
@@ -952,7 +959,7 @@ class _TranscriptLine extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: label == 'You' ? _accent : Colors.lightGreenAccent,
+            color: isUser ? _accent : Colors.lightGreenAccent,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),

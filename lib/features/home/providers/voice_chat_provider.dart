@@ -12,6 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../core/auth/state/auth_state.dart';
 import '../../../core/env/env.dart';
 import '../../../core/services/device_id_service.dart';
+import '../../profile/providers/customization_controller.dart';
 import '../models/expression_models.dart';
 import '../models/realtime_voice_bridge_models.dart';
 import '../services/pcm_audio_player.dart';
@@ -153,7 +154,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   static const int _sampleRate = 24000;
   static const String _outputAudioFormat = 'pcm16';
-  static const String _outputVoice = 'alloy';
+  static const String _defaultVoice = 'alloy';
   static const String _deviceType = 'mobile';
   static const String _permissionError =
       'Microphone permission is required for voice chat';
@@ -173,6 +174,16 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   Stream<double> get aiAudioLevelStream =>
       _aiAudioLevelController?.stream ?? Stream<double>.empty();
+
+  /// Gets the TTS voice from user's AI settings, or falls back to default.
+  String get _outputVoice {
+    final settings = ref.read(customizationControllerProvider).asData?.value;
+    final voice = settings?.ttsVoice;
+    if (voice != null && voice.isNotEmpty) {
+      return voice;
+    }
+    return _defaultVoice;
+  }
 
   @override
   VoiceChatState build() {
