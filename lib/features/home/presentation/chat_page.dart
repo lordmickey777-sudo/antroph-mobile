@@ -891,7 +891,7 @@ class _TranscriptButton extends StatelessWidget {
                     const SizedBox(height: 16),
                   ],
                   if (voiceState.aiResponse?.isNotEmpty ?? false) ...[
-                    _TranscriptLine(label: 'AI', text: voiceState.aiResponse!),
+                    _TranscriptLine(label: 'Aura', text: voiceState.aiResponse!),
                     const SizedBox(height: 16),
                   ],
                   if (headline.trim().isNotEmpty &&
