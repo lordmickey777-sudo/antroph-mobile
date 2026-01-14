@@ -1,11 +1,12 @@
 /// Client message types sent to the realtime voice bridge.
 enum RealtimeClientMessageType {
   storyStart('story_start'),
+  storyStop('story_stop'),
+  storyPause('story_pause'),
+  storyResume('story_resume'),
   joinRoom('join_room'),
   leaveRoom('leave_room'),
   deviceTakeover('device_takeover'),
-  storyPause('story_pause'),
-  storyResume('story_resume'),
   inputAudioBufferAppend('input_audio_buffer.append'),
   inputAudioBufferCommit('input_audio_buffer.commit');
 
@@ -15,24 +16,38 @@ enum RealtimeClientMessageType {
 
 /// Server message types received from the realtime voice bridge.
 enum RealtimeServerMessageType {
+  // Story control messages
   storySessionReady('story_session_ready'),
   storyStarted('story_started'),
+  storyResumed('story_resumed'),
   storyResponse('story_response'),
+  storyAck('story_ack'),
   takeoverGranted('takeover_granted'),
   takeoverDenied('takeover_denied'),
   roomJoined('room_joined'),
+
+  // OpenAI Realtime session messages
+  sessionCreated('session.created'),
+  sessionUpdated('session.updated'),
+
+  // OpenAI Realtime conversation messages
   conversationItemCreate('conversation.item.create'),
-  responseAudioTranscriptDone('response.audio_transcript.done'),
+  inputAudioTranscriptionCompleted('conversation.item.input_audio_transcription.completed'),
+
+  // OpenAI Realtime response messages
+  responseCreated('response.created'),
+  responseDone('response.done'),
   responseAudioTranscriptDelta('response.audio_transcript.delta'),
-  responseTextDone('response.text.done'),
+  responseAudioTranscriptDone('response.audio_transcript.done'),
   responseTextDelta('response.text.delta'),
+  responseTextDone('response.text.done'),
   responseAudioDelta('response.audio.delta'),
   responseAudio('response.audio'),
   responseOutputAudioDelta('response.output_audio.delta'),
   responseOutputAudio('response.output_audio'),
   outputAudioDelta('output_audio.delta'),
-  responseCreated('response.created'),
-  responseDone('response.done'),
+
+  // Error messages
   responseError('response.error'),
   error('error'),
   unknown('unknown');

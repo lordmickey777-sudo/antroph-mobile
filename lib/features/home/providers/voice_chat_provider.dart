@@ -696,10 +696,23 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   double _computeRms(Uint8List buffer) {
     final sampleCount = buffer.lengthInBytes ~/ 2;
     if (sampleCount == 0) return 0.0;
-    final samples = buffer.buffer.asInt16List(
-      buffer.offsetInBytes,
-      sampleCount,
-    );
+
+    // Ensure buffer is properly aligned for Int16 access
+    // On some Android devices, the buffer offset may not be 2-byte aligned
+    final Int16List samples;
+    if (buffer.offsetInBytes % 2 == 0) {
+      // Buffer is aligned, use directly
+      samples = buffer.buffer.asInt16List(
+        buffer.offsetInBytes,
+        sampleCount,
+      );
+    } else {
+      // Buffer is not aligned, copy to aligned buffer
+      final alignedBuffer = Uint8List(buffer.length);
+      alignedBuffer.setAll(0, buffer);
+      samples = alignedBuffer.buffer.asInt16List(0, sampleCount);
+    }
+
     double sumSquares = 0.0;
     for (final sample in samples) {
       final normalized = sample / 32768.0;
@@ -710,6 +723,17 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _commitInput() {
     if (_commitSent || !_socketOpen) return;
+
+    // Backend requires at least 100ms of audio before commit
+    // At 24kHz, 16-bit mono: 100ms = 2400 samples * 2 bytes = 4800 bytes
+    const minAudioBytes = 4800;
+    final bufferLength = _audioBuffer.length;
+    if (bufferLength < minAudioBytes) {
+      _log.w('[CommitInput] Audio buffer too small: $bufferLength bytes (min: $minAudioBytes). Skipping commit.');
+      return;
+    }
+
+    _log.i('[CommitInput] Committing audio buffer: $bufferLength bytes');
     if (state.isStoryMode) {
       _client.sendAudioCommit();
     } else {
@@ -770,6 +794,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     switch (type) {
       // Story-specific messages
       case RealtimeServerMessageType.storySessionReady:
+        _log.i('[IncomingMessage] >>> story_session_ready received! <<<');
         _handleStorySessionReady(payload);
         break;
       case RealtimeServerMessageType.storyStarted:
@@ -787,8 +812,38 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       case RealtimeServerMessageType.roomJoined:
         _handleRoomJoined(payload);
         break;
+      case RealtimeServerMessageType.storyResumed:
+        _log.i('[IncomingMessage] story_resumed received');
+        _handleStoryStarted(payload); // Same handling as story_started
+        break;
+      case RealtimeServerMessageType.storyAck:
+        _log.i('[IncomingMessage] story_ack received: $payload');
+        break;
+
+      // OpenAI session messages - use session.updated as fallback for ready state
+      case RealtimeServerMessageType.sessionCreated:
+        _log.i('[IncomingMessage] session.created received');
+        break;
+      case RealtimeServerMessageType.sessionUpdated:
+        _log.i('[IncomingMessage] session.updated received - transitioning to ready');
+        // If we're waiting for ready and receive session.updated, treat it as ready
+        // This is a fallback in case story_session_ready is not sent by the backend
+        if (state.isStoryMode && state.phase == RealtimeVoicePhase.waitingForReady) {
+          _log.i('[IncomingMessage] Using session.updated as ready signal');
+          state = state.copyWith(
+            phase: RealtimeVoicePhase.ready,
+            isConnecting: false,
+            isProcessing: false,
+            errorMessage: null,
+          );
+        }
+        break;
+
       case RealtimeServerMessageType.conversationItemCreate:
         _handleConversationItem(payload);
+        break;
+      case RealtimeServerMessageType.inputAudioTranscriptionCompleted:
+        _handleUserTranscription(payload);
         break;
 
       // Audio/transcript messages
@@ -935,6 +990,16 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     final item = ConversationItem.fromJson(payload);
     final history = [...state.conversationHistory, item];
     state = state.copyWith(conversationHistory: history);
+  }
+
+  void _handleUserTranscription(Map<String, dynamic> payload) {
+    // Handle conversation.item.input_audio_transcription.completed
+    // This contains the user's transcribed speech
+    final transcript = payload['transcript'] as String? ?? '';
+    _log.i('[UserTranscription] User said: $transcript');
+    if (transcript.isNotEmpty) {
+      state = state.copyWith(userTranscription: transcript);
+    }
   }
 
   void _handleErrorMessage(Map<String, dynamic> payload) {

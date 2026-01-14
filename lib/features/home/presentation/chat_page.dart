@@ -100,10 +100,12 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final controller = ref.read(chatControllerProvider.notifier);
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      controller.pause();
+      // Only use chatController in non-story mode
+      if (!widget.isStoryMode) {
+        ref.read(chatControllerProvider.notifier).pause();
+      }
       // Pause voice session to stop AI from talking in the background
       if (widget.isStoryMode) {
         voiceController.pauseStorySession();
@@ -111,7 +113,10 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
         voiceController.stopPlayback();
       }
     } else if (state == AppLifecycleState.resumed) {
-      controller.resume();
+      // Only use chatController in non-story mode
+      if (!widget.isStoryMode) {
+        ref.read(chatControllerProvider.notifier).resume();
+      }
       // Resume voice session if it was paused
       if (widget.isStoryMode) {
         voiceController.resumePausedSession();
@@ -121,7 +126,10 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
 
   @override
   void didPushNext() {
-    ref.read(chatControllerProvider.notifier).pause();
+    // Only use chatController in non-story mode
+    if (!widget.isStoryMode) {
+      ref.read(chatControllerProvider.notifier).pause();
+    }
     // Pause voice session when navigating to another page
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
     if (widget.isStoryMode) {
@@ -133,7 +141,10 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
 
   @override
   void didPopNext() {
-    ref.read(chatControllerProvider.notifier).resume();
+    // Only use chatController in non-story mode
+    if (!widget.isStoryMode) {
+      ref.read(chatControllerProvider.notifier).resume();
+    }
     // Resume voice session when returning to this page
     if (widget.isStoryMode) {
       ref.read(voiceChatControllerProvider.notifier).resumePausedSession();
@@ -173,13 +184,15 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
           ),
         ),
       ),
-      body: Container(child: const SafeArea(child: ChatScreen())),
+      body: Container(child: SafeArea(child: ChatScreen(isStoryMode: widget.isStoryMode))),
     );
   }
 }
 
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({super.key});
+  const ChatScreen({super.key, this.isStoryMode = false});
+
+  final bool isStoryMode;
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -225,28 +238,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     });
 
-    ref.listen<ChatState>(chatControllerProvider, (previous, next) {
-      if (!mounted) return;
-      final error = next.error;
-      if (error != null && error.isNotEmpty && error != (previous?.error ?? '')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error, style: const TextStyle(color: Colors.black87)),
-            backgroundColor: Colors.white,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
-            margin: const EdgeInsets.all(16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      }
-    });
+    // Only listen to chatControllerProvider errors in non-story mode
+    // In story mode, we only use voiceChatControllerProvider to avoid double WebSocket connections
+    if (!widget.isStoryMode) {
+      ref.listen<ChatState>(chatControllerProvider, (previous, next) {
+        if (!mounted) return;
+        final error = next.error;
+        if (error != null && error.isNotEmpty && error != (previous?.error ?? '')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(error, style: const TextStyle(color: Colors.black87)),
+              backgroundColor: Colors.white,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 3),
+              margin: const EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          );
+        }
+      });
+    }
 
-    final state = ref.watch(chatControllerProvider);
-    final controller = ref.read(chatControllerProvider.notifier);
+    // Only watch chatControllerProvider in non-story mode to avoid double WebSocket connection
+    final ChatState? chatState = widget.isStoryMode ? null : ref.watch(chatControllerProvider);
+    final ChatController? chatController = widget.isStoryMode ? null : ref.read(chatControllerProvider.notifier);
     final voiceState = ref.watch(voiceChatControllerProvider);
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
-    final headline = _chatHeadline(state, voiceState);
+    final headline = _chatHeadline(chatState, voiceState);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -267,7 +285,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: _Header(
                 voiceState: voiceState,
                 aiAudioLevelStream: voiceController.aiAudioLevelStream,
-                onReconnect: controller.forceReconnect,
+                onReconnect: chatController?.forceReconnect,
                 onStartVoice: voiceController.startRecording,
                 onStopVoice: voiceController.stopRecordingAndSend,
                 onStopVoicePlayback: voiceController.stopPlayback,
@@ -278,8 +296,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                 child: ChatList(
-                  messages: state.messages,
-                  onRetry: controller.retrySend,
+                  messages: chatState?.messages ?? const [],
+                  onRetry: chatController?.retrySend,
                   bubbleMaxWidth: bubbleMaxWidth,
                   bottomPadding: bottomPadding,
                 ),
@@ -326,7 +344,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
-String _chatHeadline(ChatState chat, VoiceChatState voice) {
+String _chatHeadline(ChatState? chat, VoiceChatState voice) {
   if (voice.isRecording) return 'Listening';
   if (voice.userTranscription?.isNotEmpty ?? false) {
     return voice.userTranscription!;
@@ -334,7 +352,7 @@ String _chatHeadline(ChatState chat, VoiceChatState voice) {
   if (voice.aiResponse?.isNotEmpty ?? false) {
     return voice.aiResponse!;
   }
-  if (chat.messages.isNotEmpty) {
+  if (chat != null && chat.messages.isNotEmpty) {
     return chat.messages.last.message;
   }
   return '';
@@ -344,7 +362,7 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.voiceState,
     required this.aiAudioLevelStream,
-    required this.onReconnect,
+    this.onReconnect,
     required this.onStartVoice,
     required this.onStopVoice,
     required this.onStopVoicePlayback,
@@ -353,7 +371,7 @@ class _Header extends StatelessWidget {
 
   final VoiceChatState voiceState;
   final Stream<double> aiAudioLevelStream;
-  final VoidCallback onReconnect;
+  final VoidCallback? onReconnect;
   final VoidCallback onStartVoice;
   final VoidCallback onStopVoice;
   final VoidCallback onStopVoicePlayback;
@@ -612,13 +630,13 @@ class ChatList extends StatelessWidget {
   const ChatList({
     super.key,
     required this.messages,
-    required this.onRetry,
+    this.onRetry,
     this.bubbleMaxWidth = 360,
     this.bottomPadding = 160,
   });
 
   final List<ChatMessageModel> messages;
-  final void Function(String messageId) onRetry;
+  final void Function(String messageId)? onRetry;
   final double bubbleMaxWidth;
   final double bottomPadding;
 
@@ -636,7 +654,7 @@ class ChatList extends StatelessWidget {
         final message = messages[messages.length - 1 - index];
         return _ChatBubble(
           message: message,
-          onRetry: () => onRetry(message.id),
+          onRetry: () => onRetry?.call(message.id),
           maxWidth: bubbleMaxWidth,
         );
       },
