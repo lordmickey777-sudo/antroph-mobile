@@ -100,6 +100,7 @@ class StoryPage extends ConsumerWidget {
         imageAsset: card.image,
         users: card.users,
         views: card.views,
+        isAdded: card.isAdded,
       ),
     );
   }
@@ -116,6 +117,7 @@ class StoryPage extends ConsumerWidget {
         imageAsset: story.coverImageUrl,
         users: 0,
         views: 0,
+        isAdded: story.isAdded,
       ),
     );
   }

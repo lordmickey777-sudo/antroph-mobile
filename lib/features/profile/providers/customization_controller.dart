@@ -25,6 +25,27 @@ class CustomizationController extends AsyncNotifier<AiSettings> {
     }
   }
 
+  Future<void> resetSettings() async {
+    _setResetting(true);
+    try {
+      final defaults = await _repo.resetSettings();
+      state = AsyncValue.data(defaults);
+    } finally {
+      _setResetting(false);
+    }
+  }
+
+  bool _isResetting = false;
+  bool get isResetting => _isResetting;
+
+  void _setResetting(bool resetting) {
+    _isResetting = resetting;
+    final current = state.asData?.value;
+    if (current != null) {
+      state = AsyncValue.data(current);
+    }
+  }
+
   void _setSaving(bool saving) {
     _isSaving = saving;
     final current = state.asData?.value;
