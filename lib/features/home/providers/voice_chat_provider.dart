@@ -142,6 +142,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   StreamController<double>? _aiAudioLevelController;
   Timer? _aiAudioLevelTimer;
   Timer? _silenceTimer;
+  Timer? _autoListenTimer;
   final List<double> _pendingAiRmsValues = [];
   final StringBuffer _aiTextBuffer = StringBuffer();
   BytesBuilder _audioBuffer = BytesBuilder(copy: false);
@@ -194,6 +195,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     ref.onDispose(() async {
       _disableAudio();
       _cancelSilenceTimer();
+      _cancelAutoListenTimer();
       _stopAiAudioLevelTimer();
       await _stopRecorder();
       await _teardownSocket();
@@ -373,6 +375,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   /// End the current story session and disconnect.
   Future<void> endStorySession() async {
+    _cancelAutoListenTimer();
     await cancelRecording();
     state = state.copyWith(
       isStoryMode: false,
@@ -1129,6 +1132,43 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       clearFace: true,
       phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
     );
+
+    // Auto-listen after AI finishes speaking (only in story mode)
+    if (state.isStoryMode) {
+      _scheduleAutoListen();
+    }
+  }
+
+  /// Schedules auto-listening after a brief delay if enabled in settings.
+  void _scheduleAutoListen() {
+    _cancelAutoListenTimer();
+
+    // Check if auto-listen is enabled in user settings
+    final settings = ref.read(customizationControllerProvider).asData?.value;
+    final autoListenEnabled = settings?.autoListenAfterResponse ?? true;
+
+    if (!autoListenEnabled) {
+      _log.i('Auto-listen disabled in settings');
+      return;
+    }
+
+    // Brief delay before auto-starting to feel natural
+    const autoListenDelay = Duration(milliseconds: 800);
+    _autoListenTimer = Timer(autoListenDelay, () {
+      if (!ref.mounted) return;
+      // Only auto-start if still in ready state and not busy
+      if (state.isStoryMode &&
+          state.phase == RealtimeVoicePhase.ready &&
+          !state.isBusy) {
+        _log.i('Auto-starting recording after AI response');
+        startRecording();
+      }
+    });
+  }
+
+  void _cancelAutoListenTimer() {
+    _autoListenTimer?.cancel();
+    _autoListenTimer = null;
   }
 
   List<String> _extractAudioStrings(Map<String, dynamic> payload) {
@@ -1270,6 +1310,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   /// Cancel current recording and tear down the current session.
   Future<void> cancelRecording() async {
+    _cancelAutoListenTimer();
     _disableAudio();
     _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
@@ -1298,6 +1339,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   /// Stop audio playback
   Future<void> stopPlayback() async {
+    _cancelAutoListenTimer();
     _disableAudio();
     _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);

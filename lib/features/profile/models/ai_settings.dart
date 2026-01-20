@@ -3,12 +3,14 @@ class AiSettings {
   final ParentalControls parentalControls;
   final String ttsVoice;
   final String language;
+  final bool autoListenAfterResponse;
 
   const AiSettings({
     required this.personality,
     required this.parentalControls,
     required this.ttsVoice,
     required this.language,
+    this.autoListenAfterResponse = true,
   });
 
   factory AiSettings.fromJson(Map<String, dynamic> json) {
@@ -21,6 +23,7 @@ class AiSettings {
       ),
       ttsVoice: (json['tts_voice'] ?? '').toString(),
       language: (json['language'] ?? '').toString(),
+      autoListenAfterResponse: json['auto_listen_after_response'] as bool? ?? true,
     );
   }
 
@@ -29,6 +32,7 @@ class AiSettings {
     'parental_controls': parentalControls.toJson(),
     'tts_voice': ttsVoice,
     'language': language,
+    'auto_listen_after_response': autoListenAfterResponse,
   };
 }
 
