@@ -142,6 +142,7 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   double _maxAgeRating = 0;
   bool _parentalEnabled = false;
   double _personalitySliderValue = 0;
+  bool _autoListenAfterResponse = true;
 
   AiSettings? _boundSettings;
 
@@ -260,6 +261,7 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
         .join(', ');
     _approvalController.text = settings.parentalControls.requireApprovalFor
         .join(', ');
+    _autoListenAfterResponse = settings.autoListenAfterResponse;
   }
 
   Widget _buildForm(CustomizationController controller) {
@@ -337,6 +339,8 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
                   setState(() => _selectedLanguage = value);
                 },
               ),
+              const SizedBox(height: 12),
+              _buildAutoListenToggle(),
               const SizedBox(height: 24),
               _sectionTitle('Parental controls'),
               const SizedBox(height: 12),
@@ -565,6 +569,45 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
     );
   }
 
+  Widget _buildAutoListenToggle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F2223),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                TypographyText(
+                  'Continuous conversation',
+                  color: Colors.white,
+                  variant: TypographyVariant.body1,
+                ),
+                SizedBox(height: 4),
+                TypographyText(
+                  'Auto-listen after AI finishes speaking',
+                  color: Colors.white70,
+                  variant: TypographyVariant.body2,
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: _autoListenAfterResponse,
+            activeColor: Colors.greenAccent,
+            onChanged: (value) =>
+                setState(() => _autoListenAfterResponse = value),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSlider() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -631,6 +674,7 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
       parentalControls: parental,
       ttsVoice: _ttsVoice,
       language: _selectedLanguage,
+      autoListenAfterResponse: _autoListenAfterResponse,
     );
   }
 
