@@ -52,6 +52,7 @@ dependencies:
   webview_flutter: ^4.7.0
   image_picker: ^1.0.7
   just_audio: ^0.9.35
+  audio_session: ^0.1.21
   flutter_sound: ^9.2.13
   permission_handler: ^11.0.1
   web_socket_channel: ^2.4.0

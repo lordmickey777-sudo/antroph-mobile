@@ -22,6 +22,7 @@ abstract class AudioChunkPlayer {
 
 AudioChunkPlayer createAudioChunkPlayer() {
   if (Platform.isAndroid) return AndroidAudioTrackPlayer();
+  if (Platform.isIOS) return IOSAudioTrackPlayer();
   return PcmAudioPlayer();
 }
 
@@ -107,6 +108,87 @@ class PcmAudioPlayer implements AudioChunkPlayer {
       await _player.closePlayer();
     } catch (_) {}
     _player = FlutterSoundPlayer();
+    _startFuture = null;
+    _stopped = true;
+    _finishedNotified = false;
+  }
+
+  void _notifyFinished() {
+    if (_finishedNotified) return;
+    _finishedNotified = true;
+    _onFinished?.call();
+    _onFinished = null;
+  }
+}
+
+/// iOS implementation using native AVAudioEngine with gain boost.
+/// Mirrors the Android implementation for consistent loud audio output.
+class IOSAudioTrackPlayer implements AudioChunkPlayer {
+  static const _channel = MethodChannel('com.antroph.aura/pcm_player');
+  Future<void>? _startFuture;
+  bool _stopped = true;
+  VoidCallback? _onFinished;
+  bool _finishedNotified = false;
+
+  @override
+  Future<void> addChunk(
+    Uint8List bytes, {
+    int sampleRate = 16000,
+    int bufferSize = 4096,
+    bool interleaved = true, // ignored, mono only
+    VoidCallback? onFinished,
+  }) async {
+    _onFinished ??= onFinished;
+    try {
+      _startFuture ??= _start(sampleRate: sampleRate, bufferSize: bufferSize);
+      await _startFuture;
+    } catch (_) {
+      await _reset();
+      _startFuture = _start(sampleRate: sampleRate, bufferSize: bufferSize);
+      await _startFuture;
+    }
+
+    try {
+      await _channel.invokeMethod<void>('write', {
+        'bytes': bytes,
+      });
+    } catch (_) {
+      await _reset();
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> stop() async {
+    if (_stopped) return;
+    await _reset();
+    _notifyFinished();
+  }
+
+  @override
+  Future<void> dispose() => stop();
+
+  Future<void> _start({
+    required int sampleRate,
+    required int bufferSize,
+  }) async {
+    _finishedNotified = false;
+    try {
+      await _channel.invokeMethod<void>('start', {
+        'sampleRate': sampleRate,
+        'bufferSize': bufferSize,
+      });
+      _stopped = false;
+    } catch (_) {
+      _stopped = true;
+      rethrow;
+    }
+  }
+
+  Future<void> _reset() async {
+    try {
+      await _channel.invokeMethod<void>('stop');
+    } catch (_) {}
     _startFuture = null;
     _stopped = true;
     _finishedNotified = false;
