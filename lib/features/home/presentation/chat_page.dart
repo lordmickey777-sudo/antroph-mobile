@@ -434,7 +434,7 @@ class _Header extends StatelessWidget {
         case RealtimeVoicePhase.waitingForReady:
           return const _StatusData('Connecting', Icons.wifi);
         case RealtimeVoicePhase.ready:
-          return const _StatusData('Story Ready', Icons.auto_stories);
+          return const _StatusData('Start Talking', Icons.auto_stories);
         case RealtimeVoicePhase.recording:
           return const _StatusData('Listening', Icons.mic);
         case RealtimeVoicePhase.processing:
