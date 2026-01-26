@@ -12,6 +12,7 @@ import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
 import 'package:antroph_mobile/features/profile/providers/profile_controller.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/voice_activity_face.dart';
+import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 
 const _chatBg = Color(0xFF0B1118);
 const _surface = Color(0xFF111822);
@@ -830,116 +831,136 @@ class _TranscriptButton extends StatelessWidget {
                     ? 'Voice chat issue'
                     : 'Transcript';
 
-    showModalBottomSheet(
+    showAppBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF111822),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      heightFactor: 0.5,
+      builder: (context, scrollController) => _TranscriptSheetContent(
+        title: title,
+        hasError: hasError,
+        active: active,
+        voiceState: voiceState,
+        headline: headline,
+        userName: userName,
+        onStop: onStop,
+        onCancel: onCancel,
+        scrollController: scrollController,
       ),
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.4,
-        minChildSize: 0.2,
-        maxChildSize: 0.8,
-        expand: false,
-        builder: (context, scrollController) => Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                      ),
-                    ),
+    );
+  }
+}
+
+class _TranscriptSheetContent extends StatelessWidget {
+  const _TranscriptSheetContent({
+    required this.title,
+    required this.hasError,
+    required this.active,
+    required this.voiceState,
+    required this.headline,
+    required this.userName,
+    required this.onStop,
+    required this.onCancel,
+    required this.scrollController,
+  });
+
+  final String title;
+  final bool hasError;
+  final bool active;
+  final VoiceChatState voiceState;
+  final String headline;
+  final String? userName;
+  final VoidCallback onStop;
+  final VoidCallback onCancel;
+  final ScrollController scrollController;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
                   ),
-                  if (active || hasError)
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        if (hasError) {
-                          onCancel();
-                        } else {
-                          onStop();
-                        }
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: hasError ? Colors.redAccent : Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      ),
-                      child: Text(hasError ? 'Dismiss' : 'Stop'),
-                    ),
-                ],
+                ),
               ),
-            ),
-            const Divider(color: Colors.white12, height: 1),
-            Expanded(
-              child: ListView(
-                controller: scrollController,
-                padding: const EdgeInsets.all(20),
-                children: [
-                  if (voiceState.userTranscription?.isNotEmpty ?? false) ...[
-                    _TranscriptLine(label: userName ?? 'You', text: voiceState.userTranscription!, isUser: true),
-                    const SizedBox(height: 16),
-                  ],
-                  if (voiceState.aiResponse?.isNotEmpty ?? false) ...[
-                    _TranscriptLine(label: 'Aura', text: voiceState.aiResponse!),
-                    const SizedBox(height: 16),
-                  ],
-                  if (headline.trim().isNotEmpty &&
-                      headline != voiceState.userTranscription &&
-                      headline != voiceState.aiResponse) ...[
-                    Text(
-                      headline,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                  if (hasError && voiceState.errorMessage != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              voiceState.errorMessage!,
-                              style: const TextStyle(color: Colors.white70, fontSize: 13),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
+              if (active || hasError)
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    if (hasError) {
+                      onCancel();
+                    } else {
+                      onStop();
+                    }
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: hasError ? Colors.redAccent : Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  ),
+                  child: Text(hasError ? 'Dismiss' : 'Stop'),
+                ),
+            ],
+          ),
         ),
-      ),
+        const Divider(color: Colors.white12, height: 1),
+        Expanded(
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.all(20),
+            children: [
+              if (voiceState.userTranscription?.isNotEmpty ?? false) ...[
+                _TranscriptLine(label: userName ?? 'You', text: voiceState.userTranscription!, isUser: true),
+                const SizedBox(height: 16),
+              ],
+              if (voiceState.aiResponse?.isNotEmpty ?? false) ...[
+                _TranscriptLine(label: 'Aura', text: voiceState.aiResponse!),
+                const SizedBox(height: 16),
+              ],
+              if (headline.trim().isNotEmpty &&
+                  headline != voiceState.userTranscription &&
+                  headline != voiceState.aiResponse) ...[
+                Text(
+                  headline,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+              if (hasError && voiceState.errorMessage != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          voiceState.errorMessage!,
+                          style: const TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

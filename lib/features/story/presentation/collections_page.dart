@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
+import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
@@ -547,12 +547,16 @@ class _StyledPopupMenu extends StatelessWidget {
   final String removeLabel;
 
   Future<void> _showActionsSheet(BuildContext context) async {
-    await showCupertinoModalBottomSheet(
+    await showAppActionSheet(
       context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.7),
-      builder: (_) =>
-          _CollectionActionsSheet(onRemove: onRemove, removeLabel: removeLabel),
+      actions: [
+        AppActionSheetItem(
+          label: removeLabel,
+          icon: CupertinoIcons.trash,
+          isDestructive: true,
+          onTap: () => onRemove(),
+        ),
+      ],
     );
   }
 
@@ -578,114 +582,6 @@ class _StyledPopupMenu extends StatelessWidget {
           ],
         ),
         child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
-      ),
-    );
-  }
-}
-
-class _CollectionActionsSheet extends StatelessWidget {
-  const _CollectionActionsSheet({
-    required this.onRemove,
-    required this.removeLabel,
-  });
-
-  final Future<void> Function() onRemove;
-  final String removeLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.of(context).padding.bottom;
-    return SafeArea(
-      top: false,
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF101214),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(20, 12, 20, bottom + 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.22),
-                  borderRadius: BorderRadius.circular(50),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).maybePop(),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        CupertinoIcons.xmark,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _MinimalActionTile(
-                icon: CupertinoIcons.trash,
-                label: removeLabel,
-                onTap: () async {
-                  Navigator.of(context).pop();
-                  await onRemove();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MinimalActionTile extends StatelessWidget {
-  const _MinimalActionTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
-                fontSize: 16,
-                decoration: TextDecoration.none,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/widgets/bottom_nav.dart';
 import 'package:antroph_mobile/features/profile/presentation/profile_page.dart';
-import 'package:antroph_mobile/features/story/presentation/collections_page.dart';
-import 'package:antroph_mobile/features/story/presentation/collections_action_button.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/features/auth/pages/login_page.dart';
@@ -64,15 +62,6 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
-            if (_tab != HomeTab.profile)
-              Positioned(
-                top: 12,
-                right: 16,
-                child: CollectionsActionButton(
-                  onPressed: _openCollections,
-                ),
-              ),
-
             // Bottom rounded navigation panel
             Positioned(
               left: 0,
@@ -103,9 +92,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _openCollections() {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CollectionsPage()));
-  }
 }
 
 class _AuthGated extends ConsumerStatefulWidget {

@@ -1,22 +1,22 @@
-import 'dart:ui';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/features/story/providers/story_session_provider.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 
-class StorySheet extends ConsumerStatefulWidget {
-  const StorySheet({
+/// Content widget for the story bottom sheet.
+/// Used with [showAppBottomSheet] for consistent sheet styling.
+class StorySheetContent extends ConsumerStatefulWidget {
+  const StorySheetContent({
     super.key,
     required this.storyId,
     required this.title,
     required this.subtitle,
     required this.imageAsset,
+    required this.scrollController,
     this.users,
     this.views,
     this.isAdded = false,
@@ -26,22 +26,21 @@ class StorySheet extends ConsumerStatefulWidget {
   final String title;
   final String subtitle;
   final String imageAsset;
+  final ScrollController scrollController;
   final int? users;
   final int? views;
   final bool isAdded;
 
-  static const _panel = Color(0xFF121516);
-
   @override
-  ConsumerState<StorySheet> createState() => _StorySheetState();
+  ConsumerState<StorySheetContent> createState() => _StorySheetContentState();
 }
 
-class _StorySheetState extends ConsumerState<StorySheet> {
+class _StorySheetContentState extends ConsumerState<StorySheetContent> {
   late bool _isAdded = widget.isAdded;
   bool _isAddingToPlaylist = false;
 
   @override
-  void didUpdateWidget(covariant StorySheet oldWidget) {
+  void didUpdateWidget(covariant StorySheetContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isAdded != widget.isAdded) {
       _isAdded = widget.isAdded;
@@ -52,7 +51,6 @@ class _StorySheetState extends ConsumerState<StorySheet> {
   void dispose() {
     // Clear session when sheet is closed
     ref.read(storySessionProvider.notifier).clearSession();
-
     super.dispose();
   }
 
@@ -62,79 +60,65 @@ class _StorySheetState extends ConsumerState<StorySheet> {
     final bottom = MediaQuery.of(context).padding.bottom;
     final sessionState = ref.watch(storySessionProvider);
 
-    return SizedBox(
-      height: size.height * 0.7,
-      child: CupertinoPageScaffold(
-        backgroundColor: StorySheet._panel,
-        child: SafeArea(
-        top: false,
-        bottom: false,
-        child: Stack(
-          children: [
-            CustomScrollView(
-              // Hand control to the modal sheet so drag-to-dismiss
-              // only kicks in when the scroll is at the top.
-              controller: ModalScrollController.of(context),
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _GrabHandle(),
-                        const SizedBox(height: 16),
-                        _HeroCard(
-                          size: size,
-                          imageAsset: widget.imageAsset,
-                          sessionState: sessionState,
-                          isAdded: _isAdded,
-                          isAddingToPlaylist: _isAddingToPlaylist,
-                          onAddToPlaylist: _handleAddToPlaylist,
-                          onPlayPressed: _navigateToChat,
-                        ),
-                        const SizedBox(height: 20),
-                        TypographyText(
-                          widget.title,
-                          variant: TypographyVariant.h2,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(height: 8),
-                        TypographyText(
-                          widget.subtitle,
-                          variant: TypographyVariant.body1,
-                          color: Colors.white70,
-                          height: 1.35,
-                        ),
-                        const SizedBox(height: 16),
-                        const TypographyText(
-                          "Great interaction experience and you learn easily cause we'll have lots of conversations. I can tune it to how you like it too.",
-                          variant: TypographyVariant.body1,
-                          color: Colors.white70,
-                          height: 1.35,
-                        ),
-                        SizedBox(height: bottom + 120), // space for floating nav overlay
-                      ],
+    return Stack(
+      children: [
+        CustomScrollView(
+          controller: widget.scrollController,
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _HeroCard(
+                      size: size,
+                      imageAsset: widget.imageAsset,
+                      sessionState: sessionState,
+                      isAdded: _isAdded,
+                      isAddingToPlaylist: _isAddingToPlaylist,
+                      onAddToPlaylist: _handleAddToPlaylist,
+                      onPlayPressed: _navigateToChat,
                     ),
-                  ),
-                ),
-              ],
-            ),
-            // Error snackbar
-            if (sessionState.error != null)
-              Positioned(
-                top: 16,
-                left: 16,
-                right: 16,
-                child: _ErrorBanner(
-                  message: sessionState.error!,
-                  onDismiss: () => ref.read(storySessionProvider.notifier).clearError(),
+                    const SizedBox(height: 20),
+                    TypographyText(
+                      widget.title,
+                      variant: TypographyVariant.h2,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(height: 8),
+                    TypographyText(
+                      widget.subtitle,
+                      variant: TypographyVariant.body1,
+                      color: Colors.white70,
+                      height: 1.35,
+                    ),
+                    const SizedBox(height: 16),
+                    const TypographyText(
+                      "Great interaction experience and you learn easily cause we'll have lots of conversations. I can tune it to how you like it too.",
+                      variant: TypographyVariant.body1,
+                      color: Colors.white70,
+                      height: 1.35,
+                    ),
+                    SizedBox(height: bottom + 40),
+                  ],
                 ),
               ),
+            ),
           ],
         ),
-      ),
-      ),
+        // Error snackbar
+        if (sessionState.error != null)
+          Positioned(
+            top: 16,
+            left: 16,
+            right: 16,
+            child: _ErrorBanner(
+              message: sessionState.error!,
+              onDismiss: () => ref.read(storySessionProvider.notifier).clearError(),
+            ),
+          ),
+      ],
     );
   }
 
@@ -174,24 +158,6 @@ class _StorySheetState extends ConsumerState<StorySheet> {
   }
 }
 
-class _GrabHandle extends StatelessWidget {
-  const _GrabHandle();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 44,
-        height: 5,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.22),
-          borderRadius: BorderRadius.circular(50),
-        ),
-      ),
-    );
-  }
-
-}
 
 class _HeroCard extends ConsumerWidget {
   const _HeroCard({
@@ -308,77 +274,6 @@ class _HeroImage extends StatelessWidget {
       fit: BoxFit.cover,
       errorBuilder: (context, error, stackTrace) =>
           Image.asset('assets/images/default.png', fit: BoxFit.cover),
-    );
-  }
-}
-
-class _GlassButton extends StatelessWidget {
-  const _GlassButton({required this.label, required this.icon, this.onPressed});
-
-  final String label;
-  final IconData icon;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: AppButton(
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            backgroundColor: Colors.white.withValues(alpha: 0.18),
-            foregroundColor: Colors.black,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(28),
-              side: BorderSide(color: Colors.white.withValues(alpha: 0.30)),
-            ),
-            elevation: 0,
-            shadowColor: Colors.transparent,
-          ),
-          onPressed: onPressed,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.black),
-              const SizedBox(width: 8),
-              TypographyText(
-                label,
-                variant: TypographyVariant.body2,
-                color: Colors.black,
-                fontWeight: FontWeight.w600,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PrimaryPillButton extends StatelessWidget {
-  const _PrimaryPillButton({required this.label, this.onPressed});
-
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppButton(
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        backgroundColor: const Color(0xFFFF6B7D),
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      onPressed: onPressed,
-      child: TypographyText(
-        label,
-        variant: TypographyVariant.body2,
-        color: Colors.white,
-        fontWeight: FontWeight.w600,
-      ),
     );
   }
 }

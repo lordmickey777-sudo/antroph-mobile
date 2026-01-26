@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
+import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
@@ -89,11 +89,10 @@ class StoryPage extends ConsumerWidget {
   }
 
   Future<void> _openStory(BuildContext context, StoryCardDto card) async {
-    await showCupertinoModalBottomSheet(
+    await showAppBottomSheet(
       context: context,
-      expand: false,
-      backgroundColor: Colors.transparent,
-      builder: (_) => StorySheet(
+      heightFactor: 0.7,
+      builder: (_, scrollController) => StorySheetContent(
         storyId: card.storyId,
         title: card.title,
         subtitle: card.subtitle,
@@ -101,16 +100,16 @@ class StoryPage extends ConsumerWidget {
         users: card.users,
         views: card.views,
         isAdded: card.isAdded,
+        scrollController: scrollController,
       ),
     );
   }
 
   Future<void> _openFeaturedStory(BuildContext context, FeaturedStoryDto story) async {
-    await showCupertinoModalBottomSheet(
+    await showAppBottomSheet(
       context: context,
-      expand: false,
-      backgroundColor: Colors.transparent,
-      builder: (_) => StorySheet(
+      heightFactor: 0.7,
+      builder: (_, scrollController) => StorySheetContent(
         storyId: story.id,
         title: story.title,
         subtitle: story.description,
@@ -118,6 +117,7 @@ class StoryPage extends ConsumerWidget {
         users: 0,
         views: 0,
         isAdded: story.isAdded,
+        scrollController: scrollController,
       ),
     );
   }
