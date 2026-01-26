@@ -25,6 +25,31 @@ dart run build_runner build --delete-conflicting-outputs
 flutter run
 ```
 
+### Running on specific devices
+
+```sh
+# List available devices
+flutter devices
+
+# Run on a specific device
+flutter run -d <device-id>
+
+# Common flags
+flutter run -d <device-id> --release   # Release mode (faster, no debugging)
+flutter run -d <device-id> --debug     # Debug mode with hot reload (default)
+flutter run -d <device-id> --profile   # Profile mode for performance testing
+```
+
+### Other useful commands
+
+```sh
+flutter clean              # Clean build files
+flutter pub get            # Get dependencies
+flutter analyze            # Check for errors
+flutter install -d <device-id>  # Install without running
+flutter logs -d <device-id>     # View device logs
+```
+
 ## Building release (APK & iOS)
 
 Below are common Flutter commands to build Android and iOS release artifacts. Run these from the repository root. Building iOS artifacts requires a macOS machine with Xcode and proper code signing configured.

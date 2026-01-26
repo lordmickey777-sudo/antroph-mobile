@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -50,7 +51,12 @@ class StoryPage extends ConsumerWidget {
                     slivers: [
                       SliverToBoxAdapter(
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                          padding: EdgeInsets.fromLTRB(
+                            AppPadding.horizontal.of(context) + 4,
+                            12,
+                            AppPadding.horizontal.of(context) + 4,
+                            8,
+                          ),
                           child: Row(
                             children: [
                               Image.asset('assets/images/app_logo.png', width: 38, height: 38),
@@ -147,8 +153,9 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
 
   @override
   Widget build(BuildContext context) {
+    final horizontalPadding = AppPadding.large.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(30, 8, 30, 24),
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 24),
       child: GestureDetector(
         onTap: widget.onTap,
         child: SmoothClipRRect(

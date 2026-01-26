@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -46,27 +47,33 @@ class CollectionsPage extends ConsumerWidget {
               assetPath: 'assets/images/antroph_smile.png',
             );
           }
-          return ListView.separated(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
+          final horizontalPadding = AppPadding.horizontal.of(context);
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: ContentWidth.content),
+              child: ListView.separated(
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.symmetric(vertical: 12, horizontal: horizontalPadding),
+                itemCount: items.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
               final collection = items[index];
               return _CollectionCard(
-                collection: collection,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        CollectionDetailPage(collection: collection),
+                  collection: collection,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          CollectionDetailPage(collection: collection),
+                    ),
                   ),
-                ),
-                onStartChat: () => _startChatForCollection(context, collection),
-                onRemove: () =>
-                    _removeCollectionStories(context, ref, collection),
-              );
-            },
-          );
+                  onStartChat: () => _startChatForCollection(context, collection),
+                  onRemove: () =>
+                      _removeCollectionStories(context, ref, collection),
+                );
+              },
+            ),
+          ),
+        );
         },
       ),
     );

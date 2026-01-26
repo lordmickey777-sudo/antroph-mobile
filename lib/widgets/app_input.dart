@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
 
 /// A reusable, app-wide text input styled like the login fields.
 ///
@@ -59,8 +60,9 @@ class AppInput extends StatelessWidget {
       ),
     );
 
+    final minHeight = AppSizing.inputHeight.of(context);
     return Container(
-      constraints: isMultiline ? null : const BoxConstraints(minHeight: 64),
+      constraints: isMultiline ? null : BoxConstraints(minHeight: minHeight),
       padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(color: const Color(0xFF1F2223), borderRadius: radius),
       child: Row(

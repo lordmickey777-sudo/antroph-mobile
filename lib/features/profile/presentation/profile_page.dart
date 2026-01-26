@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
@@ -14,16 +15,22 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Use a ListView with bottom padding to avoid overflow/clipping.
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 140),
-      children: const [
-        SizedBox(height: 28),
-        _ProfileHeader(),
-        SizedBox(height: 30),
-        _ProfileMenu(),
-        SizedBox(height: 40),
-        _BuildNumber(),
-      ],
+    // Center content with max-width on larger screens (iPad)
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: ContentWidth.content),
+        child: ListView(
+          padding: const EdgeInsets.only(bottom: 140),
+          children: const [
+            SizedBox(height: 28),
+            _ProfileHeader(),
+            SizedBox(height: 30),
+            _ProfileMenu(),
+            SizedBox(height: 40),
+            _BuildNumber(),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -38,6 +45,7 @@ class _ProfileHeader extends ConsumerWidget {
     final email = auth?.email ?? '';
     final displayName = profile?.displayName ?? auth?.displayName ?? email.trim().split('@').first;
     final avatarUrl = profile?.avatarUrl;
+    final avatarSize = AppSizing.avatarLarge.of(context);
     return Column(
       children: [
         Stack(
@@ -47,11 +55,11 @@ class _ProfileHeader extends ConsumerWidget {
               onTap: () => context.pushNamed('edit-profile'),
               child: ClipOval(
                 child: avatarUrl != null && avatarUrl.isNotEmpty
-                    ? Image.network(avatarUrl, width: 116, height: 116, fit: BoxFit.cover)
+                    ? Image.network(avatarUrl, width: avatarSize, height: avatarSize, fit: BoxFit.cover)
                     : Image.asset(
                         'assets/images/avatar.png',
-                        width: 116,
-                        height: 116,
+                        width: avatarSize,
+                        height: avatarSize,
                         fit: BoxFit.cover,
                       ),
               ),

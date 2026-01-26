@@ -30,7 +30,7 @@ void main() {
         if (key == 'AssetManifest.json') {
           // Minimal manifest referencing the images used by tests.
           const json =
-              '{"assets/images/app_logo.png":["assets/images/app_logo.png"],"assets/images/eye_logo.png":["assets/images/eye_logo.png"]}';
+              '{"assets/images/app_logo.png":["assets/images/app_logo.png"],"assets/images/app_logo.png":["assets/images/app_logo.png"]}';
           final bytes = utf8.encode(json);
           return ByteData.view(Uint8List.fromList(bytes).buffer);
         }
@@ -38,7 +38,7 @@ void main() {
           final bytes = utf8.encode('[]');
           return ByteData.view(Uint8List.fromList(bytes).buffer);
         }
-        if (key.endsWith('app_logo.png') || key.endsWith('eye_logo.png')) {
+        if (key.endsWith('app_logo.png') || key.endsWith('app_logo.png')) {
           final bytes = base64Decode(b64);
           return ByteData.view(bytes.buffer);
         }

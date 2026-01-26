@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:antroph_mobile/core/onboarding/onboarding_storage_service.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
@@ -45,16 +46,20 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final horizontalPadding = AppPadding.form.of(context);
     return Scaffold(
       body: SafeArea(
-        child: PageView.builder(
-          controller: _controller,
-          itemCount: 3,
-          onPageChanged: (i) => setState(() => _index = i),
-          itemBuilder: (context, i) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: ContentWidth.form),
+            child: PageView.builder(
+              controller: _controller,
+              itemCount: 3,
+              onPageChanged: (i) => setState(() => _index = i),
+              itemBuilder: (context, i) {
+                return Padding(
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                  child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const SizedBox(height: 24),
@@ -171,11 +176,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     ],
                   ),
                   const SizedBox(height: 24),
-                ],
-              ),
-            );
-          },
+                  ],
+                ),
+              );
+            },
+          ),
         ),
+      ),
       ),
     );
   }

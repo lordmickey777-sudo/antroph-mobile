@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
 enum HomeTab { story, profile }
@@ -14,10 +15,10 @@ class BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double navWidth = (constraints.maxWidth * 0.88).clamp(
-          0,
-          480,
-        ); // cap max width for large screens
+        // Responsive nav sizing for phone/tablet/iPad
+        final maxWidth = AppSizing.navBarMaxWidth.fromConstraints(constraints);
+        final double navWidth = (constraints.maxWidth * 0.88).clamp(0, maxWidth);
+        final navHeight = AppSizing.navBarHeight.fromConstraints(constraints);
         return Center(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(50),
@@ -25,7 +26,7 @@ class BottomNav extends StatelessWidget {
               filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
               child: Container(
                 width: navWidth,
-                height: 76,
+                height: navHeight,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(50),
                   // Glass morphism: subtle gradient + translucent border + shadow
@@ -54,12 +55,14 @@ class BottomNav extends StatelessWidget {
                       tab: HomeTab.story,
                       iconPath: 'assets/images/tool.png',
                       label: 'Story',
+                      itemHeight: navHeight - 20,
                     ),
                     _navItem(
                       context,
                       tab: HomeTab.profile,
                       iconPath: 'assets/images/profile.png',
                       label: 'Profile',
+                      itemHeight: navHeight - 20,
                     ),
                   ],
                 ),
@@ -76,6 +79,7 @@ class BottomNav extends StatelessWidget {
     required HomeTab tab,
     required String iconPath,
     required String label,
+    required double itemHeight,
   }) {
     final bool selected = current == tab;
     return Expanded(
@@ -85,7 +89,7 @@ class BottomNav extends StatelessWidget {
         curve: Curves.easeOutCubic,
         margin: const EdgeInsets.symmetric(horizontal: 4),
         padding: EdgeInsets.symmetric(horizontal: selected ? 12 : 0),
-        height: 56,
+        height: itemHeight,
         decoration: BoxDecoration(
           color: selected ? Colors.black.withOpacity(0.30) : Colors.transparent,
           borderRadius: BorderRadius.circular(50),

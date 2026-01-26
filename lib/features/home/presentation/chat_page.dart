@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/navigation/app_route_observer.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
 
 import 'package:antroph_mobile/features/home/models/chat_models.dart';
 import 'package:antroph_mobile/features/home/models/realtime_voice_bridge_models.dart';
@@ -22,16 +23,13 @@ const _accent = Color(0xFF9CC6FF);
 const _pageGradient = Colors.transparent;
 
 class ChatPage extends ConsumerStatefulWidget {
-  const ChatPage({
-    super.key,
-    this.storyTitle,
-    this.storyId,
-    this.storySessionId,
-  });
+  const ChatPage({super.key, this.storyTitle, this.storyId, this.storySessionId});
 
   final String? storyTitle;
+
   /// If provided, starts a new story voice session with this story ID
   final String? storyId;
+
   /// If provided, resumes an existing story voice session
   final String? storySessionId;
 
@@ -45,11 +43,17 @@ class ChatPage extends ConsumerStatefulWidget {
 class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver, RouteAware {
   ModalRoute<void>? _modalRoute;
   bool _storySessionStarted = false;
+  // Store reference for safe use in dispose()
+  VoiceChatController? _voiceController;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Save controller reference for safe disposal
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _voiceController = ref.read(voiceChatControllerProvider.notifier);
+    });
     // Start story session if in story mode
     if (widget.isStoryMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -89,12 +93,14 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
       appRouteObserver.unsubscribe(this);
     }
     // Stop voice playback and end session when leaving
-    final voiceController = ref.read(voiceChatControllerProvider.notifier);
-    if (widget.isStoryMode) {
-      voiceController.pauseStorySession();
-      voiceController.endStorySession();
-    } else {
-      voiceController.stopPlayback();
+    // Use saved reference to avoid using ref after unmount
+    if (_voiceController != null) {
+      if (widget.isStoryMode) {
+        _voiceController!.pauseStorySession();
+        _voiceController!.endStorySession();
+      } else {
+        _voiceController!.stopPlayback();
+      }
     }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -186,7 +192,9 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
           ),
         ),
       ),
-      body: Container(child: SafeArea(child: ChatScreen(isStoryMode: widget.isStoryMode))),
+      body: Container(
+        child: SafeArea(child: ChatScreen(isStoryMode: widget.isStoryMode)),
+      ),
     );
   }
 }
@@ -263,7 +271,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     // Only watch chatControllerProvider in non-story mode to avoid double WebSocket connection
     final ChatState? chatState = widget.isStoryMode ? null : ref.watch(chatControllerProvider);
-    final ChatController? chatController = widget.isStoryMode ? null : ref.read(chatControllerProvider.notifier);
+    final ChatController? chatController = widget.isStoryMode
+        ? null
+        : ref.read(chatControllerProvider.notifier);
     final voiceState = ref.watch(voiceChatControllerProvider);
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
     final headline = _chatHeadline(chatState, voiceState);
@@ -272,11 +282,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final horizontalPadding = constraints.maxWidth > 900
-            ? 40.0
-            : constraints.maxWidth > 600
-            ? 32.0
-            : 16.0;
+        // Use centralized responsive utilities for consistent breakpoints
+        final horizontalPadding = AppPadding.horizontal.fromConstraints(constraints);
         final faceSize = (constraints.maxWidth * 0.75).clamp(250.0, 380.0);
         final availableWidth = math.max(0, constraints.maxWidth - horizontalPadding * 2);
         final bubbleMaxWidth = math.min(460.0, availableWidth * 0.95);
@@ -443,7 +450,7 @@ class _Header extends StatelessWidget {
         case RealtimeVoicePhase.playing:
           return const _StatusData('Narrating', Icons.graphic_eq);
         case RealtimeVoicePhase.paused:
-          return const _StatusData('Paused', Icons.pause_circle);
+          return const _StatusData('v', Icons.pause_circle);
         case RealtimeVoicePhase.error:
           return const _StatusData('Error', Icons.error_outline);
         case RealtimeVoicePhase.closed:
@@ -620,8 +627,8 @@ class _HeroMicButton extends StatelessWidget {
             recording
                 ? Icons.mic
                 : waiting || playing
-                    ? Icons.stop_rounded
-                    : Icons.mic_rounded,
+                ? Icons.stop_rounded
+                : Icons.mic_rounded,
             color: Colors.white,
             size: 30,
           ),
@@ -794,15 +801,13 @@ class _TranscriptButton extends StatelessWidget {
         height: 48,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: _hasContent
-              ? Colors.white.withOpacity(0.1)
-              : Colors.white.withOpacity(0.05),
+          color: _hasContent ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.05),
           border: Border.all(
             color: hasError
                 ? Colors.redAccent.withOpacity(0.6)
                 : _hasContent
-                    ? Colors.white.withOpacity(0.2)
-                    : Colors.white.withOpacity(0.1),
+                ? Colors.white.withOpacity(0.2)
+                : Colors.white.withOpacity(0.1),
           ),
         ),
         child: Icon(
@@ -810,8 +815,8 @@ class _TranscriptButton extends StatelessWidget {
           color: hasError
               ? Colors.redAccent
               : _hasContent
-                  ? Colors.white
-                  : Colors.white38,
+              ? Colors.white
+              : Colors.white38,
           size: 22,
         ),
       ),
@@ -824,12 +829,12 @@ class _TranscriptButton extends StatelessWidget {
     final title = voiceState.isRecording
         ? 'Listening...'
         : voiceState.isProcessing
-            ? 'Processing voice...'
-            : voiceState.isPlaying
-                ? 'Playing reply...'
-                : hasError
-                    ? 'Voice chat issue'
-                    : 'Transcript';
+        ? 'Processing voice...'
+        : voiceState.isPlaying
+        ? 'Playing reply...'
+        : hasError
+        ? 'Voice chat issue'
+        : 'Transcript';
 
     showAppBottomSheet(
       context: context,
@@ -916,7 +921,11 @@ class _TranscriptSheetContent extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             children: [
               if (voiceState.userTranscription?.isNotEmpty ?? false) ...[
-                _TranscriptLine(label: userName ?? 'You', text: voiceState.userTranscription!, isUser: true),
+                _TranscriptLine(
+                  label: userName ?? 'You',
+                  text: voiceState.userTranscription!,
+                  isUser: true,
+                ),
                 const SizedBox(height: 16),
               ],
               if (voiceState.aiResponse?.isNotEmpty ?? false) ...[
@@ -928,11 +937,7 @@ class _TranscriptSheetContent extends StatelessWidget {
                   headline != voiceState.aiResponse) ...[
                 Text(
                   headline,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    height: 1.4,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
                 ),
               ],
               if (hasError && voiceState.errorMessage != null) ...[
@@ -986,14 +991,7 @@ class _TranscriptLine extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          text,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 15,
-            height: 1.4,
-          ),
-        ),
+        Text(text, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
       ],
     );
   }

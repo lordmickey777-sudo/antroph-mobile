@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
 
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/app_dropdown.dart';
@@ -279,13 +280,17 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
     final safeBottom = MediaQuery.of(context).viewPadding.bottom;
     const bottomSpacing = 96.0;
     final listBottomPadding = bottomSpacing + safeBottom;
+    final horizontalPadding = AppPadding.form.of(context);
     return Stack(
       children: [
-        Form(
-          key: _formKey,
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(24, 12, 24, listBottomPadding),
-            children: [
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: ContentWidth.content),
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, listBottomPadding),
+                children: [
               _sectionTitle('Personality'),
               const SizedBox(height: 12),
               _buildPersonalitySlider(),
@@ -390,7 +395,9 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
                 maxLines: 2,
               ),
               const SizedBox(height: 32),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
         Positioned(

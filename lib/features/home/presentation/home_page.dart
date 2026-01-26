@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/bottom_nav.dart';
 import 'package:antroph_mobile/features/profile/presentation/profile_page.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page.dart';
@@ -34,7 +35,15 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+    // Responsive bottom spacing: larger on tablets
+    final bottomPadding = responsive<double>(
+      context,
+      phone: 16,
+      tablet: 20,
+      largeTablet: 24,
+    );
+    final horizontalPadding = AppPadding.horizontal.of(context);
+
     return Scaffold(
       backgroundColor: _homeBg,
       body: SafeArea(
@@ -66,9 +75,9 @@ class _HomePageState extends State<HomePage> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: 16,
+              bottom: bottomPadding,
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: size.width * 0.07),
+                padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                 child: BottomNav(
                   current: _tab,
                   onChanged: (tab) async {

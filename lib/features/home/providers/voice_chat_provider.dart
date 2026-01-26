@@ -15,6 +15,8 @@ import '../../../core/services/device_id_service.dart';
 import '../../profile/providers/customization_controller.dart';
 import '../models/expression_models.dart';
 import '../models/realtime_voice_bridge_models.dart';
+import 'package:audio_session/audio_session.dart';
+
 import '../services/pcm_audio_player.dart';
 import '../services/realtime_voice_client.dart';
 
@@ -134,6 +136,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   final RealtimeVoiceClient _client;
   final AudioChunkPlayer _player;
   final Uri? _voiceUriOverride;
+  AudioSession? _audioSession;
+  _VoiceAudioSessionMode? _audioSessionMode;
   FlutterSoundRecorder? _recorder;
   StreamSubscription<RealtimeIncomingMessage>? _socketSub;
   StreamController<Uint8List>? _micStreamController;
@@ -207,6 +211,51 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     });
 
     return const VoiceChatState();
+  }
+
+  Future<void> _configureAudioSession(_VoiceAudioSessionMode mode) async {
+    if (_audioSessionMode == mode) return;
+    try {
+      _audioSession ??= await AudioSession.instance;
+      final AudioSessionConfiguration config;
+      if (mode == _VoiceAudioSessionMode.recording) {
+        config = AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+          avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker |
+              AVAudioSessionCategoryOptions.allowBluetooth,
+          avAudioSessionMode: AVAudioSessionMode.voiceChat,
+          avAudioSessionRouteSharingPolicy:
+              AVAudioSessionRouteSharingPolicy.defaultPolicy,
+          avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.speech,
+            usage: AndroidAudioUsage.voiceCommunication,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+          androidWillPauseWhenDucked: false,
+        );
+      } else {
+        config = AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playback,
+          avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker,
+          avAudioSessionMode: AVAudioSessionMode.defaultMode,
+          avAudioSessionRouteSharingPolicy:
+              AVAudioSessionRouteSharingPolicy.defaultPolicy,
+          avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.music,
+            usage: AndroidAudioUsage.media,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+          androidWillPauseWhenDucked: false,
+        );
+      }
+      await _audioSession!.configure(config);
+      await _audioSession!.setActive(true);
+      _audioSessionMode = mode;
+    } catch (err, st) {
+      _log.w('Audio session configure failed', error: err, stackTrace: st);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -505,6 +554,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   Future<void> _startRecorder() async {
     try {
+      await _configureAudioSession(_VoiceAudioSessionMode.recording);
       await _stopRecorder();
       _recorder ??= FlutterSoundRecorder();
       if (!_recorder!.isRecording) {
@@ -1056,6 +1106,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       _queueAiAudioLevel(bytes);
 
+      await _configureAudioSession(_VoiceAudioSessionMode.playback);
       await _player.addChunk(
         bytes,
         sampleRate: _sampleRate,
@@ -1092,6 +1143,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       _queueAiAudioLevel(bytes);
 
+      await _configureAudioSession(_VoiceAudioSessionMode.playback);
       await _player.addChunk(
         bytes,
         sampleRate: _sampleRate,
@@ -1491,6 +1543,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _audioEnabled = false;
     unawaited(_player.stop());
   }
+}
+
+enum _VoiceAudioSessionMode {
+  recording,
+  playback,
 }
 
 class VoiceChatException implements Exception {

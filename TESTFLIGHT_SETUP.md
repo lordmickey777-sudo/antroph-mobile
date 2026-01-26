@@ -2,7 +2,7 @@
 
 ## Application Configuration
 
-The application ID has been successfully updated to: **`com.antroph.aura`**
+The application ID has been successfully updated to: **`com.antroph.auraapp`**
 
 ## Prerequisites for TestFlight Deployment
 
@@ -16,7 +16,7 @@ The application ID has been successfully updated to: **`com.antroph.aura`**
 1. Go to https://appstoreconnect.apple.com/
 2. Create a new app:
    - Click "My Apps" → "+" → "New App"
-   - **Bundle ID**: Select or create `com.antroph.aura`
+   - **Bundle ID**: Select or create `com.antroph.auraapp`
    - **App Name**: Your app's name (e.g., "Aura" or "Antroph")
    - **Primary Language**: English
    - **SKU**: A unique identifier (e.g., "antroph-aura-001")
