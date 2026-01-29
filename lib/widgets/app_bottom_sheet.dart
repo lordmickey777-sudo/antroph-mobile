@@ -1,44 +1,36 @@
-import 'package:flutter/cupertino.dart' hide CupertinoSheetRoute;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import 'package:antroph_mobile/widgets/cupertino_sheet_route.dart';
-
-/// Shows a Cupertino-style bottom sheet with iOS-like transitions using [CupertinoSheetRoute].
+/// Shows a full-height Cupertino-style sheet using [CupertinoSheetRoute].
 ///
 /// [context] - Build context
 /// [builder] - Builder function that receives a scroll controller for nested scrolling
-/// [heightFactor] - Height as a fraction of screen height (0.0 to 1.0), defaults to 0.7
-/// [isDismissible] - Whether tapping the barrier dismisses the sheet
+/// [enableDrag] - Whether the sheet can be dismissed by dragging
 /// [backgroundColor] - Background color of the sheet (defaults to theme surface color)
 Future<T?> showAppBottomSheet<T>({
   required BuildContext context,
   required Widget Function(BuildContext context, ScrollController scrollController) builder,
-  double heightFactor = 0.7,
-  bool isDismissible = true,
+  bool enableDrag = true,
   Color? backgroundColor,
 }) {
-  return Navigator.of(context).push<T>(
-    CupertinoSheetRoute<T>(
-      dismissible: isDismissible,
-      builder: (context) => _SheetScaffold(
-        heightFactor: heightFactor,
-        backgroundColor: backgroundColor,
-        builder: builder,
-      ),
+  return showCupertinoSheet<T>(
+    context: context,
+    enableDrag: enableDrag,
+    pageBuilder: (context) => _SheetScaffold(
+      backgroundColor: backgroundColor,
+      builder: builder,
     ),
   );
 }
 
-/// Internal scaffold that positions the sheet at the bottom of the screen.
+/// Internal scaffold that styles the sheet surface and fills the available height.
 class _SheetScaffold extends StatefulWidget {
   const _SheetScaffold({
     required this.builder,
-    required this.heightFactor,
     this.backgroundColor,
   });
 
   final Widget Function(BuildContext context, ScrollController scrollController) builder;
-  final double heightFactor;
   final Color? backgroundColor;
 
   @override
@@ -56,29 +48,31 @@ class _SheetScaffoldState extends State<_SheetScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-
     final bgColor = widget.backgroundColor ?? Theme.of(context).cardColor;
+    final safePadding = MediaQueryData.fromView(View.of(context)).padding;
 
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: Container(
-        height: size.height * widget.heightFactor,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const _DragHandle(),
-              Expanded(
-                child: widget.builder(context, _scrollController),
-              ),
-            ],
+    return SizedBox.expand(
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: bgColor,
+          ),
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: safePadding.left,
+              right: safePadding.right,
+              bottom: safePadding.bottom,
+            ),
+            child: Column(
+              children: [
+                const _DragHandle(),
+                Expanded(
+                  child: widget.builder(context, _scrollController),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -120,7 +114,6 @@ Future<T?> showAppActionSheet<T>({
 }) {
   return showAppBottomSheet<T>(
     context: context,
-    heightFactor: 0.35,
     builder: (context, scrollController) => _ActionSheetContent(
       actions: actions,
       title: title,

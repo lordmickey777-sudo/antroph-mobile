@@ -216,11 +216,9 @@ AppButton(
 
 ## Notes on Cupertino-style sheets
 
-This app uses a lightweight custom `CupertinoSheetRoute` (`lib/widgets/cupertino_sheet_route.dart`) to present a full-height bottom sheet for the Story flow. When opening and closing the sheet from `HomePage`, we push/pop on the root navigator to avoid issues with nested navigators (e.g., when using `go_router`). If you open or close the sheet elsewhere, prefer:
+This app uses Flutter's built-in `CupertinoSheetRoute` (via `showCupertinoSheet` in `lib/widgets/app_bottom_sheet.dart`) to present full-height sheets. Use `showAppBottomSheet` to open a sheet; it always pushes to the root navigator so transitions stack correctly. To close:
 
-- Open: `Navigator.of(context, rootNavigator: true).push(CupertinoSheetRoute(...))`
-- Close: `Navigator.of(context, rootNavigator: true).pop()`
-
-This ensures the sheet always dismisses correctly regardless of the current tab or nesting.
+- Use `Navigator.of(context).pop(result)` when you need to return a result.
+- Use `CupertinoSheetRoute.popSheet(context)` if you ever enable nested sheet navigation and want to dismiss the entire sheet.
 
 # antroph-mobile

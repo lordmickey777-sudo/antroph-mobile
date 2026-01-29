@@ -40,8 +40,7 @@ Future<AuthGuardResult> showAuthGuardSheet(
   // Show the auth sheet
   final result = await showAppBottomSheet<AuthGuardResult>(
     context: context,
-    heightFactor: 0.85,
-    isDismissible: true,
+    enableDrag: true,
     builder: (context, scrollController) => AuthSheetContent(
       actionDescription: actionDescription,
       scrollController: scrollController,

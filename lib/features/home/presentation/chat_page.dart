@@ -850,7 +850,6 @@ class _TranscriptButton extends StatelessWidget {
 
     showAppBottomSheet(
       context: context,
-      heightFactor: 0.5,
       builder: (context, scrollController) => _TranscriptSheetContent(
         title: title,
         hasError: hasError,

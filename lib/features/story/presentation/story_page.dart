@@ -88,7 +88,6 @@ class StoryPage extends ConsumerWidget {
   Future<void> _openStory(BuildContext context, StoryCardDto card) async {
     await showAppBottomSheet(
       context: context,
-      heightFactor: 0.7,
       builder: (_, scrollController) => StorySheetContent(
         storyId: card.storyId,
         title: card.title,
@@ -105,7 +104,6 @@ class StoryPage extends ConsumerWidget {
   Future<void> _openFeaturedStory(BuildContext context, FeaturedStoryDto story) async {
     await showAppBottomSheet(
       context: context,
-      heightFactor: 0.7,
       builder: (_, scrollController) => StorySheetContent(
         storyId: story.id,
         title: story.title,
