@@ -6,6 +6,7 @@ import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
+import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
@@ -392,35 +393,15 @@ class _CollectionCard extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                     const SizedBox(height: 12),
-                    GestureDetector(
-                      onTap: onStartChat,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 20,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(100),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(
-                              CupertinoIcons.play_fill,
-                              color: Colors.black,
-                              size: 18,
-                            ),
-                            SizedBox(width: 6),
-                            TypographyText(
-                              'Start story',
-                              variant: TypographyVariant.body1,
-                              color: Colors.black,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ],
-                        ),
-                      ),
+                    AppPillButton(
+                      onPressed: onStartChat,
+                      icon: CupertinoIcons.play_fill,
+                      label: 'Start story',
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                      variant: TypographyVariant.body1,
+                      fontWeight: FontWeight.w600,
                     ),
                   ],
                 ),
@@ -516,69 +497,27 @@ class _CollectionStoryCard extends StatelessWidget {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        GestureDetector(
-                          onTap: onPlay,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 10,
-                              horizontal: 20,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(100),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(
-                                  CupertinoIcons.play_fill,
-                                  color: Colors.black,
-                                  size: 18,
-                                ),
-                                SizedBox(width: 6),
-                                TypographyText(
-                                  'Play',
-                                  variant: TypographyVariant.body1,
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ],
-                            ),
-                          ),
+                        AppPillButton(
+                          onPressed: onPlay,
+                          icon: CupertinoIcons.play_fill,
+                          label: 'Play',
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                          variant: TypographyVariant.body1,
+                          fontWeight: FontWeight.w600,
                         ),
                         const SizedBox(width: 10),
-                        GestureDetector(
-                          onTap: onStartChat,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 10,
-                              horizontal: 20,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(100),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.2),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(
-                                  CupertinoIcons.chat_bubble_2_fill,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                                SizedBox(width: 6),
-                                TypographyText(
-                                  'Chat',
-                                  variant: TypographyVariant.body1,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ],
-                            ),
-                          ),
+                        AppPillButton(
+                          onPressed: onStartChat,
+                          icon: CupertinoIcons.chat_bubble_2_fill,
+                          label: 'Chat',
+                          backgroundColor: Colors.white.withValues(alpha: 0.15),
+                          foregroundColor: Colors.white,
+                          borderColor: Colors.white.withValues(alpha: 0.2),
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                          variant: TypographyVariant.body1,
+                          fontWeight: FontWeight.w600,
                         ),
                       ],
                     ),

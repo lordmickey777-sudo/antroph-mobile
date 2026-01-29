@@ -214,21 +214,21 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
                             maxLines: 2,
                           ),
                         const SizedBox(height: 20),
-                      AppPillButton(
-                        onPressed: _isAdding
-                            ? null
-                            : _isAdded
-                            ? _navigateToChat
-                            : _handleAddToPlaylist,
-                        isLoading: _isAdding,
-                        icon: _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
-                        label: _isAdding ? 'Adding...' : (_isAdded ? 'Play' : 'My List'),
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-                        variant: TypographyVariant.body1,
-                        fontWeight: FontWeight.w600,
-                      ),
+                        AppPillButton(
+                          onPressed: _isAdding
+                              ? null
+                              : _isAdded
+                              ? _navigateToChat
+                              : _handleAddToPlaylist,
+                          isLoading: _isAdding,
+                          icon: _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
+                          label: _isAdding ? 'Adding...' : (_isAdded ? 'Play' : 'My List'),
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                          variant: TypographyVariant.body1,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ],
                     ),
                   ),
@@ -402,63 +402,41 @@ class _SectionSliver extends StatelessWidget {
 
   final StorySectionDto section;
   final Future<void> Function(StoryCardDto) onTap;
-  static const double _sectionHeight = 220;
-
-  @override
-  Widget build(BuildContext context) {
-    return SliverToBoxAdapter(
-      child: SizedBox(
-        height: _sectionHeight,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(width: 8),
-            _SideLabel(text: section.title),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.only(right: 10),
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                itemBuilder: (context, index) {
-                  final item = section.items[index];
-                  return _StoryCard(item: item, onTap: () => onTap(item));
-                },
-                separatorBuilder: (_, __) => const SizedBox(width: 16),
-                itemCount: section.items.length,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SideLabel extends StatelessWidget {
-  const _SideLabel({required this.text});
-  final String text;
+  static const double _cardListHeight = 170;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return RotatedBox(
-      quarterTurns: 3,
-      child: Opacity(
-        opacity: 0.8,
-        child: Align(
-          alignment: Alignment.center,
-          child: Padding(
-            padding: const EdgeInsets.only(left: 100.0),
+
+    return SliverToBoxAdapter(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
             child: TypographyText(
-              text,
+              section.title,
               variant: TypographyVariant.body1,
               color: isDark ? Colors.white : Colors.black87,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
             ),
           ),
-        ),
+          SizedBox(
+            height: _cardListHeight,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemBuilder: (context, index) {
+                final item = section.items[index];
+                return _StoryCard(item: item, onTap: () => onTap(item));
+              },
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemCount: section.items.length,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -494,67 +472,76 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
       onTap: widget.onTap,
       child: SizedBox(
         width: 125,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Card visual
-            SmoothClipRRect(
-              smoothness: 0.6,
-              borderRadius: BorderRadius.circular(cardRadius),
-              side: BorderSide(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white.withValues(alpha: 0.15)
-                    : Colors.black.withValues(alpha: 0.1),
-                width: 1,
-              ),
-              child: AspectRatio(
-                aspectRatio: 0.8,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Positioned.fill(child: _StoryImage(image: item.image)),
-                    Positioned(
-                      right: 6,
-                      bottom: 6,
-                      child: AppCircleIconButton(
-                        onPressed: _isAdding
-                            ? null
-                            : _isAdded
-                            ? _navigateToChat
-                            : _handleAddToPlaylist,
-                        isLoading: _isAdding,
-                        icon: _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
-                        size: 34,
-                        iconSize: 18,
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                      ),
+        child: SmoothClipRRect(
+        smoothness: 0.6,
+        borderRadius: BorderRadius.circular(cardRadius),
+        side: BorderSide(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.black.withValues(alpha: 0.1),
+          width: 1,
+        ),
+        child: AspectRatio(
+          aspectRatio: 0.75,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(child: _StoryImage(image: item.image)),
+              // Gradient overlay for title readability
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  height: 60,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.0),
+                        Colors.black.withValues(alpha: 0.7),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 6),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TypographyText(
-                    item.title,
-                    variant: TypographyVariant.body1,
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white
-                        : Colors.black87,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ],
+              // Title at bottom left
+              Positioned(
+                left: 10,
+                right: 10,
+                bottom: 10,
+                child: TypographyText(
+                  item.title,
+                  variant: TypographyVariant.body1,
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  maxLines: 2,
+                ),
               ),
-            ),
-          ],
+              // Button at top right
+              Positioned(
+                right: 6,
+                top: 6,
+                child: AppCircleIconButton(
+                  onPressed: _isAdding
+                      ? null
+                      : _isAdded
+                      ? _navigateToChat
+                      : _handleAddToPlaylist,
+                  isLoading: _isAdding,
+                  icon: _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
+                  size: 34,
+                  iconSize: 18,
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                ),
+              ),
+            ],
+          ),
         ),
+      ),
       ),
     );
   }

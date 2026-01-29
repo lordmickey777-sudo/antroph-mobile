@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
+import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/features/story/providers/story_session_provider.dart';
@@ -258,19 +259,20 @@ class _HeroCard extends ConsumerWidget {
             left: 20,
             right: 20,
             bottom: 24,
-            child: sessionState.isLoading
-                ? const Center(
-                    child: Padding(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: sessionState.isLoading
+                  ? const Padding(
                       padding: EdgeInsets.symmetric(vertical: 10),
                       child: CupertinoActivityIndicator(color: Colors.white),
+                    )
+                  : _ActionButton(
+                      isAdded: isAdded,
+                      isLoading: isAddingToPlaylist,
+                      onAddPressed: isAddingToPlaylist ? null : onAddToPlaylist,
+                      onPlayPressed: onPlayPressed,
                     ),
-                  )
-                : _ActionButton(
-                    isAdded: isAdded,
-                    isLoading: isAddingToPlaylist,
-                    onAddPressed: isAddingToPlaylist ? null : onAddToPlaylist,
-                    onPlayPressed: onPlayPressed,
-                  ),
+            ),
           ),
         ],
       ),
@@ -318,43 +320,20 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: isLoading
+    return AppPillButton(
+      onPressed: isLoading
           ? null
           : isAdded
               ? onPlayPressed
               : onAddPressed,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(100),
-        ),
-        child: isLoading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CupertinoActivityIndicator(radius: 10),
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
-                    color: Colors.black,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  TypographyText(
-                    isAdded ? 'Play' : 'My List',
-                    variant: TypographyVariant.body1,
-                    color: Colors.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ],
-              ),
-      ),
+      isLoading: isLoading,
+      icon: isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
+      label: isLoading ? 'Adding...' : (isAdded ? 'Play' : 'My List'),
+      backgroundColor: Colors.white,
+      foregroundColor: Colors.black,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+      variant: TypographyVariant.body1,
+      fontWeight: FontWeight.w600,
     );
   }
 }

@@ -50,6 +50,7 @@ class AppPillButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isEnabled = onPressed != null && !isLoading;
+    final shouldDim = onPressed == null && !isLoading;
     final fg = foregroundColor ?? Theme.of(context).colorScheme.onSurface;
     final bg = backgroundColor ?? Theme.of(context).colorScheme.surface;
     final shape = RoundedRectangleBorder(
@@ -97,7 +98,7 @@ class AppPillButton extends StatelessWidget {
       ),
     );
 
-    if (isEnabled) return button;
+    if (isEnabled || !shouldDim) return button;
 
     return Opacity(opacity: 0.6, child: button);
   }
@@ -139,6 +140,7 @@ class AppCircleIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isEnabled = onPressed != null && !isLoading;
+    final shouldDim = onPressed == null && !isLoading;
     final fg = foregroundColor ?? Theme.of(context).colorScheme.onSurface;
     final bg = backgroundColor ?? Theme.of(context).colorScheme.surface;
     final rippleColor = fg.withValues(alpha: 0.18);
@@ -169,7 +171,7 @@ class AppCircleIconButton extends StatelessWidget {
       ),
     );
 
-    if (isEnabled) return button;
+    if (isEnabled || !shouldDim) return button;
     return Opacity(opacity: 0.6, child: button);
   }
 }
