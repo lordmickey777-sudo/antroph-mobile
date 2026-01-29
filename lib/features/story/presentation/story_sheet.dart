@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
@@ -124,6 +125,19 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
 
   Future<void> _handleAddToPlaylist() async {
     if (_isAddingToPlaylist) return;
+
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Add stories to your playlist',
+    );
+    if (!mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     setState(() => _isAddingToPlaylist = true);
     try {
       await ref
@@ -146,7 +160,19 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
     }
   }
 
-  void _navigateToChat() {
+  Future<void> _navigateToChat() async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (!mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatPage(

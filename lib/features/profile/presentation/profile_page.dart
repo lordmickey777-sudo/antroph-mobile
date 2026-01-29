@@ -1,9 +1,12 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
+import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
@@ -40,11 +43,18 @@ class _ProfileHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+
     final auth = ref.watch(authControllerProvider).value;
+    final isGuest = auth == null;
     final profile = ref.watch(profileControllerProvider).value;
     final email = auth?.email ?? '';
-    final displayName = profile?.displayName ?? auth?.displayName ?? email.trim().split('@').first;
-    final avatarUrl = profile?.avatarUrl;
+    final displayName = isGuest
+        ? 'Guest'
+        : (profile?.displayName ?? auth?.displayName ?? email.trim().split('@').first);
+    final avatarUrl = isGuest ? null : profile?.avatarUrl;
     final avatarSize = AppSizing.avatarLarge.of(context);
     return Column(
       children: [
@@ -52,7 +62,18 @@ class _ProfileHeader extends ConsumerWidget {
           clipBehavior: Clip.none,
           children: [
             GestureDetector(
-              onTap: () => context.pushNamed('edit-profile'),
+              onTap: isGuest
+                  ? () async {
+                      final result = await showAuthGuardSheet(
+                        context,
+                        ref,
+                        actionDescription: 'Access your profile',
+                      );
+                      if (result == AuthGuardResult.loginSuccessful && context.mounted) {
+                        context.pushNamed('edit-profile');
+                      }
+                    }
+                  : () => context.pushNamed('edit-profile'),
               child: ClipOval(
                 child: avatarUrl != null && avatarUrl.isNotEmpty
                     ? Image.network(avatarUrl, width: avatarSize, height: avatarSize, fit: BoxFit.cover)
@@ -64,32 +85,47 @@ class _ProfileHeader extends ConsumerWidget {
                       ),
               ),
             ),
-            Positioned(
-              right: 9,
-              bottom: 9,
-              child: Container(
-                width: 14,
-                height: 14,
-                decoration: const BoxDecoration(color: Color(0xFF23D18B), shape: BoxShape.circle),
+            if (!isGuest)
+              Positioned(
+                right: 9,
+                bottom: 9,
+                child: Container(
+                  width: 14,
+                  height: 14,
+                  decoration: const BoxDecoration(color: Color(0xFF23D18B), shape: BoxShape.circle),
+                ),
               ),
-            ),
           ],
         ),
         const SizedBox(height: 16),
         TypographyText(
           displayName,
           variant: TypographyVariant.h2,
-          color: Colors.white,
+          color: textColor,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 6),
-        TypographyText(
-          email,
-          variant: TypographyVariant.body2,
-          color: Colors.white.withOpacity(0.7),
-        ),
+        if (isGuest)
+          GestureDetector(
+            onTap: () => showAuthGuardSheet(
+              context,
+              ref,
+              actionDescription: 'Access your profile',
+            ),
+            child: TypographyText(
+              'Tap to login',
+              variant: TypographyVariant.body2,
+              color: secondaryTextColor,
+            ),
+          )
+        else
+          TypographyText(
+            email,
+            variant: TypographyVariant.body2,
+            color: secondaryTextColor,
+          ),
         const SizedBox(height: 12),
-        _ProfileNudge(),
+        if (!isGuest) _ProfileNudge(),
       ],
     );
   }
@@ -100,36 +136,64 @@ class _ProfileMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const items = [
+    final isGuest = ref.watch(authControllerProvider).value == null;
+
+    // Build menu items dynamically based on auth state
+    final items = [
       (Icons.person_outline, 'Profile', true),
       (Icons.settings_outlined, 'Customization', true),
       (Icons.qr_code_scanner, 'Scan', true),
-      (Icons.attach_money_outlined, 'Subscription', true),
       (Icons.lock_outline, 'Security', true),
       (Icons.help_outline, 'Support', true),
       (Icons.privacy_tip_outlined, 'Privacy Policy', true),
       (Icons.description_outlined, 'Terms of Service', true),
-      (Icons.delete_outline, 'Delete account', false),
-      (Icons.logout, 'Logout', false),
+      if (!isGuest) (Icons.delete_outline, 'Delete account', false),
+      (isGuest ? Icons.login : Icons.logout, isGuest ? 'Login' : 'Logout', false),
     ];
+
+    // Actions that require authentication
+    const authRequiredActions = {'Profile', 'Customization', 'Scan', 'Security'};
+
+    final isDarkMode = ref.watch(themeModeProvider) == ThemeMode.dark;
 
     return Column(
       children: [
+        // Theme toggle row
+        _ThemeToggleRow(
+          isDarkMode: isDarkMode,
+          onToggle: () => ref.read(themeModeProvider.notifier).toggleTheme(),
+        ),
         for (int i = 0; i < items.length; i++) ...[
           InkWell(
             onTap: () async {
               final title = items[i].$2;
+
+              // Check if action requires auth and user is guest
+              if (isGuest && authRequiredActions.contains(title)) {
+                final result = await showAuthGuardSheet(
+                  context,
+                  ref,
+                  actionDescription: 'Access $title',
+                );
+                if (!context.mounted) return;
+                if (result != AuthGuardResult.authenticated &&
+                    result != AuthGuardResult.loginSuccessful) {
+                  return;
+                }
+              }
+
               switch (title) {
                 case 'Profile':
                   context.pushNamed('edit-profile');
                   break;
                 case 'Customization':
-                  // showToast(context, 'Opening customization…');
                   context.pushNamed('customization');
                   break;
                 case 'Scan':
-                  // showToast(context, 'Opening scanner…');
                   context.pushNamed('scan');
+                  break;
+                case 'Security':
+                  showToast(context, 'Security coming soon');
                   break;
                 case 'Support':
                   context.pushNamed('support');
@@ -182,7 +246,7 @@ class _ProfileMenu extends ConsumerWidget {
                     final msg = await ref.read(profileControllerProvider.notifier).deleteAccount();
                     if (context.mounted) {
                       showToast(context, msg.isNotEmpty ? msg : 'Account deleted', success: true);
-                      context.goNamed('login');
+                      context.go('/home');
                     }
                   } catch (e) {
                     if (context.mounted) {
@@ -190,12 +254,18 @@ class _ProfileMenu extends ConsumerWidget {
                     }
                   }
                   break;
+                case 'Login':
+                  await showAuthGuardSheet(
+                    context,
+                    ref,
+                    actionDescription: 'Login to your account',
+                  );
+                  break;
                 case 'Logout':
                   final controller = ref.read(authControllerProvider.notifier);
                   await controller.logout();
                   if (context.mounted) {
                     showToast(context, 'Logged out', success: true);
-                    context.goNamed('login');
                   }
                   break;
                 default:
@@ -223,16 +293,61 @@ class _ProfileMenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final iconColor = isDark ? Colors.white : Colors.black87;
+    final chevronColor = isDark ? Colors.white70 : Colors.black54;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white, size: 26),
+          Icon(icon, color: iconColor, size: 26),
           const SizedBox(width: 18),
           Expanded(
-            child: TypographyText(title, variant: TypographyVariant.body1, color: Colors.white),
+            child: TypographyText(title, variant: TypographyVariant.body1, color: textColor),
           ),
-          if (showChevron) const Icon(Icons.chevron_right, color: Colors.white70),
+          if (showChevron) Icon(Icons.chevron_right, color: chevronColor),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThemeToggleRow extends StatelessWidget {
+  const _ThemeToggleRow({required this.isDarkMode, required this.onToggle});
+
+  final bool isDarkMode;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final iconColor = isDark ? Colors.white : Colors.black87;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      child: Row(
+        children: [
+          Icon(
+            isDarkMode ? Icons.dark_mode : Icons.light_mode,
+            color: iconColor,
+            size: 26,
+          ),
+          const SizedBox(width: 18),
+          Expanded(
+            child: TypographyText(
+              isDarkMode ? 'Dark Mode' : 'Light Mode',
+              variant: TypographyVariant.body1,
+              color: textColor,
+            ),
+          ),
+          CupertinoSwitch(
+            value: isDarkMode,
+            onChanged: (_) => onToggle(),
+            activeTrackColor: Colors.deepPurple,
+          ),
         ],
       ),
     );
@@ -242,6 +357,10 @@ class _ProfileMenuItem extends StatelessWidget {
 class _ProfileNudge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final chevronColor = isDark ? Colors.white70 : Colors.black54;
+
     final profileAsync = ref.watch(profileControllerProvider);
     return profileAsync.when(
       loading: () => const SizedBox.shrink(),
@@ -260,9 +379,9 @@ class _ProfileNudge extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.12),
+                color: Colors.grey.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.withOpacity(0.4)),
+                border: Border.all(color: Colors.grey.withValues(alpha: 0.4)),
               ),
               child: Row(
                 children: [
@@ -271,13 +390,11 @@ class _ProfileNudge extends ConsumerWidget {
                   Expanded(
                     child: TypographyText(
                       'Complete your profile',
-
-                      // 'Complete your profile: ${missing.join(', ')}',
                       variant: TypographyVariant.body2,
-                      color: Colors.white,
+                      color: textColor,
                     ),
                   ),
-                  const Icon(Icons.chevron_right, color: Colors.white70),
+                  Icon(Icons.chevron_right, color: chevronColor),
                 ],
               ),
             ),
@@ -293,6 +410,9 @@ class _BuildNumber extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final versionColor = isDark ? Colors.white.withValues(alpha: 0.4) : Colors.black.withValues(alpha: 0.4);
+
     return FutureBuilder<PackageInfo>(
       future: PackageInfo.fromPlatform(),
       builder: (context, snapshot) {
@@ -302,7 +422,7 @@ class _BuildNumber extends StatelessWidget {
           child: TypographyText(
             'v${info.version} (${info.buildNumber})',
             variant: TypographyVariant.body2,
-            color: Colors.white.withOpacity(0.4),
+            color: versionColor,
           ),
         );
       },

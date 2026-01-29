@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
-import 'package:antroph_mobile/core/auth/models/user.dart';
 import 'package:antroph_mobile/core/onboarding/onboarding_storage_service.dart';
 
 class SplashPage extends ConsumerStatefulWidget {
@@ -32,11 +31,11 @@ class _SplashPageState extends ConsumerState<SplashPage> {
         ? Future<void>.value()
         : Future.delayed(const Duration(milliseconds: 1200));
 
-    AuthUser? user;
+    // Attempt to restore auth session in background (for returning users)
     try {
-      user = await ref.read(authControllerProvider.future);
+      await ref.read(authControllerProvider.future);
     } catch (_) {
-      user = null;
+      // Ignore auth errors - user can continue as guest
     }
 
     await minimumDisplay;
@@ -47,12 +46,8 @@ class _SplashPageState extends ConsumerState<SplashPage> {
       return;
     }
 
-    if (user != null) {
-      _navigate('/home');
-      return;
-    }
-
-    _navigate('/auth/login');
+    // Always go to home - auth is handled via auth guard sheets when needed
+    _navigate('/home');
   }
 
   void _navigate(String path) {

@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
+import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -66,7 +67,7 @@ class CollectionsPage extends ConsumerWidget {
                           CollectionDetailPage(collection: collection),
                     ),
                   ),
-                  onStartChat: () => _startChatForCollection(context, collection),
+                  onStartChat: () => _startChatForCollection(context, ref, collection),
                   onRemove: () =>
                       _removeCollectionStories(context, ref, collection),
                 );
@@ -79,7 +80,23 @@ class CollectionsPage extends ConsumerWidget {
     );
   }
 
-  void _startChatForCollection(BuildContext context, PlaylistDto collection) {
+  Future<void> _startChatForCollection(
+    BuildContext context,
+    WidgetRef ref,
+    PlaylistDto collection,
+  ) async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (!context.mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     // Use the collection id as the story id since each playlist item is a story
     final storyId = collection.id;
     if (storyId.isEmpty) {
@@ -106,6 +123,18 @@ class CollectionsPage extends ConsumerWidget {
     WidgetRef ref,
     PlaylistDto collection,
   ) async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Remove stories from collection',
+    );
+    if (!context.mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     final id = collection.id;
     if (id.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -185,8 +214,8 @@ class CollectionDetailPage extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _CollectionStoryCard(
                   story: story,
-                  onPlay: () => _startStory(context, story),
-                  onStartChat: () => _startChatForStory(context, story),
+                  onPlay: () => _startStory(context, ref, story),
+                  onStartChat: () => _startChatForStory(context, ref, story),
                   onRemove: () =>
                       _removeStoryFromCollection(context, ref, story),
                 ),
@@ -198,13 +227,45 @@ class CollectionDetailPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _startStory(BuildContext context, PlaylistStoryDto story) async {
+  Future<void> _startStory(
+    BuildContext context,
+    WidgetRef ref,
+    PlaylistStoryDto story,
+  ) async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (!context.mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => StoryPlayerPage(story: story)));
   }
 
-  void _startChatForStory(BuildContext context, PlaylistStoryDto story) {
+  Future<void> _startChatForStory(
+    BuildContext context,
+    WidgetRef ref,
+    PlaylistStoryDto story,
+  ) async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (!context.mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatPage(
@@ -220,6 +281,18 @@ class CollectionDetailPage extends ConsumerWidget {
     WidgetRef ref,
     PlaylistStoryDto story,
   ) async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Remove story from collection',
+    );
+    if (!context.mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     final repo = ref.read(storiesRepositoryProvider);
     try {
       await repo.removeStoriesFromCollection(storyIds: [story.storyId]);

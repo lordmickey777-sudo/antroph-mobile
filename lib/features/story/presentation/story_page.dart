@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
+import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -18,13 +19,10 @@ import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 class StoryPage extends ConsumerWidget {
   const StoryPage({super.key});
 
-  static const _bg = Color(0xFF121516);
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncHome = ref.watch(storiesHomeSectionsProvider);
     return Scaffold(
-      backgroundColor: _bg,
       body: SafeArea(
         child: Stack(
           children: [
@@ -43,8 +41,8 @@ class StoryPage extends ConsumerWidget {
                 if (sections.isEmpty && featuredStory == null) return const _EmptyView();
 
                 return RefreshIndicator.adaptive(
-                  color: Colors.white,
-                  backgroundColor: _bg,
+                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87,
+                  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                   onRefresh: () => ref.refresh(storiesHomeSectionsProvider.future),
                   child: CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
@@ -61,10 +59,10 @@ class StoryPage extends ConsumerWidget {
                             children: [
                               Image.asset('assets/images/app_logo.png', width: 38, height: 38),
                               const SizedBox(width: 2),
-                              const TypographyText(
+                              TypographyText(
                                 'Stories',
                                 variant: TypographyVariant.h3,
-                                color: Colors.white,
+                                color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87,
                               ),
                             ],
                           ),
@@ -161,7 +159,7 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
         child: SmoothClipRRect(
           smoothness: 0.6,
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 1),
+          side: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.1), width: 1),
           child: AspectRatio(
             aspectRatio: 0.85,
             child: Stack(
@@ -270,6 +268,19 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
 
   Future<void> _handleAddToPlaylist() async {
     if (_isAdding || _isAdded) return;
+
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Add stories to your playlist',
+    );
+    if (!mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     setState(() => _isAdding = true);
     try {
       await ref.read(storiesRepositoryProvider).addStoriesToPlaylist(storyIds: [widget.story.id]);
@@ -289,7 +300,19 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
     }
   }
 
-  void _navigateToChat() {
+  Future<void> _navigateToChat() async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (!mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatPage(
@@ -345,6 +368,7 @@ class _SideLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return RotatedBox(
       quarterTurns: 3,
       child: Opacity(
@@ -356,7 +380,7 @@ class _SideLabel extends StatelessWidget {
             child: TypographyText(
               text,
               variant: TypographyVariant.body1,
-              color: Colors.white,
+              color: isDark ? Colors.white : Colors.black87,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
@@ -398,12 +422,13 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
       child: SizedBox(
         width: 125,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Card visual
             SmoothClipRRect(
               smoothness: 0.6,
               borderRadius: BorderRadius.circular(cardRadius),
-              side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 1),
+              side: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.1), width: 1),
               child: AspectRatio(
                 aspectRatio: 0.8,
                 child: Stack(
@@ -466,7 +491,7 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
                   TypographyText(
                     item.title,
                     variant: TypographyVariant.body1,
-                    color: Colors.white,
+                    color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -481,6 +506,19 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
 
   Future<void> _handleAddToPlaylist() async {
     if (_isAdding || _isAdded) return;
+
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Add stories to your playlist',
+    );
+    if (!mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     setState(() => _isAdding = true);
     try {
       await ref
@@ -502,7 +540,19 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
     }
   }
 
-  void _navigateToChat() {
+  Future<void> _navigateToChat() async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (!mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatPage(

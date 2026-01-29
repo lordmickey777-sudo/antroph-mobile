@@ -15,12 +15,17 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/voice_activity_face.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 
-const _chatBg = Color(0xFF0B1118);
-const _surface = Color(0xFF111822);
-const _userBubble = Color(0xFF1C2533);
-const _assistantBubble = Color(0xFF0F1720);
+// Dark mode colors
+const _chatBgDark = Color(0xFF0B1118);
+const _userBubbleDark = Color(0xFF1C2533);
+const _assistantBubbleDark = Color(0xFF0F1720);
+
+// Light mode colors
+const _chatBgLight = Color(0xFFF5F5F7);
+const _userBubbleLight = Color(0xFF007AFF);
+const _assistantBubbleLight = Color(0xFFE9E9EB);
+
 const _accent = Color(0xFF9CC6FF);
-const _pageGradient = Colors.transparent;
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key, this.storyTitle, this.storyId, this.storySessionId});
@@ -161,13 +166,16 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final chatBg = isDark ? _chatBgDark : _chatBgLight;
+
     return Scaffold(
-      backgroundColor: _chatBg,
+      backgroundColor: chatBg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         toolbarHeight: 76,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black87),
         titleSpacing: 0,
         title: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -683,9 +691,12 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final alignment = message.isUser ? Alignment.centerRight : Alignment.centerLeft;
-    final bgColor = message.isUser ? _userBubble : _assistantBubble;
-    final textColor = message.isUser ? Colors.white : Colors.white;
+    final userBubble = isDark ? _userBubbleDark : _userBubbleLight;
+    final assistantBubble = isDark ? _assistantBubbleDark : _assistantBubbleLight;
+    final bgColor = message.isUser ? userBubble : assistantBubble;
+    final textColor = message.isUser ? Colors.white : (isDark ? Colors.white : Colors.black87);
     final isStreaming = !message.isUser && message.isStreaming;
 
     return Align(

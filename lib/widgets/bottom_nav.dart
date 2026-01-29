@@ -13,6 +13,7 @@ class BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return LayoutBuilder(
       builder: (context, constraints) {
         // Responsive nav sizing for phone/tablet/iPad
@@ -33,12 +34,17 @@ class BottomNav extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Colors.white.withOpacity(0.10), Colors.white.withOpacity(0.04)],
+                    colors: isDark
+                        ? [Colors.white.withOpacity(0.10), Colors.white.withOpacity(0.04)]
+                        : [Colors.black.withOpacity(0.06), Colors.black.withOpacity(0.02)],
                   ),
-                  border: Border.all(color: Colors.white.withOpacity(0.22), width: 1.2),
+                  border: Border.all(
+                    color: isDark ? Colors.white.withOpacity(0.22) : Colors.black.withOpacity(0.15),
+                    width: 1.2,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.4),
+                      color: Colors.black.withOpacity(isDark ? 0.4 : 0.15),
                       blurRadius: 28,
                       offset: const Offset(0, 12),
                       spreadRadius: -4,
@@ -82,6 +88,11 @@ class BottomNav extends StatelessWidget {
     required double itemHeight,
   }) {
     final bool selected = current == tab;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = isDark ? Colors.white : Colors.black87;
+    final labelColor = isDark ? Colors.white : Colors.black87;
+    final selectedBgColor = isDark ? Colors.black.withOpacity(0.30) : Colors.white.withOpacity(0.50);
+
     return Expanded(
       flex: selected ? 3 : 2,
       child: AnimatedContainer(
@@ -91,7 +102,7 @@ class BottomNav extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: selected ? 12 : 0),
         height: itemHeight,
         decoration: BoxDecoration(
-          color: selected ? Colors.black.withOpacity(0.30) : Colors.transparent,
+          color: selected ? selectedBgColor : Colors.transparent,
           borderRadius: BorderRadius.circular(50),
         ),
         child: Material(
@@ -102,12 +113,12 @@ class BottomNav extends StatelessWidget {
             splashColor: Colors.transparent,
             highlightColor: Colors.transparent,
             hoverColor: Colors.transparent,
-            overlayColor: MaterialStatePropertyAll(Colors.transparent),
+            overlayColor: WidgetStatePropertyAll(Colors.transparent),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.max,
               children: [
-                Image.asset(iconPath, width: 24, height: 24, color: Colors.white),
+                Image.asset(iconPath, width: 24, height: 24, color: iconColor),
                 Flexible(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 260),
@@ -121,7 +132,7 @@ class BottomNav extends StatelessWidget {
                             child: TypographyText(
                               label,
                               variant: TypographyVariant.body2,
-                              color: Colors.white,
+                              color: labelColor,
                               maxLines: 1,
                               overflow: TextOverflow.fade,
                               softWrap: false,

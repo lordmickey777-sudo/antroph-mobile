@@ -55,13 +55,13 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       }
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Profile'),
-        backgroundColor: const Color(0xFF121516),
-        foregroundColor: Colors.white,
+        foregroundColor: isDark ? Colors.white : Colors.black87,
       ),
-      backgroundColor: const Color(0xFF121516),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(

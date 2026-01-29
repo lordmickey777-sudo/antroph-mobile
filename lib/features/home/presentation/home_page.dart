@@ -1,14 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/bottom_nav.dart';
 import 'package:antroph_mobile/features/profile/presentation/profile_page.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page.dart';
-import 'package:antroph_mobile/core/auth/state/auth_state.dart';
-import 'package:antroph_mobile/features/auth/pages/login_page.dart';
-import 'package:antroph_mobile/features/auth/pages/signup_page.dart';
-
-const _homeBg = Color(0xFF121516);
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -45,7 +39,6 @@ class _HomePageState extends State<HomePage> {
     final horizontalPadding = AppPadding.horizontal.of(context);
 
     return Scaffold(
-      backgroundColor: _homeBg,
       body: SafeArea(
         child: Stack(
           alignment: Alignment.center,
@@ -65,9 +58,9 @@ class _HomePageState extends State<HomePage> {
                     }
                   });
                 },
-                children: [
-                  _AuthGated(child: const StoryPage()),
-                  _AuthGated(child: const ProfilePage()),
+                children: const [
+                  StoryPage(),
+                  ProfilePage(),
                 ],
               ),
             ),
@@ -101,34 +94,4 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-}
-
-class _AuthGated extends ConsumerStatefulWidget {
-  const _AuthGated({required this.child});
-  final Widget child;
-  @override
-  ConsumerState<_AuthGated> createState() => _AuthGatedState();
-}
-
-class _AuthGatedState extends ConsumerState<_AuthGated> {
-  bool showLogin = true;
-
-  @override
-  Widget build(BuildContext context) {
-    final userState = ref.watch(authControllerProvider);
-    final user = userState.value;
-    if (user != null) return widget.child;
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
-      child: showLogin
-          ? LoginPage(
-              key: const ValueKey('login'),
-              onSwitchSignup: () => setState(() => showLogin = false),
-            )
-          : SignUpPage(
-              key: const ValueKey('signup'),
-              onSwitchLogin: () => setState(() => showLogin = true),
-            ),
-    );
-  }
 }
