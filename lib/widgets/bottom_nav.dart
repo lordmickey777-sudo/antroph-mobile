@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
-import 'package:antroph_mobile/widgets/typography_text.dart';
 
 enum HomeTab { story, profile }
 
@@ -18,7 +17,7 @@ class BottomNav extends StatelessWidget {
       builder: (context, constraints) {
         // Responsive nav sizing for phone/tablet/iPad
         final maxWidth = AppSizing.navBarMaxWidth.fromConstraints(constraints);
-        final double navWidth = (constraints.maxWidth * 0.88).clamp(0, maxWidth);
+        final double navWidth = (constraints.maxWidth * 0.5).clamp(0, maxWidth);
         final navHeight = AppSizing.navBarHeight.fromConstraints(constraints);
         return Center(
           child: ClipRRect(
@@ -51,24 +50,20 @@ class BottomNav extends StatelessWidget {
                     ),
                   ],
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                // Fixed order navigation items: Story | Profile
-                // Selected item is highlighted but items do NOT reorder.
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 child: Row(
                   children: [
                     _navItem(
                       context,
                       tab: HomeTab.story,
-                      iconPath: 'assets/images/tool.png',
-                      label: 'Story',
-                      itemHeight: navHeight - 20,
+                      icon: Icons.auto_stories_rounded,
+                      itemHeight: navHeight - 16,
                     ),
                     _navItem(
                       context,
                       tab: HomeTab.profile,
-                      iconPath: 'assets/images/profile.png',
-                      label: 'Profile',
-                      itemHeight: navHeight - 20,
+                      icon: Icons.person_rounded,
+                      itemHeight: navHeight - 16,
                     ),
                   ],
                 ),
@@ -83,23 +78,20 @@ class BottomNav extends StatelessWidget {
   Widget _navItem(
     BuildContext context, {
     required HomeTab tab,
-    required String iconPath,
-    required String label,
+    required IconData icon,
     required double itemHeight,
   }) {
     final bool selected = current == tab;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final iconColor = isDark ? Colors.white : Colors.black87;
-    final labelColor = isDark ? Colors.white : Colors.black87;
+    final unselectedIconColor = isDark ? Colors.white.withValues(alpha: 0.5) : Colors.black.withValues(alpha: 0.4);
     final selectedBgColor = isDark ? Colors.black.withOpacity(0.30) : Colors.white.withOpacity(0.50);
 
     return Expanded(
-      flex: selected ? 3 : 2,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 360),
+        duration: const Duration(milliseconds: 300),
         curve: Curves.easeOutCubic,
         margin: const EdgeInsets.symmetric(horizontal: 4),
-        padding: EdgeInsets.symmetric(horizontal: selected ? 12 : 0),
         height: itemHeight,
         decoration: BoxDecoration(
           color: selected ? selectedBgColor : Colors.transparent,
@@ -114,34 +106,27 @@ class BottomNav extends StatelessWidget {
             highlightColor: Colors.transparent,
             hoverColor: Colors.transparent,
             overlayColor: WidgetStatePropertyAll(Colors.transparent),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.max,
-              children: [
-                Image.asset(iconPath, width: 24, height: 24, color: iconColor),
-                Flexible(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 260),
-                    switchInCurve: Curves.easeOut,
-                    switchOutCurve: Curves.easeIn,
-                    transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
-                    child: selected
-                        ? Padding(
-                            key: ValueKey(label),
-                            padding: const EdgeInsets.only(left: 8),
-                            child: TypographyText(
-                              label,
-                              variant: TypographyVariant.body2,
-                              color: labelColor,
-                              maxLines: 1,
-                              overflow: TextOverflow.fade,
-                              softWrap: false,
-                            ),
-                          )
-                        : const SizedBox(width: 0, height: 0, key: ValueKey('empty')),
+            child: Center(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: selected ? 1.0 : 0.85, end: selected ? 1.0 : 0.85),
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutBack,
+                builder: (context, scale, child) {
+                  return Transform.scale(
+                    scale: scale,
+                    child: child,
+                  );
+                },
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    icon,
+                    key: ValueKey('$tab-$selected'),
+                    size: 26,
+                    color: selected ? iconColor : unselectedIconColor,
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),

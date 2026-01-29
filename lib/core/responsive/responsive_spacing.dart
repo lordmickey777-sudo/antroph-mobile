@@ -89,11 +89,11 @@ class AppSizing {
     largeTablet: 640.0,
   );
 
-  /// Nav bar height: 76 -> 80 -> 84
+  /// Nav bar height: 60 -> 64 -> 68
   static const navBarHeight = ResponsiveValue<double>(
-    phone: 76.0,
-    tablet: 80.0,
-    largeTablet: 84.0,
+    phone: 60.0,
+    tablet: 64.0,
+    largeTablet: 68.0,
   );
 
   /// Large avatar size: 116 -> 140 -> 160

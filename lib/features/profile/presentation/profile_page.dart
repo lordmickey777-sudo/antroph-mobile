@@ -346,7 +346,8 @@ class _ThemeToggleRow extends StatelessWidget {
           CupertinoSwitch(
             value: isDarkMode,
             onChanged: (_) => onToggle(),
-            activeTrackColor: Colors.deepPurple,
+            activeTrackColor: isDark ? Colors.white : Colors.black87,
+            inactiveTrackColor: isDark ? Colors.white24 : Colors.black26,
           ),
         ],
       ),

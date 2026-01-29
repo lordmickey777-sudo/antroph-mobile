@@ -47,7 +47,7 @@ class _HomePageState extends State<HomePage> {
             Positioned.fill(
               child: PageView(
                 controller: _pageController,
-                physics: const BouncingScrollPhysics(),
+                physics: const ClampingScrollPhysics(),
                 onPageChanged: (index) {
                   // Sync the active tab when user swipes
                   setState(() {
@@ -79,8 +79,8 @@ class _HomePageState extends State<HomePage> {
                     if (_pageController.hasClients) {
                       _pageController.animateToPage(
                         targetPage,
-                        duration: const Duration(milliseconds: 320),
-                        curve: Curves.easeOutCubic,
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeOutExpo,
                       );
                     }
                     setState(() => _tab = tab);

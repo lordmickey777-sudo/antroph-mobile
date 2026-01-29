@@ -58,6 +58,7 @@ dependencies:
   web_socket_channel: ^2.4.0
   rive: ^0.13.13
   smooth_corner: ^1.1.1
+  shimmer_animation: ^2.2.2+1
   device_info_plus: ^11.0.0
   package_info_plus: ^8.0.0
 
