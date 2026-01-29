@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
-import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/features/story/providers/story_session_provider.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
@@ -89,12 +88,15 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                       widget.title,
                       variant: TypographyVariant.h2,
                       color: textColor,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     TypographyText(
                       widget.subtitle,
                       variant: TypographyVariant.body1,
                       color: secondaryTextColor,
+                      fontSize: 14,
                       height: 1.35,
                     ),
                     const SizedBox(height: 16),
@@ -102,6 +104,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                       "Great interaction experience and you learn easily cause we'll have lots of conversations. I can tune it to how you like it too.",
                       variant: TypographyVariant.body1,
                       color: secondaryTextColor,
+                      fontSize: 14,
                       height: 1.35,
                     ),
                     SizedBox(height: bottom + 40),
@@ -209,77 +212,67 @@ class _HeroCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cardRadius = 28.0;
+    const cardRadius = 24.0;
     final borderColor = context.isDarkMode
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.08);
+        ? Colors.white.withValues(alpha: 0.15)
+        : Colors.black.withValues(alpha: 0.1);
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(cardRadius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 30,
-            offset: const Offset(0, 12),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(cardRadius),
+      child: Stack(
+        children: [
+          // Background image with network/asset handling and fallback
+          AspectRatio(aspectRatio: 0.85, child: _HeroImage(image: imageAsset)),
+
+          // Modern gradient overlay (matching featured card)
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.0),
+                    Colors.black.withValues(alpha: 0.1),
+                    Colors.black.withValues(alpha: 0.6),
+                    Colors.black.withValues(alpha: 0.95),
+                  ],
+                  stops: const [0.0, 0.3, 0.7, 1.0],
+                ),
+              ),
+            ),
+          ),
+
+          // Border overlay
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(cardRadius),
+                border: Border.all(color: borderColor, width: 1),
+              ),
+            ),
+          ),
+
+          // Button only
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 24,
+            child: sessionState.isLoading
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 10),
+                      child: CupertinoActivityIndicator(color: Colors.white),
+                    ),
+                  )
+                : _ActionButton(
+                    isAdded: isAdded,
+                    isLoading: isAddingToPlaylist,
+                    onAddPressed: isAddingToPlaylist ? null : onAddToPlaylist,
+                    onPlayPressed: onPlayPressed,
+                  ),
           ),
         ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(cardRadius),
-        child: Stack(
-          children: [
-            // Background image with network/asset handling and fallback
-            AspectRatio(aspectRatio: 1.0, child: _HeroImage(image: imageAsset)),
-
-            // Top subtle inner glass border
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(cardRadius),
-                  border: Border.all(color: borderColor, width: 1),
-                ),
-              ),
-            ),
-
-            // Bottom gradient for button legibility
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                height: 80,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0x00000000), Color(0x99000000)],
-                  ),
-                ),
-              ),
-            ),
-
-            // Button only
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: 16,
-              child: sessionState.isLoading
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        child: CupertinoActivityIndicator(color: Colors.white),
-                      ),
-                    )
-                  : _ActionButton(
-                      isAdded: isAdded,
-                      isLoading: isAddingToPlaylist,
-                      onAddPressed: isAddingToPlaylist ? null : onAddToPlaylist,
-                      onPlayPressed: onPlayPressed,
-                    ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -325,45 +318,42 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppButton(
-      onPressed: isLoading
+    return GestureDetector(
+      onTap: isLoading
           ? null
           : isAdded
               ? onPlayPressed
               : onAddPressed,
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        backgroundColor: isAdded
-            ? Colors.white
-            : const Color.fromARGB(255, 15, 9, 9).withValues(alpha: 0.78),
-        foregroundColor: isAdded ? Colors.black : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        elevation: 0,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isLoading)
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CupertinoActivityIndicator(color: Colors.white),
-            )
-          else if (isAdded)
-            Icon(CupertinoIcons.play_fill, size: 18, color: Colors.black)
-          else
-            const Icon(Icons.playlist_add, size: 18, color: Colors.white),
-          const SizedBox(width: 6),
-          TypographyText(
-            isLoading
-                ? 'Adding...'
-                : isAdded
-                    ? 'Play'
-                    : 'My List',
-            variant: TypographyVariant.body2,
-            color: isAdded ? Colors.black : Colors.white,
-          ),
-        ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CupertinoActivityIndicator(radius: 10),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
+                    color: Colors.black,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  TypographyText(
+                    isAdded ? 'Play' : 'My List',
+                    variant: TypographyVariant.body1,
+                    color: Colors.black,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ],
+              ),
       ),
     );
   }

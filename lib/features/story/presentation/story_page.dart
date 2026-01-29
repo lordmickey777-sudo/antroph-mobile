@@ -1,6 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
@@ -14,6 +13,7 @@ import 'package:antroph_mobile/features/story/data/stories_cache.dart';
 import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page_shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
+import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
@@ -120,10 +120,15 @@ class StoryPage extends ConsumerWidget {
 }
 
 class _FeaturedStoryCard extends ConsumerStatefulWidget {
-  const _FeaturedStoryCard({required this.story, required this.onTap});
+  const _FeaturedStoryCard({
+    required this.story,
+    required this.onTap,
+    this.textOpacity = 1.0,
+  });
 
   final FeaturedStoryDto story;
   final VoidCallback onTap;
+  final double textOpacity;
 
   @override
   ConsumerState<_FeaturedStoryCard> createState() => _FeaturedStoryCardState();
@@ -186,72 +191,46 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
                   left: 20,
                   right: 20,
                   bottom: 24,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TypographyText(
-                        widget.story.title,
-                        variant: TypographyVariant.h2,
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      const SizedBox(height: 10),
-                      if (widget.story.description.isNotEmpty)
+                  child: Opacity(
+                    opacity: widget.textOpacity,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         TypographyText(
-                          widget.story.description,
-                          variant: TypographyVariant.body1,
-                          color: Colors.white.withOpacity(0.85),
-                          fontSize: 14,
-                          maxLines: 2,
+                          widget.story.title,
+                          variant: TypographyVariant.h2,
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
                         ),
-                      const SizedBox(height: 20),
-                      GestureDetector(
-                        onTap: _isAdding
+                        const SizedBox(height: 10),
+                        if (widget.story.description.isNotEmpty)
+                          TypographyText(
+                            widget.story.description,
+                            variant: TypographyVariant.body1,
+                            color: Colors.white.withOpacity(0.85),
+                            fontSize: 14,
+                            maxLines: 2,
+                          ),
+                        const SizedBox(height: 20),
+                      AppPillButton(
+                        onPressed: _isAdding
                             ? null
                             : _isAdded
-                            ? () {
-                                HapticFeedback.mediumImpact();
-                                _navigateToChat();
-                              }
-                            : () {
-                                HapticFeedback.mediumImpact();
-                                _handleAddToPlaylist();
-                              },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(100),
-                          ),
-                          child: _isAdding
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CupertinoActivityIndicator(radius: 10),
-                                )
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
-                                      color: Colors.black,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TypographyText(
-                                      _isAdded ? 'Play' : 'My List',
-                                      variant: TypographyVariant.body1,
-                                      color: Colors.black,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ],
-                                ),
-                        ),
+                            ? _navigateToChat
+                            : _handleAddToPlaylist,
+                        isLoading: _isAdding,
+                        icon: _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
+                        label: _isAdding ? 'Adding...' : (_isAdded ? 'Play' : 'My List'),
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                        variant: TypographyVariant.body1,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -354,16 +333,35 @@ class _FeaturedStoriesCarouselState extends State<_FeaturedStoriesCarousel> {
       children: [
         SizedBox(
           height: MediaQuery.of(context).size.width * 1.1,
-          child: PageView.builder(
-            controller: _pageController,
-            onPageChanged: (index) => setState(() => _currentPage = index),
-            physics: const BouncingScrollPhysics(),
-            itemCount: widget.stories.length,
-            itemBuilder: (context, index) {
-              final story = widget.stories[index];
-              return Padding(
-                padding: EdgeInsets.symmetric(horizontal: horizontalPadding * 0.1),
-                child: _FeaturedStoryCard(story: story, onTap: () => widget.onTap(story)),
+          child: AnimatedBuilder(
+            animation: _pageController,
+            builder: (context, child) {
+              return PageView.builder(
+                controller: _pageController,
+                onPageChanged: (index) => setState(() => _currentPage = index),
+                physics: const BouncingScrollPhysics(),
+                itemCount: widget.stories.length,
+                itemBuilder: (context, index) {
+                  final story = widget.stories[index];
+
+                  // Calculate text opacity based on how centered this card is
+                  double textOpacity = 1.0;
+                  if (_pageController.position.haveDimensions) {
+                    final page = _pageController.page ?? _currentPage.toDouble();
+                    final distance = (page - index).abs();
+                    // Fade out quickly as we scroll away (opacity goes from 1 to 0 as distance goes from 0 to 0.5)
+                    textOpacity = (1.0 - (distance * 2)).clamp(0.0, 1.0);
+                  }
+
+                  return Padding(
+                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding * 0.1),
+                    child: _FeaturedStoryCard(
+                      story: story,
+                      onTap: () => widget.onTap(story),
+                      textOpacity: textOpacity,
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -518,43 +516,18 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
                     Positioned(
                       right: 6,
                       bottom: 6,
-                      child: GestureDetector(
-                        onTap: _isAdding
+                      child: AppCircleIconButton(
+                        onPressed: _isAdding
                             ? null
                             : _isAdded
-                            ? () {
-                                HapticFeedback.lightImpact();
-                                _navigateToChat();
-                              }
-                            : () {
-                                HapticFeedback.lightImpact();
-                                _handleAddToPlaylist();
-                              },
-                        child: DecoratedBox(
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: _isAdding
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CupertinoActivityIndicator(
-                                      radius: 9,
-                                      color: Colors.black,
-                                    ),
-                                  )
-                                : _isAdded
-                                ? const Icon(
-                                    CupertinoIcons.play_fill,
-                                    size: 18,
-                                    color: Colors.black,
-                                  )
-                                : const Icon(CupertinoIcons.add, size: 18, color: Colors.black),
-                          ),
-                        ),
+                            ? _navigateToChat
+                            : _handleAddToPlaylist,
+                        isLoading: _isAdding,
+                        icon: _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
+                        size: 34,
+                        iconSize: 18,
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
                       ),
                     ),
                   ],
