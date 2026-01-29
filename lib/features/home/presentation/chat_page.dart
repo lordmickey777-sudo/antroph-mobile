@@ -15,6 +15,7 @@ import 'package:antroph_mobile/features/profile/providers/profile_controller.dar
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/voice_activity_face.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
+import 'package:antroph_mobile/widgets/toast.dart';
 
 // Dark mode colors
 const _chatBgDark = Color(0xFF0B1118);
@@ -244,16 +245,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (!mounted) return;
       final error = next.errorMessage;
       if (error != null && error.isNotEmpty && error != (previous?.errorMessage ?? '')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error, style: const TextStyle(color: Colors.black87)),
-            backgroundColor: Colors.white,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
-            margin: const EdgeInsets.all(16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
+        showToast(context, error);
       }
     });
 
@@ -264,16 +256,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         if (!mounted) return;
         final error = next.error;
         if (error != null && error.isNotEmpty && error != (previous?.error ?? '')) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(error, style: const TextStyle(color: Colors.black87)),
-              backgroundColor: Colors.white,
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 3),
-              margin: const EdgeInsets.all(16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          );
+          showToast(context, error);
         }
       });
     }

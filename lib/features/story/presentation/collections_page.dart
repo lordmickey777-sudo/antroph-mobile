@@ -8,6 +8,7 @@ import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
+import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
@@ -102,12 +103,7 @@ class CollectionsPage extends ConsumerWidget {
     // Use the collection id as the story id since each playlist item is a story
     final storyId = collection.id;
     if (storyId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to start story'),
-          backgroundColor: Color(0xFF2A2A2A),
-        ),
-      );
+      showToast(context, 'Unable to start story', variant: ToastVariant.info);
       return;
     }
     Navigator.of(context).push(
@@ -139,12 +135,7 @@ class CollectionsPage extends ConsumerWidget {
 
     final id = collection.id;
     if (id.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No stories to remove'),
-          backgroundColor: Color(0xFF2A2A2A),
-        ),
-      );
+      showToast(context, 'No stories to remove', variant: ToastVariant.info);
       return;
     }
     final repo = ref.read(storiesRepositoryProvider);
@@ -159,12 +150,7 @@ class CollectionsPage extends ConsumerWidget {
       ref.invalidate(storiesHomeSectionsProvider);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to remove stories'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showToast(context, 'Failed to remove stories');
       }
     }
   }
@@ -303,21 +289,11 @@ class CollectionDetailPage extends ConsumerWidget {
       await StoriesCacheService.clear();
       ref.invalidate(storiesHomeSectionsProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Story removed from collection'),
-            backgroundColor: Color(0xFF2A2A2A),
-          ),
-        );
+        showToast(context, 'Story removed from collection', success: true);
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to remove story'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showToast(context, 'Failed to remove story');
       }
     }
   }

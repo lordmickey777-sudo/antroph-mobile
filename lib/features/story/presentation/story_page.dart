@@ -17,6 +17,7 @@ import 'package:antroph_mobile/features/story/presentation/story_page_shimmer.da
 import 'package:antroph_mobile/widgets/empty_state.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
+import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
 
@@ -271,9 +272,7 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
     } catch (err) {
       if (!mounted) return;
       setState(() => _isAdding = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to add story: $err')));
+      showToast(context, 'Failed to add story: $err');
     }
   }
 
@@ -608,9 +607,7 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
     } catch (err) {
       if (!mounted) return;
       setState(() => _isAdding = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to add story: $err')));
+      showToast(context, 'Failed to add story: $err');
     }
   }
 

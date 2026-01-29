@@ -12,7 +12,7 @@ import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/features/auth/widgets/auth_input.dart';
 
 /// Content widget for the auth guard sheet.
-/// Shows login or signup forms with the option to continue as guest.
+/// Shows login or signup forms.
 class AuthSheetContent extends ConsumerStatefulWidget {
   const AuthSheetContent({
     super.key,
@@ -134,10 +134,6 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
           ? null
           : _signupNameCtrl.text.trim(),
     );
-  }
-
-  void _continueAsGuest() {
-    Navigator.of(context).pop(AuthGuardResult.guestContinue);
   }
 
   @override
@@ -277,27 +273,6 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 24),
-
-          // Continue as guest button
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: OutlinedButton(
-              onPressed: loading ? null : _continueAsGuest,
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.2)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(40),
-                ),
-              ),
-              child: TypographyText(
-                'Continue as Guest',
-                variant: TypographyVariant.body1,
-                color: secondaryTextColor,
-              ),
-            ),
           ),
         ],
       ),

@@ -5,6 +5,7 @@ import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
+import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/features/story/providers/story_session_provider.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
@@ -152,14 +153,10 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
           .addStoriesToPlaylist(storyIds: [widget.storyId]);
       if (!mounted) return;
       setState(() => _isAdded = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Story added to playlist')),
-      );
+      showToast(context, 'Story added to playlist', success: true);
     } catch (err) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to add story: $err')),
-      );
+      showToast(context, 'Failed to add story: $err');
     } finally {
       if (mounted) {
         setState(() => _isAddingToPlaylist = false);
