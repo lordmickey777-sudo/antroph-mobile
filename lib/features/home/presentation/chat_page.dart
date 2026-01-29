@@ -190,7 +190,7 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
                     TypographyText(
                       widget.storyTitle ?? 'Voice chat',
                       variant: TypographyVariant.h4,
-                      color: Colors.white,
+                      color: context.primaryTextColor,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       softWrap: false,
@@ -472,6 +472,11 @@ class _ConnectionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.04);
+    final borderColor = isDark ? Colors.white12 : Colors.black12;
+    final labelColor = isDark ? Colors.white70 : Colors.black54;
+    final actionColor = isDark ? Colors.white : Colors.black87;
     Color color;
     String label;
     IconData icon;
@@ -492,23 +497,23 @@ class _ConnectionChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
+        color: bgColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: borderColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, color: color, size: 14),
           const SizedBox(width: 8),
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          Text(label, style: TextStyle(color: labelColor, fontSize: 12)),
           if (state.isDisconnected) ...[
             const SizedBox(width: 12),
             TextButton(
               onPressed: onReconnect,
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                foregroundColor: Colors.white,
+                foregroundColor: actionColor,
                 textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
               ),
               child: const Text('Reconnect'),
@@ -534,12 +539,17 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06);
+    final borderColor =
+        isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08);
+    final labelColor = context.primaryTextColor;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: bgColor,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: borderColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -548,7 +558,7 @@ class _StatusPill extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+            style: TextStyle(color: labelColor, fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -575,10 +585,14 @@ class _HeroMicButton extends StatelessWidget {
     final waiting = voiceState.isProcessing || voiceState.isConnecting;
     final playing = voiceState.isPlaying;
     final canRecord = !recording && !waiting && !playing;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final gradient = LinearGradient(
       colors: recording
-          ? [Colors.white, _accent]
-          : [_accent.withOpacity(0.8), Colors.white.withOpacity(0.2)],
+          ? [isDark ? Colors.white : Colors.black87, _accent]
+          : [
+              _accent.withOpacity(0.8),
+              isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.08),
+            ],
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
     );
@@ -602,7 +616,7 @@ class _HeroMicButton extends StatelessWidget {
           gradient: gradient,
           boxShadow: [
             BoxShadow(
-              color: _accent.withOpacity(recording ? 0.6 : 0.25),
+              color: _accent.withOpacity(recording ? 0.6 : (isDark ? 0.25 : 0.18)),
               blurRadius: 30,
               spreadRadius: 1,
             ),
@@ -612,8 +626,10 @@ class _HeroMicButton extends StatelessWidget {
           margin: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.black.withOpacity(0.55),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            color: isDark ? Colors.black.withOpacity(0.55) : Colors.white.withOpacity(0.9),
+            border: Border.all(
+              color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.12),
+            ),
           ),
           child: Icon(
             recording
@@ -621,7 +637,7 @@ class _HeroMicButton extends StatelessWidget {
                 : waiting || playing
                 ? Icons.stop_rounded
                 : Icons.mic_rounded,
-            color: Colors.white,
+            color: isDark ? Colors.white : Colors.black87,
             size: 30,
           ),
         ),
@@ -681,6 +697,8 @@ class _ChatBubble extends StatelessWidget {
     final assistantBubble = isDark ? _assistantBubbleDark : _assistantBubbleLight;
     final bgColor = message.isUser ? userBubble : assistantBubble;
     final textColor = message.isUser ? Colors.white : (isDark ? Colors.white : Colors.black87);
+    final statusColor =
+        message.isUser ? Colors.white70 : (isDark ? Colors.white70 : Colors.black45);
     final isStreaming = !message.isUser && message.isStreaming;
 
     return Align(
@@ -698,14 +716,14 @@ class _ChatBubble extends StatelessWidget {
                 const SizedBox(height: 6),
                 Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
+                  children: [
                     SizedBox(
                       width: 14,
                       height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: statusColor),
                     ),
-                    SizedBox(width: 6),
-                    Text('Streaming...', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                    const SizedBox(width: 6),
+                    Text('Streaming...', style: TextStyle(color: statusColor, fontSize: 11)),
                   ],
                 ),
               ] else if (message.isPending || message.isFailed) ...[
@@ -728,17 +746,22 @@ class _StatusRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final statusColor =
+        message.isUser ? Colors.white70 : (isDark ? Colors.white70 : Colors.black45);
+    final actionColor =
+        message.isUser ? Colors.white : (isDark ? Colors.white : Colors.black87);
     if (message.isPending) {
       return Row(
         mainAxisSize: MainAxisSize.min,
-        children: const [
+        children: [
           SizedBox(
             width: 14,
             height: 14,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+            child: CircularProgressIndicator(strokeWidth: 2, color: statusColor),
           ),
-          SizedBox(width: 6),
-          Text('Sending...', style: TextStyle(color: Colors.white70, fontSize: 11)),
+          const SizedBox(width: 6),
+          Text('Sending...', style: TextStyle(color: statusColor, fontSize: 11)),
         ],
       );
     }
@@ -754,7 +777,7 @@ class _StatusRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            foregroundColor: Colors.white,
+            foregroundColor: actionColor,
             textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
           ),
           child: const Text('Retry'),
@@ -788,6 +811,15 @@ class _TranscriptButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasError = voiceState.errorMessage?.isNotEmpty ?? false;
+    final isDark = context.isDarkMode;
+    final baseBg = isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.06);
+    final idleBg = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04);
+    final baseBorder =
+        isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.2);
+    final idleBorder =
+        isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1);
+    final iconBase = isDark ? Colors.white : Colors.black87;
+    final iconIdle = isDark ? Colors.white38 : Colors.black38;
 
     return GestureDetector(
       onTap: _hasContent ? () => _showTranscriptSheet(context) : null,
@@ -796,13 +828,13 @@ class _TranscriptButton extends StatelessWidget {
         height: 48,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: _hasContent ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+          color: _hasContent ? baseBg : idleBg,
           border: Border.all(
             color: hasError
                 ? Colors.redAccent.withOpacity(0.6)
                 : _hasContent
-                ? Colors.white.withOpacity(0.2)
-                : Colors.white.withOpacity(0.1),
+                ? baseBorder
+                : idleBorder,
           ),
         ),
         child: Icon(
@@ -810,8 +842,8 @@ class _TranscriptButton extends StatelessWidget {
           color: hasError
               ? Colors.redAccent
               : _hasContent
-              ? Colors.white
-              : Colors.white38,
+              ? iconBase
+              : iconIdle,
           size: 22,
         ),
       ),
