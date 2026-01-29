@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
+
 /// A reusable date input styled like [AppInput] that opens a Cupertino date picker.
 ///
 /// - Shows a hint when no value is picked
@@ -43,19 +45,22 @@ class _AppDateInputState extends State<AppDateInput> {
     final first = widget.firstDate ?? DateTime(1900);
     final last = widget.lastDate ?? now;
     _temp = initial;
+    final isDark = context.isDarkMode;
+    final borderColor = context.dividerColor;
+    final sheetColor = context.surfaceColor;
 
     await showCupertinoModalPopup(
       context: context,
       builder: (context) {
         return Container(
           height: 300,
-          color: const Color(0xFF1A1D1F),
+          color: sheetColor,
           child: Column(
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: Colors.white24, width: 0.5)),
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -78,7 +83,7 @@ class _AppDateInputState extends State<AppDateInput> {
               ),
               Expanded(
                 child: CupertinoTheme(
-                  data: const CupertinoThemeData(brightness: Brightness.dark),
+                  data: CupertinoThemeData(brightness: isDark ? Brightness.dark : Brightness.light),
                   child: CupertinoDatePicker(
                     mode: CupertinoDatePickerMode.date,
                     minimumDate: first,
@@ -99,6 +104,9 @@ class _AppDateInputState extends State<AppDateInput> {
   Widget build(BuildContext context) {
     final text = widget.value != null ? _format(widget.value!) : widget.hint;
     final isHint = widget.value == null;
+    final textColor = context.primaryTextColor;
+    final hintColor = context.tertiaryTextColor;
+    final iconColor = context.secondaryTextColor;
 
     return InkWell(
       onTap: _openPicker,
@@ -107,20 +115,20 @@ class _AppDateInputState extends State<AppDateInput> {
         constraints: const BoxConstraints(minHeight: 64),
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
-          color: const Color(0xFF1F2223),
+          color: context.inputBackground,
           borderRadius: BorderRadius.circular(40),
         ),
         child: Row(
           children: [
-            Icon(widget.icon, color: Colors.white70, size: 22),
+            Icon(widget.icon, color: iconColor, size: 22),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 text,
-                style: TextStyle(color: isHint ? Colors.white38 : Colors.white, fontSize: 15),
+                style: TextStyle(color: isHint ? hintColor : textColor, fontSize: 15),
               ),
             ),
-            const Icon(Icons.calendar_today_outlined, color: Colors.white70, size: 20),
+            Icon(Icons.calendar_today_outlined, color: iconColor, size: 20),
           ],
         ),
       ),

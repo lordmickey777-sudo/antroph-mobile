@@ -97,21 +97,21 @@ class FeaturedStoryDto {
 }
 
 class StoriesHomeResponse {
-  StoriesHomeResponse({required this.sections, this.featuredStory});
+  StoriesHomeResponse({required this.sections, this.featuredStories = const []});
   final List<StorySectionDto> sections;
-  final FeaturedStoryDto? featuredStory;
+  final List<FeaturedStoryDto> featuredStories;
 
   factory StoriesHomeResponse.fromJson(Map<String, dynamic> json) => StoriesHomeResponse(
     sections: ((json['sections'] as List?) ?? const [])
         .map((e) => StorySectionDto.fromJson(e as Map<String, dynamic>))
         .toList(),
-    featuredStory: json['featured_story'] != null
-        ? FeaturedStoryDto.fromJson(json['featured_story'] as Map<String, dynamic>)
-        : null,
+    featuredStories: ((json['featured_stories'] as List?) ?? const [])
+        .map((e) => FeaturedStoryDto.fromJson(e as Map<String, dynamic>))
+        .toList(),
   );
 
   Map<String, dynamic> toJson() => {
     'sections': sections.map((e) => e.toJson()).toList(),
-    if (featuredStory != null) 'featured_story': featuredStory!.toJson(),
+    'featured_stories': featuredStories.map((e) => e.toJson()).toList(),
   };
 }

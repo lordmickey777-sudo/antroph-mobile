@@ -1,6 +1,8 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 
 /// A complete shimmer layout for the Story page that mirrors the real UI.
@@ -96,8 +98,9 @@ class StoryCardShimmer extends StatelessWidget {
         children: [
           Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF1B1E20),
+              color: context.cardBackground,
               borderRadius: BorderRadius.circular(cardRadius),
+              border: Border.all(color: context.dividerColor),
             ),
             child: Padding(
               padding: const EdgeInsets.all(12.0),

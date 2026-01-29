@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
@@ -60,6 +61,8 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
     final size = MediaQuery.of(context).size;
     final bottom = MediaQuery.of(context).padding.bottom;
     final sessionState = ref.watch(storySessionProvider);
+    final textColor = context.primaryTextColor;
+    final secondaryTextColor = context.secondaryTextColor;
 
     return Stack(
       children: [
@@ -85,20 +88,20 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                     TypographyText(
                       widget.title,
                       variant: TypographyVariant.h2,
-                      color: Colors.white,
+                      color: textColor,
                     ),
                     const SizedBox(height: 8),
                     TypographyText(
                       widget.subtitle,
                       variant: TypographyVariant.body1,
-                      color: Colors.white70,
+                      color: secondaryTextColor,
                       height: 1.35,
                     ),
                     const SizedBox(height: 16),
-                    const TypographyText(
+                    TypographyText(
                       "Great interaction experience and you learn easily cause we'll have lots of conversations. I can tune it to how you like it too.",
                       variant: TypographyVariant.body1,
-                      color: Colors.white70,
+                      color: secondaryTextColor,
                       height: 1.35,
                     ),
                     SizedBox(height: bottom + 40),
@@ -207,6 +210,9 @@ class _HeroCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cardRadius = 28.0;
+    final borderColor = context.isDarkMode
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.08);
 
     return Container(
       decoration: BoxDecoration(
@@ -231,7 +237,7 @@ class _HeroCard extends ConsumerWidget {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(cardRadius),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
+                  border: Border.all(color: borderColor, width: 1),
                 ),
               ),
             ),

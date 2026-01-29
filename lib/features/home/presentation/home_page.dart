@@ -39,38 +39,39 @@ class _HomePageState extends State<HomePage> {
     final horizontalPadding = AppPadding.horizontal.of(context);
 
     return Scaffold(
-      body: SafeArea(
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Sliding content between tabs using PageView for fluid transitions
-            Positioned.fill(
-              child: PageView(
-                controller: _pageController,
-                physics: const ClampingScrollPhysics(),
-                onPageChanged: (index) {
-                  // Sync the active tab when user swipes
-                  setState(() {
-                    if (index == 0) {
-                      _tab = HomeTab.story;
-                    } else {
-                      _tab = HomeTab.profile;
-                    }
-                  });
-                },
-                children: const [
-                  StoryPage(),
-                  ProfilePage(),
-                ],
-              ),
+      body: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Sliding content between tabs using PageView for fluid transitions
+          Positioned.fill(
+            child: PageView(
+              controller: _pageController,
+              physics: const ClampingScrollPhysics(),
+              onPageChanged: (index) {
+                // Sync the active tab when user swipes
+                setState(() {
+                  if (index == 0) {
+                    _tab = HomeTab.story;
+                  } else {
+                    _tab = HomeTab.profile;
+                  }
+                });
+              },
+              children: const [
+                StoryPage(),
+                ProfilePage(),
+              ],
             ),
-            // Bottom rounded navigation panel
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: bottomPadding,
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          ),
+          // Bottom rounded navigation panel
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: bottomPadding,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+              child: SafeArea(
+                top: false,
                 child: BottomNav(
                   current: _tab,
                   onChanged: (tab) async {
@@ -88,8 +89,8 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

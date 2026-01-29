@@ -1,34 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
 
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
+
 /// Theme-aware shimmer colors that match the app's design system
 class ShimmerColors {
-  // Dark mode colors
-  static const darkBase = Color(0xFF1B1E20);
-  static const darkHighlight = Color(0xFF2D3135);
-  static const darkAccent = Color(0xFF3A3F44);
+  static Color _shiftLightness(Color color, double amount) {
+    final hsl = HSLColor.fromColor(color);
+    final nextLightness = (hsl.lightness + amount).clamp(0.0, 1.0);
+    return hsl.withLightness(nextLightness).toColor();
+  }
 
-  // Light mode colors
-  static const lightBase = Color(0xFFE8E8EA);
-  static const lightHighlight = Color(0xFFF5F5F7);
-  static const lightAccent = Color(0xFFFFFFFF);
+  static Color _tone(BuildContext context, double darkDelta, double lightDelta) {
+    final base = context.surfaceColor;
+    return _shiftLightness(base, context.isDarkMode ? darkDelta : lightDelta);
+  }
 
   static Color baseColor(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark
-        ? darkBase
-        : lightBase;
+    return _tone(context, 0.06, -0.05);
   }
 
   static Color highlightColor(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark
-        ? darkHighlight
-        : lightHighlight;
+    return _tone(context, 0.18, 0.02);
   }
 
   static Color accentColor(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark
-        ? darkAccent
-        : lightAccent;
+    return _tone(context, 0.12, -0.08);
+  }
+
+  static Color borderColor(BuildContext context) {
+    return context.dividerColor;
   }
 }
 
@@ -52,15 +53,14 @@ class AppShimmer extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!enabled) return child;
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDarkMode;
+    final shimmerTint = ShimmerColors.highlightColor(context);
 
     return Shimmer(
       duration: duration,
       direction: direction,
-      color: isDark
-          ? Colors.white.withValues(alpha: 0.15)
-          : Colors.white.withValues(alpha: 0.8),
-      colorOpacity: isDark ? 0.2 : 0.6,
+      color: shimmerTint,
+      colorOpacity: isDark ? 0.28 : 0.45,
       enabled: enabled,
       child: child,
     );
@@ -202,19 +202,15 @@ class ShimmerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       width: width,
       height: height,
       padding: padding,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1F2223) : Colors.white,
+        color: context.cardBackground,
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.05)
-              : Colors.black.withValues(alpha: 0.05),
+          color: ShimmerColors.borderColor(context),
         ),
       ),
       child: child,
@@ -350,19 +346,15 @@ class ShimmerInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return AppShimmer(
       child: Container(
         width: width,
         height: height,
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1F2223) : const Color(0xFFEEEEF0),
+          color: context.inputBackground,
           borderRadius: BorderRadius.circular(radius),
           border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.08),
+            color: ShimmerColors.borderColor(context),
           ),
         ),
       ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/navigation/app_route_observer.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
 import 'package:antroph_mobile/features/home/models/chat_models.dart';
 import 'package:antroph_mobile/features/home/models/realtime_voice_bridge_models.dart';
@@ -890,6 +891,7 @@ class _TranscriptSheetContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textColor = context.primaryTextColor;
     return Column(
       children: [
         Padding(
@@ -899,8 +901,8 @@ class _TranscriptSheetContent extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: textColor,
                     fontWeight: FontWeight.w700,
                     fontSize: 18,
                   ),
@@ -917,7 +919,7 @@ class _TranscriptSheetContent extends StatelessWidget {
                     }
                   },
                   style: TextButton.styleFrom(
-                    foregroundColor: hasError ? Colors.redAccent : Colors.white,
+                    foregroundColor: hasError ? Colors.redAccent : textColor,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   ),
                   child: Text(hasError ? 'Dismiss' : 'Stop'),
@@ -925,7 +927,7 @@ class _TranscriptSheetContent extends StatelessWidget {
             ],
           ),
         ),
-        const Divider(color: Colors.white12, height: 1),
+        Divider(color: context.dividerColor, height: 1),
         Expanded(
           child: ListView(
             controller: scrollController,
@@ -948,7 +950,7 @@ class _TranscriptSheetContent extends StatelessWidget {
                   headline != voiceState.aiResponse) ...[
                 Text(
                   headline,
-                  style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
+                  style: TextStyle(color: textColor, fontSize: 15, height: 1.4),
                 ),
               ],
               if (hasError && voiceState.errorMessage != null) ...[
@@ -966,7 +968,7 @@ class _TranscriptSheetContent extends StatelessWidget {
                       Expanded(
                         child: Text(
                           voiceState.errorMessage!,
-                          style: const TextStyle(color: Colors.white70, fontSize: 13),
+                          style: TextStyle(color: context.secondaryTextColor, fontSize: 13),
                         ),
                       ),
                     ],
@@ -990,19 +992,24 @@ class _TranscriptLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textColor = context.primaryTextColor;
+    final isDark = context.isDarkMode;
+    final userLabelColor =
+        isDark ? _accent : Theme.of(context).colorScheme.primary;
+    final assistantLabelColor = isDark ? Colors.lightGreenAccent : Colors.green;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: TextStyle(
-            color: isUser ? _accent : Colors.lightGreenAccent,
+            color: isUser ? userLabelColor : assistantLabelColor,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 4),
-        Text(text, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
+        Text(text, style: TextStyle(color: textColor, fontSize: 15, height: 1.4)),
       ],
     );
   }
@@ -1018,7 +1025,7 @@ class _EmptyState extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const SizedBox(height: 10),
-          const Text('', style: TextStyle(color: Colors.white70, fontSize: 14)),
+          Text('', style: TextStyle(color: context.secondaryTextColor, fontSize: 14)),
         ],
       ),
     );

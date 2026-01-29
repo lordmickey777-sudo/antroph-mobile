@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
 /// A reusable, app-wide text input styled like the login fields.
 ///
@@ -41,10 +42,13 @@ class AppInput extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMultiline = (maxLines != 1);
     final radius = BorderRadius.circular(isMultiline ? 16 : 40);
+    final textColor = context.primaryTextColor;
+    final hintColor = context.tertiaryTextColor;
+    final iconColor = context.secondaryTextColor;
 
     final input = TextFormField(
       controller: controller,
-      style: const TextStyle(color: Colors.white, fontSize: 15),
+      style: TextStyle(color: textColor, fontSize: 15),
       obscureText: obscure,
       keyboardType: keyboardType,
       validator: validator,
@@ -55,7 +59,7 @@ class AppInput extends StatelessWidget {
         isCollapsed: true,
         border: InputBorder.none,
         hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white38, fontSize: 15),
+        hintStyle: TextStyle(color: hintColor, fontSize: 15),
         contentPadding: const EdgeInsets.symmetric(vertical: 4),
       ),
     );
@@ -64,14 +68,14 @@ class AppInput extends StatelessWidget {
     return Container(
       constraints: isMultiline ? null : BoxConstraints(minHeight: minHeight),
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(color: const Color(0xFF1F2223), borderRadius: radius),
+      decoration: BoxDecoration(color: context.inputBackground, borderRadius: radius),
       child: Row(
         crossAxisAlignment: isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
           if (icon != null) ...[
             Padding(
               padding: EdgeInsets.only(top: isMultiline ? 14 : 0),
-              child: Icon(icon, color: Colors.white70, size: 22),
+              child: Icon(icon, color: iconColor, size: 22),
             ),
             const SizedBox(width: 12),
           ],
@@ -88,7 +92,7 @@ class AppInput extends StatelessWidget {
                 padding: EdgeInsets.only(top: isMultiline ? 12 : 0),
                 child: Icon(
                   obscure ? Icons.visibility_off : Icons.visibility,
-                  color: Colors.white70,
+                  color: iconColor,
                   size: 22,
                 ),
               ),

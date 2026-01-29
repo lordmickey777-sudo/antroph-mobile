@@ -17,21 +17,50 @@ class ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Use a ListView with bottom padding to avoid overflow/clipping.
-    // Center content with max-width on larger screens (iPad)
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: ContentWidth.content),
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: 140),
-          children: const [
-            SizedBox(height: 28),
-            _ProfileHeader(),
-            SizedBox(height: 30),
-            _ProfileMenu(),
-            SizedBox(height: 40),
-            _BuildNumber(),
-          ],
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF141718) : const Color(0xFFF5F5F7),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: ContentWidth.content),
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                  child: SafeArea(
+                    bottom: false,
+                    child: Row(
+                      children: [
+                        Image.asset('assets/images/app_logo.png', width: 38, height: 38),
+                        const SizedBox(width: 2),
+                        TypographyText(
+                          'Profile',
+                          variant: TypographyVariant.h3,
+                          color: isDark ? Colors.white : Colors.black,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Column(
+                  children: const [
+                    SizedBox(height: 8),
+                    _ProfileHeader(),
+                    SizedBox(height: 30),
+                    _ProfileMenu(),
+                    SizedBox(height: 40),
+                    _BuildNumber(),
+                    SizedBox(height: 140),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
