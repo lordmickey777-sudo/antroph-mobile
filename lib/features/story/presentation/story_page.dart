@@ -14,7 +14,9 @@ import 'package:antroph_mobile/features/story/data/stories_cache.dart';
 import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page_shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
+import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
+import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
 
 class StoryPage extends ConsumerWidget {
   const StoryPage({super.key});
@@ -40,45 +42,44 @@ class StoryPage extends ConsumerWidget {
           final featuredStories = data.featuredStories;
           if (sections.isEmpty && featuredStories.isEmpty) return const _EmptyView();
 
-          return CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                  child: SafeArea(
-                    bottom: false,
-                    child: Row(
-                      children: [
-                        Image.asset('assets/images/app_logo.png', width: 38, height: 38),
-                        const SizedBox(width: 2),
-                        TypographyText(
-                          'Stories',
-                          variant: TypographyVariant.h3,
-                          color: isDark ? Colors.white : Colors.black,
-                        ),
-                      ],
+          return ScrollFadeGradient(
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                    child: SafeArea(
+                      bottom: false,
+                      child: Row(
+                        children: [
+                          Image.asset('assets/images/app_logo.png', width: 38, height: 38),
+                          const SizedBox(width: 2),
+                          TypographyText(
+                            'Stories',
+                            variant: TypographyVariant.h3,
+                            color: isDark ? Colors.white : Colors.black,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              CupertinoSliverRefreshControl(
-                onRefresh: () => ref.refresh(storiesHomeSectionsProvider.future),
-              ),
-              if (featuredStories.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: _FeaturedStoriesCarousel(
-                    stories: featuredStories,
-                    onTap: (story) => _openFeaturedStory(context, story),
+                CupertinoSliverRefreshControl(
+                  onRefresh: () => ref.refresh(storiesHomeSectionsProvider.future),
+                ),
+                if (featuredStories.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: _FeaturedStoriesCarousel(
+                      stories: featuredStories,
+                      onTap: (story) => _openFeaturedStory(context, story),
+                    ),
                   ),
-                ),
-              for (final section in sections)
-                _SectionSliver(
-                  section: section,
-                  onTap: (card) => _openStory(context, card),
-                ),
-              const SliverToBoxAdapter(child: SizedBox(height: 120)),
-            ],
+                for (final section in sections)
+                  _SectionSliver(section: section, onTap: (card) => _openStory(context, card)),
+                const SliverToBoxAdapter(child: SizedBox(height: 120)),
+              ],
+            ),
           );
         },
       ),
@@ -149,7 +150,12 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
         child: SmoothClipRRect(
           smoothness: 0.6,
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.1), width: 1),
+          side: BorderSide(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.white.withValues(alpha: 0.15)
+                : Colors.black.withValues(alpha: 0.1),
+            width: 1,
+          ),
           child: AspectRatio(
             aspectRatio: 0.85,
             child: Stack(
@@ -315,10 +321,7 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
 }
 
 class _FeaturedStoriesCarousel extends StatefulWidget {
-  const _FeaturedStoriesCarousel({
-    required this.stories,
-    required this.onTap,
-  });
+  const _FeaturedStoriesCarousel({required this.stories, required this.onTap});
 
   final List<FeaturedStoryDto> stories;
   final void Function(FeaturedStoryDto story) onTap;
@@ -360,10 +363,7 @@ class _FeaturedStoriesCarouselState extends State<_FeaturedStoriesCarousel> {
               final story = widget.stories[index];
               return Padding(
                 padding: EdgeInsets.symmetric(horizontal: horizontalPadding * 0.1),
-                child: _FeaturedStoryCard(
-                  story: story,
-                  onTap: () => widget.onTap(story),
-                ),
+                child: _FeaturedStoryCard(story: story, onTap: () => widget.onTap(story)),
               );
             },
           ),
@@ -383,11 +383,11 @@ class _FeaturedStoriesCarouselState extends State<_FeaturedStoriesCarousel> {
                   decoration: BoxDecoration(
                     color: _currentPage == index
                         ? (Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white
-                            : Colors.black87)
+                              ? Colors.white
+                              : Colors.black87)
                         : (Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white.withValues(alpha: 0.3)
-                            : Colors.black.withValues(alpha: 0.2)),
+                              ? Colors.white.withValues(alpha: 0.3)
+                              : Colors.black.withValues(alpha: 0.2)),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -503,7 +503,12 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
             SmoothClipRRect(
               smoothness: 0.6,
               borderRadius: BorderRadius.circular(cardRadius),
-              side: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.1), width: 1),
+              side: BorderSide(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : Colors.black.withValues(alpha: 0.1),
+                width: 1,
+              ),
               child: AspectRatio(
                 aspectRatio: 0.8,
                 child: Stack(
@@ -566,7 +571,9 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
                   TypographyText(
                     item.title,
                     variant: TypographyVariant.body1,
-                    color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black87,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -647,22 +654,59 @@ class _StoryImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (_isNetwork) {
-      return Image.network(
-        image,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return Image.asset('assets/images/default.png', fit: BoxFit.cover);
-        },
+      return _StoryImageShimmer(
+        child: Image.network(
+          image,
+          fit: BoxFit.cover,
+          frameBuilder: _frameBuilder,
+          errorBuilder: (context, error, stackTrace) {
+            return Image.asset('assets/images/default.png', fit: BoxFit.cover);
+          },
+        ),
       );
     }
     // Fallback to asset path from API examples or local assets
     final assetPath = image.isNotEmpty ? image : 'assets/images/default.png';
-    return Image.asset(
-      assetPath,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) {
-        return Image.asset('assets/images/default.png', fit: BoxFit.cover);
-      },
+    return _StoryImageShimmer(
+      child: Image.asset(
+        assetPath,
+        fit: BoxFit.cover,
+        frameBuilder: _frameBuilder,
+        errorBuilder: (context, error, stackTrace) {
+          return Image.asset('assets/images/default.png', fit: BoxFit.cover);
+        },
+      ),
+    );
+  }
+
+  Widget _frameBuilder(
+    BuildContext context,
+    Widget child,
+    int? frame,
+    bool wasSynchronouslyLoaded,
+  ) {
+    if (wasSynchronouslyLoaded) return child;
+    return AnimatedOpacity(
+      opacity: frame == null ? 0 : 1,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      child: child,
+    );
+  }
+}
+
+class _StoryImageShimmer extends StatelessWidget {
+  const _StoryImageShimmer({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const ShimmerBox(radius: 0),
+        child,
+      ],
     );
   }
 }

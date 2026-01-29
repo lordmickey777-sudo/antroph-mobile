@@ -137,7 +137,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             } else {
                               await OnboardingStorageService.markCompleted();
                               if (mounted) {
-                                context.go('/auth/login');
+                                context.go('/home');
                               }
                             }
                           },

@@ -11,6 +11,7 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/features/profile/providers/profile_controller.dart';
+import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -24,42 +25,44 @@ class ProfilePage extends StatelessWidget {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: ContentWidth.content),
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                  child: SafeArea(
-                    bottom: false,
-                    child: Row(
-                      children: [
-                        Image.asset('assets/images/app_logo.png', width: 38, height: 38),
-                        const SizedBox(width: 2),
-                        TypographyText(
-                          'Profile',
-                          variant: TypographyVariant.h3,
-                          color: isDark ? Colors.white : Colors.black,
-                        ),
-                      ],
+          child: ScrollFadeGradient(
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                    child: SafeArea(
+                      bottom: false,
+                      child: Row(
+                        children: [
+                          Image.asset('assets/images/app_logo.png', width: 38, height: 38),
+                          const SizedBox(width: 2),
+                          TypographyText(
+                            'Profile',
+                            variant: TypographyVariant.h3,
+                            color: isDark ? Colors.white : Colors.black,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              SliverToBoxAdapter(
-                child: Column(
-                  children: const [
-                    SizedBox(height: 8),
-                    _ProfileHeader(),
-                    SizedBox(height: 30),
-                    _ProfileMenu(),
-                    SizedBox(height: 40),
-                    _BuildNumber(),
-                    SizedBox(height: 140),
-                  ],
+                SliverToBoxAdapter(
+                  child: Column(
+                    children: const [
+                      SizedBox(height: 8),
+                      _ProfileHeader(),
+                      SizedBox(height: 30),
+                      _ProfileMenu(),
+                      SizedBox(height: 40),
+                      _BuildNumber(),
+                      SizedBox(height: 140),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
