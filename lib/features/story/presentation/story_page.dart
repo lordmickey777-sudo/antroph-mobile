@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -312,17 +314,41 @@ class _FeaturedStoriesCarousel extends StatefulWidget {
 class _FeaturedStoriesCarouselState extends State<_FeaturedStoriesCarousel> {
   late final PageController _pageController;
   int _currentPage = 0;
+  Timer? _autoAdvanceTimer;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(viewportFraction: 0.92);
+    _startAutoAdvanceTimer();
   }
 
   @override
   void dispose() {
+    _autoAdvanceTimer?.cancel();
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _startAutoAdvanceTimer() {
+    _autoAdvanceTimer?.cancel();
+    if (widget.stories.length <= 1) return;
+    _autoAdvanceTimer = Timer(const Duration(seconds: 5), _advanceToNextPage);
+  }
+
+  void _advanceToNextPage() {
+    if (!mounted) return;
+    final nextPage = (_currentPage + 1) % widget.stories.length;
+    _pageController.animateToPage(
+      nextPage,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+    );
+    _startAutoAdvanceTimer();
+  }
+
+  void _onUserInteraction() {
+    _startAutoAdvanceTimer();
   }
 
   @override
@@ -336,11 +362,16 @@ class _FeaturedStoriesCarouselState extends State<_FeaturedStoriesCarousel> {
           child: AnimatedBuilder(
             animation: _pageController,
             builder: (context, child) {
-              return PageView.builder(
-                controller: _pageController,
-                onPageChanged: (index) => setState(() => _currentPage = index),
-                physics: const BouncingScrollPhysics(),
-                itemCount: widget.stories.length,
+              return GestureDetector(
+                onPanDown: (_) => _onUserInteraction(),
+                child: PageView.builder(
+                  controller: _pageController,
+                  onPageChanged: (index) {
+                    setState(() => _currentPage = index);
+                    _onUserInteraction();
+                  },
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: widget.stories.length,
                 itemBuilder: (context, index) {
                   final story = widget.stories[index];
 
@@ -362,6 +393,7 @@ class _FeaturedStoriesCarouselState extends State<_FeaturedStoriesCarousel> {
                     ),
                   );
                 },
+                ),
               );
             },
           ),
@@ -413,12 +445,12 @@ class _SectionSliver extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
             child: TypographyText(
               section.title,
               variant: TypographyVariant.body1,
               color: isDark ? Colors.white : Colors.black87,
-              fontSize: 14,
+              fontSize: 18,
               fontWeight: FontWeight.w600,
             ),
           ),
