@@ -46,6 +46,9 @@ class VoiceChatState {
   final bool isStoryMode;
   final List<ConversationItem> conversationHistory;
 
+  // Mute state for continuous listening mode
+  final bool isMuted;
+
   const VoiceChatState({
     this.currentExpression = RobotExpression.neutral,
     this.isRecording = false,
@@ -66,6 +69,7 @@ class VoiceChatState {
     this.roomState,
     this.isStoryMode = false,
     this.conversationHistory = const [],
+    this.isMuted = false,
   });
 
   VoiceChatState copyWith({
@@ -91,6 +95,7 @@ class VoiceChatState {
     bool? isStoryMode,
     List<ConversationItem>? conversationHistory,
     bool clearStorySession = false,
+    bool? isMuted,
   }) {
     return VoiceChatState(
       currentExpression: currentExpression ?? this.currentExpression,
@@ -115,6 +120,7 @@ class VoiceChatState {
       roomState: roomState ?? this.roomState,
       isStoryMode: isStoryMode ?? this.isStoryMode,
       conversationHistory: conversationHistory ?? this.conversationHistory,
+      isMuted: isMuted ?? this.isMuted,
     );
   }
 
@@ -147,6 +153,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Timer? _aiAudioLevelTimer;
   Timer? _silenceTimer;
   Timer? _autoListenTimer;
+  DateTime? _lastSpeechAt;
   final List<double> _pendingAiRmsValues = [];
   final StringBuffer _aiTextBuffer = StringBuffer();
   BytesBuilder _audioBuffer = BytesBuilder(copy: false);
@@ -163,7 +170,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   static const String _deviceType = 'mobile';
   static const String _permissionError =
       'Microphone permission is required for voice chat';
-  static const double _silenceThreshold = 0.01;
+  static const double _speechThreshold = 0.02;
   static const Duration _silenceDuration = Duration(seconds: 2);
 
   VoiceChatController({
@@ -477,8 +484,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         phase: state.isStoryMode ? RealtimeVoicePhase.recording : state.phase,
       );
 
-      // Only connect if not in story mode (story mode already connected)
-      if (!state.isStoryMode) {
+      // Only connect if not in story mode and socket not already open
+      // (story mode already connected, and for continuous listening we reuse the socket)
+      if (!state.isStoryMode && !_socketOpen) {
         await _connectSocket();
       }
 
@@ -610,11 +618,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     final rms = _computeRms(bytes);
     _emitMicLevelValue(rms);
 
-    // Silence detection: if audio level is below threshold, start/continue silence timer
-    if (rms < _silenceThreshold) {
-      _startSilenceTimer();
-    } else {
+    // Silence detection: use a higher speech threshold to avoid ambient noise keeping us open.
+    if (rms >= _speechThreshold) {
+      _lastSpeechAt = DateTime.now();
       _cancelSilenceTimer();
+    } else {
+      _startSilenceTimer();
     }
 
     if (!_socketOpen) return;
@@ -638,9 +647,17 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (_silenceTimer != null && _silenceTimer!.isActive) return;
     _silenceTimer = Timer(_silenceDuration, () {
       if (state.isRecording) {
-        _log.i(
-            'Silence detected for $_silenceDuration, auto-stopping recording');
-        stopRecordingAndSend();
+        final lastSpeechAt = _lastSpeechAt;
+        final silenceFor = lastSpeechAt == null
+            ? _silenceDuration
+            : DateTime.now().difference(lastSpeechAt);
+        if (silenceFor >= _silenceDuration) {
+          _log.i(
+              'Silence detected for $_silenceDuration, auto-stopping recording');
+          stopRecordingAndSend();
+        } else {
+          _startSilenceTimer();
+        }
       }
     });
   }
@@ -698,6 +715,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   Future<void> _stopRecorder() async {
     _cancelSilenceTimer();
+    _lastSpeechAt = null;
     try {
       await _recorder?.stopRecorder();
     } catch (_) {}
@@ -967,6 +985,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
         );
         _commitSent = false;
+        // If no audio is playing, trigger auto-listen now
+        // (otherwise _handlePlaybackComplete will trigger it when audio ends)
+        if (!state.isPlaying) {
+          _scheduleAutoListen();
+        }
         break;
       case RealtimeServerMessageType.responseError:
       case RealtimeServerMessageType.error:
@@ -1185,15 +1208,19 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
     );
 
-    // Auto-listen after AI finishes speaking (only in story mode)
-    if (state.isStoryMode) {
-      _scheduleAutoListen();
-    }
+    // Auto-listen after AI finishes speaking (both modes)
+    _scheduleAutoListen();
   }
 
   /// Schedules auto-listening after a brief delay if enabled in settings.
   void _scheduleAutoListen() {
     _cancelAutoListenTimer();
+
+    // Don't auto-listen if muted
+    if (state.isMuted) {
+      _log.i('Auto-listen skipped: muted');
+      return;
+    }
 
     // Check if auto-listen is enabled in user settings
     final settings = ref.read(customizationControllerProvider).asData?.value;
@@ -1208,10 +1235,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     const autoListenDelay = Duration(milliseconds: 800);
     _autoListenTimer = Timer(autoListenDelay, () {
       if (!ref.mounted) return;
-      // Only auto-start if still in ready state and not busy
-      if (state.isStoryMode &&
-          state.phase == RealtimeVoicePhase.ready &&
-          !state.isBusy) {
+      if (state.isMuted) return; // Check again after delay
+
+      // Works for both story mode and regular mode
+      final canAutoListen = state.isStoryMode
+          ? (state.phase == RealtimeVoicePhase.ready && !state.isBusy)
+          : (!state.isBusy);
+
+      if (canAutoListen) {
         _log.i('Auto-starting recording after AI response');
         startRecording();
       }
@@ -1403,6 +1434,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     }
 
     _resetAudioBuffer();
+    _lastSpeechAt = null;
     state = state.copyWith(
       isPlaying: false,
       isProcessing: false,
@@ -1416,6 +1448,52 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   /// Clear error message
   void clearError() {
     state = state.copyWith(errorMessage: null);
+  }
+
+  /// Toggle mute state - when muted, auto-listen is disabled
+  void toggleMute() {
+    final newMuteState = !state.isMuted;
+    _log.i('Toggling mute: ${state.isMuted} -> $newMuteState');
+
+    if (newMuteState) {
+      // Muting: stop recording, cancel auto-listen, but let AI continue
+      _cancelAutoListenTimer();
+      if (state.isRecording) {
+        _stopRecorderOnly();
+        state = state.copyWith(
+          isMuted: true,
+          isRecording: false,
+          phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
+        );
+      } else {
+        state = state.copyWith(isMuted: true);
+      }
+    } else {
+      // Unmuting: start listening if ready
+      state = state.copyWith(isMuted: false);
+      if (!state.isPlaying && !state.isProcessing &&
+          (state.isSessionReady || !state.isStoryMode)) {
+        startRecording();
+      }
+    }
+  }
+
+  /// Stop recorder without sending (for mute)
+  Future<void> _stopRecorderOnly() async {
+    _cancelSilenceTimer();
+    _lastSpeechAt = null;
+    try {
+      if (_recorder?.isRecording ?? false) {
+        await _recorder?.stopRecorder();
+      }
+    } catch (e) {
+      _log.e('Error stopping recorder', error: e);
+    }
+    await _micStreamSubscription?.cancel();
+    _micStreamSubscription = null;
+    await _micStreamController?.close();
+    _micStreamController = null;
+    _emitMicLevelValue(0.0);
   }
 
   Future<bool> _ensureMicrophonePermission() async {
