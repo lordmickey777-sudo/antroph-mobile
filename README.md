@@ -25,6 +25,31 @@ dart run build_runner build --delete-conflicting-outputs
 flutter run
 ```
 
+### Running on specific devices
+
+```sh
+# List available devices
+flutter devices
+
+# Run on a specific device
+flutter run -d <device-id>
+
+# Common flags
+flutter run -d <device-id> --release   # Release mode (faster, no debugging)
+flutter run -d <device-id> --debug     # Debug mode with hot reload (default)
+flutter run -d <device-id> --profile   # Profile mode for performance testing
+```
+
+### Other useful commands
+
+```sh
+flutter clean              # Clean build files
+flutter pub get            # Get dependencies
+flutter analyze            # Check for errors
+flutter install -d <device-id>  # Install without running
+flutter logs -d <device-id>     # View device logs
+```
+
 ## Building release (APK & iOS)
 
 Below are common Flutter commands to build Android and iOS release artifacts. Run these from the repository root. Building iOS artifacts requires a macOS machine with Xcode and proper code signing configured.
@@ -191,11 +216,9 @@ AppButton(
 
 ## Notes on Cupertino-style sheets
 
-This app uses a lightweight custom `CupertinoSheetRoute` (`lib/widgets/cupertino_sheet_route.dart`) to present a full-height bottom sheet for the Story flow. When opening and closing the sheet from `HomePage`, we push/pop on the root navigator to avoid issues with nested navigators (e.g., when using `go_router`). If you open or close the sheet elsewhere, prefer:
+This app uses Flutter's built-in `CupertinoSheetRoute` (via `showCupertinoSheet` in `lib/widgets/app_bottom_sheet.dart`) to present full-height sheets. Use `showAppBottomSheet` to open a sheet; it always pushes to the root navigator so transitions stack correctly. To close:
 
-- Open: `Navigator.of(context, rootNavigator: true).push(CupertinoSheetRoute(...))`
-- Close: `Navigator.of(context, rootNavigator: true).pop()`
-
-This ensures the sheet always dismisses correctly regardless of the current tab or nesting.
+- Use `Navigator.of(context).pop(result)` when you need to return a result.
+- Use `CupertinoSheetRoute.popSheet(context)` if you ever enable nested sheet navigation and want to dismiss the entire sheet.
 
 # antroph-mobile

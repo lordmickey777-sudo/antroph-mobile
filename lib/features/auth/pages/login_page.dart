@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
 import '../../../widgets/typography_text.dart';
 import '../widgets/auth_input.dart';
 import 'package:antroph_mobile/widgets/app_input.dart';
@@ -87,16 +88,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       }
     });
     final loading = authState.isLoading;
+    final horizontalPadding = AppPadding.form.of(context);
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 96, 24, 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: ContentWidth.form),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(horizontalPadding, 96, horizontalPadding, 24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                 const TypographyText(
                   'Login Your',
                   variant: TypographyVariant.h2,
@@ -178,6 +183,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 //     ),
                 //   ),
               ],
+                ),
+              ),
             ),
           ),
         ),

@@ -1,13 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/bottom_nav.dart';
 import 'package:antroph_mobile/features/profile/presentation/profile_page.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page.dart';
-import 'package:antroph_mobile/core/auth/state/auth_state.dart';
-import 'package:antroph_mobile/features/auth/pages/login_page.dart';
-import 'package:antroph_mobile/features/auth/pages/signup_page.dart';
-
-const _homeBg = Color(0xFF121516);
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -34,41 +29,49 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+    // Responsive bottom spacing: larger on tablets
+    final bottomPadding = responsive<double>(
+      context,
+      phone: 16,
+      tablet: 20,
+      largeTablet: 24,
+    );
+    final horizontalPadding = AppPadding.horizontal.of(context);
+
     return Scaffold(
-      backgroundColor: _homeBg,
-      body: SafeArea(
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Sliding content between tabs using PageView for fluid transitions
-            Positioned.fill(
-              child: PageView(
-                controller: _pageController,
-                physics: const BouncingScrollPhysics(),
-                onPageChanged: (index) {
-                  // Sync the active tab when user swipes
-                  setState(() {
-                    if (index == 0) {
-                      _tab = HomeTab.story;
-                    } else {
-                      _tab = HomeTab.profile;
-                    }
-                  });
-                },
-                children: [
-                  _AuthGated(child: const StoryPage()),
-                  _AuthGated(child: const ProfilePage()),
-                ],
-              ),
+      body: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Sliding content between tabs using PageView for fluid transitions
+          Positioned.fill(
+            child: PageView(
+              controller: _pageController,
+              physics: const ClampingScrollPhysics(),
+              onPageChanged: (index) {
+                // Sync the active tab when user swipes
+                setState(() {
+                  if (index == 0) {
+                    _tab = HomeTab.story;
+                  } else {
+                    _tab = HomeTab.profile;
+                  }
+                });
+              },
+              children: const [
+                StoryPage(),
+                ProfilePage(),
+              ],
             ),
-            // Bottom rounded navigation panel
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 16,
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: size.width * 0.07),
+          ),
+          // Bottom rounded navigation panel
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: bottomPadding,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+              child: SafeArea(
+                top: false,
                 child: BottomNav(
                   current: _tab,
                   onChanged: (tab) async {
@@ -77,8 +80,8 @@ class _HomePageState extends State<HomePage> {
                     if (_pageController.hasClients) {
                       _pageController.animateToPage(
                         targetPage,
-                        duration: const Duration(milliseconds: 320),
-                        curve: Curves.easeOutCubic,
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeOutExpo,
                       );
                     }
                     setState(() => _tab = tab);
@@ -86,40 +89,10 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-}
-
-class _AuthGated extends ConsumerStatefulWidget {
-  const _AuthGated({required this.child});
-  final Widget child;
-  @override
-  ConsumerState<_AuthGated> createState() => _AuthGatedState();
-}
-
-class _AuthGatedState extends ConsumerState<_AuthGated> {
-  bool showLogin = true;
-
-  @override
-  Widget build(BuildContext context) {
-    final userState = ref.watch(authControllerProvider);
-    final user = userState.value;
-    if (user != null) return widget.child;
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
-      child: showLogin
-          ? LoginPage(
-              key: const ValueKey('login'),
-              onSwitchSignup: () => setState(() => showLogin = false),
-            )
-          : SignUpPage(
-              key: const ValueKey('signup'),
-              onSwitchLogin: () => setState(() => showLogin = true),
-            ),
-    );
-  }
 }

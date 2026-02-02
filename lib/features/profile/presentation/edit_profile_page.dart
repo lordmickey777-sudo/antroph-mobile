@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import '../providers/profile_controller.dart';
 import '../../../widgets/toast.dart';
 import 'package:antroph_mobile/widgets/app_input.dart';
@@ -55,13 +56,13 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       }
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Profile'),
-        backgroundColor: const Color(0xFF121516),
-        foregroundColor: Colors.white,
+        foregroundColor: isDark ? Colors.white : Colors.black87,
       ),
-      backgroundColor: const Color(0xFF121516),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -221,29 +222,32 @@ class _LanguageDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textColor = context.primaryTextColor;
+    final hintColor = context.tertiaryTextColor;
+    final iconColor = context.secondaryTextColor;
     return Container(
       constraints: const BoxConstraints(minHeight: 64),
       padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F2223),
+        color: context.inputBackground,
         borderRadius: BorderRadius.circular(40),
       ),
       child: Row(
         children: [
-          const Icon(Icons.language, color: Colors.white70, size: 22),
+          Icon(Icons.language, color: iconColor, size: 22),
           const SizedBox(width: 12),
           Expanded(
             child: DropdownButtonFormField<String>(
               value: value,
-              dropdownColor: const Color(0xFF1F2223),
+              dropdownColor: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(12),
-              iconEnabledColor: Colors.white70,
-              style: const TextStyle(color: Colors.white, fontSize: 15),
-              decoration: const InputDecoration(
+              iconEnabledColor: iconColor,
+              style: TextStyle(color: textColor, fontSize: 15),
+              decoration: InputDecoration(
                 border: InputBorder.none,
                 isCollapsed: true,
                 hintText: 'Language',
-                hintStyle: TextStyle(color: Colors.white38, fontSize: 15),
+                hintStyle: TextStyle(color: hintColor, fontSize: 15),
                 contentPadding: EdgeInsets.zero,
               ),
               items: [

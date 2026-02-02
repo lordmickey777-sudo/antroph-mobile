@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:go_router/go_router.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
 import '../../../widgets/typography_text.dart';
 import '../widgets/auth_input.dart';
 import '../../../core/auth/state/auth_state.dart';
 import '../../../core/auth/repository/auth_repository.dart';
 import '../../../widgets/toast.dart';
-import 'package:go_router/go_router.dart';
 
 class SignUpPage extends ConsumerStatefulWidget {
   const SignUpPage({super.key, this.onSwitchLogin});
@@ -103,16 +104,20 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
       }
     });
     final loading = authState.isLoading;
+    final horizontalPadding = AppPadding.form.of(context);
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 96, 24, 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: ContentWidth.form),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(horizontalPadding, 96, horizontalPadding, 24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                 const TypographyText(
                   'Create your',
                   variant: TypographyVariant.h2,
@@ -207,13 +212,14 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                       ),
                     ),
                   ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    );
+    ));
   }
 
   @override

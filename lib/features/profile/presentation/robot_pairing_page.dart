@@ -76,12 +76,11 @@ class _RobotPairingPageState extends ConsumerState<RobotPairingPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: const Color(0xFF121516),
       appBar: AppBar(
         title: const Text('Name your Antroph'),
-        backgroundColor: const Color(0xFF121516),
-        foregroundColor: Colors.white,
+        foregroundColor: isDark ? Colors.white : Colors.black87,
       ),
       body: SafeArea(
         child: SingleChildScrollView(

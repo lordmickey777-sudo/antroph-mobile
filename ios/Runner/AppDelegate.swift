@@ -8,7 +8,7 @@ import AVFoundation
   private var playerNode: AVAudioPlayerNode?
   private var audioFormat: AVAudioFormat?
   private let gain: Float = 4.0 // Software gain to make PCM louder (matches Android)
-  private let channelName = "com.antroph.aura/pcm_player"
+  private let channelName = "com.antroph.auraapp/pcm_player"
 
   override func application(
     _ application: UIApplication,
@@ -60,8 +60,13 @@ import AVFoundation
     do {
       // Configure audio session for playback through speaker
       let audioSession = AVAudioSession.sharedInstance()
-      try audioSession.setCategory(.playback, mode: .default, options: [.defaultToSpeaker])
+      try audioSession.setCategory(
+        .playAndRecord,
+        mode: .voiceChat,
+        options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
+      )
       try audioSession.setActive(true)
+      try audioSession.overrideOutputAudioPort(.speaker)
 
       audioEngine = AVAudioEngine()
       playerNode = AVAudioPlayerNode()

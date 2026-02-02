@@ -1,9 +1,14 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
+import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
+import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
+import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
@@ -46,42 +51,59 @@ class CollectionsPage extends ConsumerWidget {
               assetPath: 'assets/images/antroph_smile.png',
             );
           }
-          return ListView.separated(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
+          final horizontalPadding = AppPadding.horizontal.of(context);
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: ContentWidth.content),
+              child: ListView.separated(
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.symmetric(vertical: 12, horizontal: horizontalPadding),
+                itemCount: items.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
               final collection = items[index];
               return _CollectionCard(
-                collection: collection,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        CollectionDetailPage(collection: collection),
+                  collection: collection,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          CollectionDetailPage(collection: collection),
+                    ),
                   ),
-                ),
-                onStartChat: () => _startChatForCollection(context, collection),
-                onRemove: () =>
-                    _removeCollectionStories(context, ref, collection),
-              );
-            },
-          );
+                  onStartChat: () => _startChatForCollection(context, ref, collection),
+                  onRemove: () =>
+                      _removeCollectionStories(context, ref, collection),
+                );
+              },
+            ),
+          ),
+        );
         },
       ),
     );
   }
 
-  void _startChatForCollection(BuildContext context, PlaylistDto collection) {
+  Future<void> _startChatForCollection(
+    BuildContext context,
+    WidgetRef ref,
+    PlaylistDto collection,
+  ) async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (!context.mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     // Use the collection id as the story id since each playlist item is a story
     final storyId = collection.id;
     if (storyId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to start story'),
-          backgroundColor: Color(0xFF2A2A2A),
-        ),
-      );
+      showToast(context, 'Unable to start story', variant: ToastVariant.info);
       return;
     }
     Navigator.of(context).push(
@@ -99,14 +121,21 @@ class CollectionsPage extends ConsumerWidget {
     WidgetRef ref,
     PlaylistDto collection,
   ) async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Remove stories from collection',
+    );
+    if (!context.mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     final id = collection.id;
     if (id.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No stories to remove'),
-          backgroundColor: Color(0xFF2A2A2A),
-        ),
-      );
+      showToast(context, 'No stories to remove', variant: ToastVariant.info);
       return;
     }
     final repo = ref.read(storiesRepositoryProvider);
@@ -121,12 +150,7 @@ class CollectionsPage extends ConsumerWidget {
       ref.invalidate(storiesHomeSectionsProvider);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to remove stories'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showToast(context, 'Failed to remove stories');
       }
     }
   }
@@ -178,8 +202,8 @@ class CollectionDetailPage extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _CollectionStoryCard(
                   story: story,
-                  onPlay: () => _startStory(context, story),
-                  onStartChat: () => _startChatForStory(context, story),
+                  onPlay: () => _startStory(context, ref, story),
+                  onStartChat: () => _startChatForStory(context, ref, story),
                   onRemove: () =>
                       _removeStoryFromCollection(context, ref, story),
                 ),
@@ -191,13 +215,45 @@ class CollectionDetailPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _startStory(BuildContext context, PlaylistStoryDto story) async {
+  Future<void> _startStory(
+    BuildContext context,
+    WidgetRef ref,
+    PlaylistStoryDto story,
+  ) async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (!context.mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => StoryPlayerPage(story: story)));
   }
 
-  void _startChatForStory(BuildContext context, PlaylistStoryDto story) {
+  Future<void> _startChatForStory(
+    BuildContext context,
+    WidgetRef ref,
+    PlaylistStoryDto story,
+  ) async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (!context.mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatPage(
@@ -213,6 +269,18 @@ class CollectionDetailPage extends ConsumerWidget {
     WidgetRef ref,
     PlaylistStoryDto story,
   ) async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Remove story from collection',
+    );
+    if (!context.mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     final repo = ref.read(storiesRepositoryProvider);
     try {
       await repo.removeStoriesFromCollection(storyIds: [story.storyId]);
@@ -221,21 +289,11 @@ class CollectionDetailPage extends ConsumerWidget {
       await StoriesCacheService.clear();
       ref.invalidate(storiesHomeSectionsProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Story removed from collection'),
-            backgroundColor: Color(0xFF2A2A2A),
-          ),
-        );
+        showToast(context, 'Story removed from collection', success: true);
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to remove story'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showToast(context, 'Failed to remove story');
       }
     }
   }
@@ -311,35 +369,15 @@ class _CollectionCard extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                     const SizedBox(height: 12),
-                    GestureDetector(
-                      onTap: onStartChat,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 20,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(100),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(
-                              CupertinoIcons.play_fill,
-                              color: Colors.black,
-                              size: 18,
-                            ),
-                            SizedBox(width: 6),
-                            TypographyText(
-                              'Start story',
-                              variant: TypographyVariant.body1,
-                              color: Colors.black,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ],
-                        ),
-                      ),
+                    AppPillButton(
+                      onPressed: onStartChat,
+                      icon: CupertinoIcons.play_fill,
+                      label: 'Start story',
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                      variant: TypographyVariant.body1,
+                      fontWeight: FontWeight.w600,
                     ),
                   ],
                 ),
@@ -435,69 +473,27 @@ class _CollectionStoryCard extends StatelessWidget {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        GestureDetector(
-                          onTap: onPlay,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 10,
-                              horizontal: 20,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(100),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(
-                                  CupertinoIcons.play_fill,
-                                  color: Colors.black,
-                                  size: 18,
-                                ),
-                                SizedBox(width: 6),
-                                TypographyText(
-                                  'Play',
-                                  variant: TypographyVariant.body1,
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ],
-                            ),
-                          ),
+                        AppPillButton(
+                          onPressed: onPlay,
+                          icon: CupertinoIcons.play_fill,
+                          label: 'Play',
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                          variant: TypographyVariant.body1,
+                          fontWeight: FontWeight.w600,
                         ),
                         const SizedBox(width: 10),
-                        GestureDetector(
-                          onTap: onStartChat,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 10,
-                              horizontal: 20,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(100),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.2),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(
-                                  CupertinoIcons.chat_bubble_2_fill,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                                SizedBox(width: 6),
-                                TypographyText(
-                                  'Chat',
-                                  variant: TypographyVariant.body1,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ],
-                            ),
-                          ),
+                        AppPillButton(
+                          onPressed: onStartChat,
+                          icon: CupertinoIcons.chat_bubble_2_fill,
+                          label: 'Chat',
+                          backgroundColor: Colors.white.withValues(alpha: 0.15),
+                          foregroundColor: Colors.white,
+                          borderColor: Colors.white.withValues(alpha: 0.2),
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                          variant: TypographyVariant.body1,
+                          fontWeight: FontWeight.w600,
                         ),
                       ],
                     ),
@@ -629,9 +625,9 @@ class _CollectionCardShimmer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1B1D1F),
+        color: context.cardBackground,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: context.dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

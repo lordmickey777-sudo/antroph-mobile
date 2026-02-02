@@ -124,7 +124,7 @@ class PcmAudioPlayer implements AudioChunkPlayer {
 /// iOS implementation using native AVAudioEngine with gain boost.
 /// Mirrors the Android implementation for consistent loud audio output.
 class IOSAudioTrackPlayer implements AudioChunkPlayer {
-  static const _channel = MethodChannel('com.antroph.aura/pcm_player');
+  static const _channel = MethodChannel('com.antroph.auraapp/pcm_player');
   Future<void>? _startFuture;
   bool _stopped = true;
   VoidCallback? _onFinished;
@@ -149,9 +149,7 @@ class IOSAudioTrackPlayer implements AudioChunkPlayer {
     }
 
     try {
-      await _channel.invokeMethod<void>('write', {
-        'bytes': bytes,
-      });
+      await _channel.invokeMethod<void>('write', {'bytes': bytes});
     } catch (_) {
       await _reset();
       rethrow;
@@ -168,10 +166,7 @@ class IOSAudioTrackPlayer implements AudioChunkPlayer {
   @override
   Future<void> dispose() => stop();
 
-  Future<void> _start({
-    required int sampleRate,
-    required int bufferSize,
-  }) async {
+  Future<void> _start({required int sampleRate, required int bufferSize}) async {
     _finishedNotified = false;
     try {
       await _channel.invokeMethod<void>('start', {
@@ -230,9 +225,7 @@ class AndroidAudioTrackPlayer implements AudioChunkPlayer {
     }
 
     try {
-      await _channel.invokeMethod<void>('write', {
-        'bytes': bytes,
-      });
+      await _channel.invokeMethod<void>('write', {'bytes': bytes});
     } catch (_) {
       await _reset();
       rethrow;
@@ -249,10 +242,7 @@ class AndroidAudioTrackPlayer implements AudioChunkPlayer {
   @override
   Future<void> dispose() => stop();
 
-  Future<void> _start({
-    required int sampleRate,
-    required int bufferSize,
-  }) async {
+  Future<void> _start({required int sampleRate, required int bufferSize}) async {
     _finishedNotified = false;
     try {
       await _channel.invokeMethod<void>('start', {

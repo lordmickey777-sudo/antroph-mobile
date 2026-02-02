@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/features/story/models/story_playlists_models.dart';
 import 'package:antroph_mobile/features/story/providers/story_socket_provider.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
@@ -474,22 +475,30 @@ class _TextInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textColor = context.primaryTextColor;
+    final hintColor = context.tertiaryTextColor;
+    final borderColor = context.dividerColor;
+    final backgroundColor = context.inputBackground;
+    final isDark = context.isDarkMode;
+    final sendBg = isDark ? Colors.white : Theme.of(context).colorScheme.primary;
+    final sendFg = isDark ? Colors.black : Theme.of(context).colorScheme.onPrimary;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1B1D1F),
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: borderColor),
       ),
       child: Row(
         children: [
           Expanded(
             child: TextField(
               controller: controller,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
+              style: TextStyle(color: textColor),
+              decoration: InputDecoration(
                 hintText: 'Send text to the story',
-                hintStyle: TextStyle(color: Colors.white54),
+                hintStyle: TextStyle(color: hintColor),
                 border: InputBorder.none,
               ),
               minLines: 1,
@@ -500,12 +509,12 @@ class _TextInput extends StatelessWidget {
           AppButton(
             onPressed: () => onSend(controller.text),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black,
+              backgroundColor: sendBg,
+              foregroundColor: sendFg,
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
-            child: const Icon(Icons.send, color: Colors.black, size: 18),
+            child: Icon(Icons.send, color: sendFg, size: 18),
           ),
         ],
       ),

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:antroph_mobile/core/responsive/responsive.dart';
+import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -12,78 +15,76 @@ import 'package:antroph_mobile/features/story/data/stories_cache.dart';
 import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page_shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
+import 'package:antroph_mobile/widgets/app_action_button.dart';
+import 'package:antroph_mobile/widgets/shimmer.dart';
+import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
+import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
 
 class StoryPage extends ConsumerWidget {
   const StoryPage({super.key});
 
-  static const _bg = Color(0xFF121516);
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncHome = ref.watch(storiesHomeSectionsProvider);
-    return Scaffold(
-      backgroundColor: _bg,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            asyncHome.when(
-              loading: () => const StoryPageShimmer(),
-              error: (err, st) {
-                final msg = err is ApiError ? err.message : 'Failed to load stories.';
-                return _ErrorView(
-                  message: msg,
-                  onRetry: () => ref.refresh(storiesHomeSectionsProvider.future),
-                );
-              },
-              data: (data) {
-                final sections = data.sections;
-                final featuredStory = data.featuredStory;
-                if (sections.isEmpty && featuredStory == null) return const _EmptyView();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-                return RefreshIndicator.adaptive(
-                  color: Colors.white,
-                  backgroundColor: _bg,
-                  onRefresh: () => ref.refresh(storiesHomeSectionsProvider.future),
-                  child: CustomScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                          child: Row(
-                            children: [
-                              Image.asset('assets/images/app_logo.png', width: 38, height: 38),
-                              const SizedBox(width: 2),
-                              const TypographyText(
-                                'Stories',
-                                variant: TypographyVariant.h3,
-                                color: Colors.white,
-                              ),
-                            ],
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF141718) : const Color(0xFFF5F5F7),
+      body: asyncHome.when(
+        loading: () => const StoryPageShimmer(),
+        error: (err, st) {
+          final msg = err is ApiError ? err.message : 'Failed to load stories.';
+          return _ErrorView(
+            message: msg,
+            onRetry: () => ref.refresh(storiesHomeSectionsProvider.future),
+          );
+        },
+        data: (data) {
+          final sections = data.sections;
+          final featuredStories = data.featuredStories;
+          if (sections.isEmpty && featuredStories.isEmpty) return const _EmptyView();
+
+          return ScrollFadeGradient(
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                    child: SafeArea(
+                      bottom: false,
+                      child: Row(
+                        children: [
+                          Image.asset('assets/images/app_logo.png', width: 38, height: 38),
+                          const SizedBox(width: 2),
+                          TypographyText(
+                            'Stories',
+                            variant: TypographyVariant.h3,
+                            color: isDark ? Colors.white : Colors.black,
                           ),
-                        ),
+                        ],
                       ),
-                      if (featuredStory != null)
-                        SliverToBoxAdapter(
-                          child: _FeaturedStoryCard(
-                            story: featuredStory,
-                            onTap: () => _openFeaturedStory(context, featuredStory),
-                          ),
-                        ),
-                      for (final section in sections)
-                        _SectionSliver(
-                          section: section,
-                          onTap: (card) => _openStory(context, card),
-                        ),
-                      const SliverToBoxAdapter(child: SizedBox(height: 120)),
-                    ],
+                    ),
                   ),
-                );
-              },
+                ),
+                CupertinoSliverRefreshControl(
+                  onRefresh: () => ref.refresh(storiesHomeSectionsProvider.future),
+                ),
+                if (featuredStories.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: _FeaturedStoriesCarousel(
+                      stories: featuredStories,
+                      onTap: (story) => _openFeaturedStory(context, story),
+                    ),
+                  ),
+                for (final section in sections)
+                  _SectionSliver(section: section, onTap: (card) => _openStory(context, card)),
+                const SliverToBoxAdapter(child: SizedBox(height: 120)),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -91,7 +92,6 @@ class StoryPage extends ConsumerWidget {
   Future<void> _openStory(BuildContext context, StoryCardDto card) async {
     await showAppBottomSheet(
       context: context,
-      heightFactor: 0.7,
       builder: (_, scrollController) => StorySheetContent(
         storyId: card.storyId,
         title: card.title,
@@ -108,7 +108,6 @@ class StoryPage extends ConsumerWidget {
   Future<void> _openFeaturedStory(BuildContext context, FeaturedStoryDto story) async {
     await showAppBottomSheet(
       context: context,
-      heightFactor: 0.7,
       builder: (_, scrollController) => StorySheetContent(
         storyId: story.id,
         title: story.title,
@@ -124,10 +123,15 @@ class StoryPage extends ConsumerWidget {
 }
 
 class _FeaturedStoryCard extends ConsumerStatefulWidget {
-  const _FeaturedStoryCard({required this.story, required this.onTap});
+  const _FeaturedStoryCard({
+    required this.story,
+    required this.onTap,
+    this.textOpacity = 1.0,
+  });
 
   final FeaturedStoryDto story;
   final VoidCallback onTap;
+  final double textOpacity;
 
   @override
   ConsumerState<_FeaturedStoryCard> createState() => _FeaturedStoryCardState();
@@ -148,13 +152,18 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(30, 8, 30, 24),
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
       child: GestureDetector(
         onTap: widget.onTap,
         child: SmoothClipRRect(
           smoothness: 0.6,
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 1),
+          side: BorderSide(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.white.withValues(alpha: 0.15)
+                : Colors.black.withValues(alpha: 0.1),
+            width: 1,
+          ),
           child: AspectRatio(
             aspectRatio: 0.85,
             child: Stack(
@@ -185,72 +194,46 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
                   left: 20,
                   right: 20,
                   bottom: 24,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TypographyText(
-                        widget.story.title,
-                        variant: TypographyVariant.h2,
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      const SizedBox(height: 10),
-                      if (widget.story.description.isNotEmpty)
+                  child: Opacity(
+                    opacity: widget.textOpacity,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         TypographyText(
-                          widget.story.description,
-                          variant: TypographyVariant.body1,
-                          color: Colors.white.withOpacity(0.85),
-                          fontSize: 14,
-                          maxLines: 2,
+                          widget.story.title,
+                          variant: TypographyVariant.h2,
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
                         ),
-                      const SizedBox(height: 20),
-                      GestureDetector(
-                        onTap: _isAdding
-                            ? null
-                            : _isAdded
-                            ? () {
-                                HapticFeedback.mediumImpact();
-                                _navigateToChat();
-                              }
-                            : () {
-                                HapticFeedback.mediumImpact();
-                                _handleAddToPlaylist();
-                              },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(100),
+                        const SizedBox(height: 10),
+                        if (widget.story.description.isNotEmpty)
+                          TypographyText(
+                            widget.story.description,
+                            variant: TypographyVariant.body1,
+                            color: Colors.white.withOpacity(0.85),
+                            fontSize: 14,
+                            maxLines: 2,
                           ),
-                          child: _isAdding
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CupertinoActivityIndicator(radius: 10),
-                                )
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
-                                      color: Colors.black,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TypographyText(
-                                      _isAdded ? 'Play' : 'My List',
-                                      variant: TypographyVariant.body1,
-                                      color: Colors.black,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ],
-                                ),
+                        const SizedBox(height: 20),
+                        AppPillButton(
+                          onPressed: _isAdding
+                              ? null
+                              : _isAdded
+                              ? _navigateToChat
+                              : _handleAddToPlaylist,
+                          isLoading: _isAdding,
+                          icon: _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
+                          label: _isAdding ? 'Adding...' : (_isAdded ? 'Play' : 'My List'),
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                          variant: TypographyVariant.body1,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -263,6 +246,19 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
 
   Future<void> _handleAddToPlaylist() async {
     if (_isAdding || _isAdded) return;
+
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Add stories to your playlist',
+    );
+    if (!mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     setState(() => _isAdding = true);
     try {
       await ref.read(storiesRepositoryProvider).addStoriesToPlaylist(storyIds: [widget.story.id]);
@@ -276,13 +272,23 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
     } catch (err) {
       if (!mounted) return;
       setState(() => _isAdding = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to add story: $err')));
+      showToast(context, 'Failed to add story: $err');
     }
   }
 
-  void _navigateToChat() {
+  Future<void> _navigateToChat() async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (!mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatPage(
@@ -294,67 +300,174 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
   }
 }
 
+class _FeaturedStoriesCarousel extends StatefulWidget {
+  const _FeaturedStoriesCarousel({required this.stories, required this.onTap});
+
+  final List<FeaturedStoryDto> stories;
+  final void Function(FeaturedStoryDto story) onTap;
+
+  @override
+  State<_FeaturedStoriesCarousel> createState() => _FeaturedStoriesCarouselState();
+}
+
+class _FeaturedStoriesCarouselState extends State<_FeaturedStoriesCarousel> {
+  late final PageController _pageController;
+  int _currentPage = 0;
+  Timer? _autoAdvanceTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(viewportFraction: 0.92);
+    _startAutoAdvanceTimer();
+  }
+
+  @override
+  void dispose() {
+    _autoAdvanceTimer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _startAutoAdvanceTimer() {
+    _autoAdvanceTimer?.cancel();
+    if (widget.stories.length <= 1) return;
+    _autoAdvanceTimer = Timer(const Duration(seconds: 5), _advanceToNextPage);
+  }
+
+  void _advanceToNextPage() {
+    if (!mounted) return;
+    final nextPage = (_currentPage + 1) % widget.stories.length;
+    _pageController.animateToPage(
+      nextPage,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+    );
+    _startAutoAdvanceTimer();
+  }
+
+  void _onUserInteraction() {
+    _startAutoAdvanceTimer();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final horizontalPadding = AppPadding.large.of(context);
+
+    return Column(
+      children: [
+        SizedBox(
+          height: MediaQuery.of(context).size.width * 1.1,
+          child: AnimatedBuilder(
+            animation: _pageController,
+            builder: (context, child) {
+              return GestureDetector(
+                onPanDown: (_) => _onUserInteraction(),
+                child: PageView.builder(
+                  controller: _pageController,
+                  onPageChanged: (index) {
+                    setState(() => _currentPage = index);
+                    _onUserInteraction();
+                  },
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: widget.stories.length,
+                itemBuilder: (context, index) {
+                  final story = widget.stories[index];
+
+                  // Calculate text opacity based on how centered this card is
+                  double textOpacity = 1.0;
+                  if (_pageController.position.haveDimensions) {
+                    final page = _pageController.page ?? _currentPage.toDouble();
+                    final distance = (page - index).abs();
+                    // Fade out quickly as we scroll away (opacity goes from 1 to 0 as distance goes from 0 to 0.5)
+                    textOpacity = (1.0 - (distance * 2)).clamp(0.0, 1.0);
+                  }
+
+                  return Padding(
+                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding * 0.1),
+                    child: _FeaturedStoryCard(
+                      story: story,
+                      onTap: () => widget.onTap(story),
+                      textOpacity: textOpacity,
+                    ),
+                  );
+                },
+                ),
+              );
+            },
+          ),
+        ),
+        if (widget.stories.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                widget.stories.length,
+                (index) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: _currentPage == index ? 24 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: _currentPage == index
+                        ? (Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black87)
+                        : (Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white.withValues(alpha: 0.3)
+                              : Colors.black.withValues(alpha: 0.2)),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _SectionSliver extends StatelessWidget {
   const _SectionSliver({required this.section, required this.onTap});
 
   final StorySectionDto section;
   final Future<void> Function(StoryCardDto) onTap;
-  static const double _sectionHeight = 220;
+  static const double _cardListHeight = 170;
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return SliverToBoxAdapter(
-      child: SizedBox(
-        height: _sectionHeight,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(width: 8),
-            _SideLabel(text: section.title),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.only(right: 10),
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                itemBuilder: (context, index) {
-                  final item = section.items[index];
-                  return _StoryCard(item: item, onTap: () => onTap(item));
-                },
-                separatorBuilder: (_, __) => const SizedBox(width: 16),
-                itemCount: section.items.length,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SideLabel extends StatelessWidget {
-  const _SideLabel({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return RotatedBox(
-      quarterTurns: 3,
-      child: Opacity(
-        opacity: 0.8,
-        child: Align(
-          alignment: Alignment.center,
-          child: Padding(
-            padding: const EdgeInsets.only(left: 100.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
             child: TypographyText(
-              text,
+              section.title,
               variant: TypographyVariant.body1,
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.white : Colors.black87,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
             ),
           ),
-        ),
+          SizedBox(
+            height: _cardListHeight,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemBuilder: (context, index) {
+                final item = section.items[index];
+                return _StoryCard(item: item, onTap: () => onTap(item));
+              },
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemCount: section.items.length,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -390,90 +503,95 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
       onTap: widget.onTap,
       child: SizedBox(
         width: 125,
-        child: Column(
-          children: [
-            // Card visual
-            SmoothClipRRect(
-              smoothness: 0.6,
-              borderRadius: BorderRadius.circular(cardRadius),
-              side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 1),
-              child: AspectRatio(
-                aspectRatio: 0.8,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Positioned.fill(child: _StoryImage(image: item.image)),
-                    Positioned(
-                      right: 6,
-                      bottom: 6,
-                      child: GestureDetector(
-                        onTap: _isAdding
-                            ? null
-                            : _isAdded
-                            ? () {
-                                HapticFeedback.lightImpact();
-                                _navigateToChat();
-                              }
-                            : () {
-                                HapticFeedback.lightImpact();
-                                _handleAddToPlaylist();
-                              },
-                        child: DecoratedBox(
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: _isAdding
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CupertinoActivityIndicator(
-                                      radius: 9,
-                                      color: Colors.black,
-                                    ),
-                                  )
-                                : _isAdded
-                                ? const Icon(
-                                    CupertinoIcons.play_fill,
-                                    size: 18,
-                                    color: Colors.black,
-                                  )
-                                : const Icon(CupertinoIcons.add, size: 18, color: Colors.black),
-                          ),
-                        ),
-                      ),
+        child: SmoothClipRRect(
+        smoothness: 0.6,
+        borderRadius: BorderRadius.circular(cardRadius),
+        side: BorderSide(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.black.withValues(alpha: 0.1),
+          width: 1,
+        ),
+        child: AspectRatio(
+          aspectRatio: 0.75,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(child: _StoryImage(image: item.image)),
+              // Gradient overlay for title readability
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  height: 60,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.0),
+                        Colors.black.withValues(alpha: 0.7),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 6),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TypographyText(
-                    item.title,
-                    variant: TypographyVariant.body1,
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ],
+              // Title at bottom left
+              Positioned(
+                left: 10,
+                right: 10,
+                bottom: 10,
+                child: TypographyText(
+                  item.title,
+                  variant: TypographyVariant.body1,
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  maxLines: 2,
+                ),
               ),
-            ),
-          ],
+              // Button at top right
+              Positioned(
+                right: 6,
+                top: 6,
+                child: AppCircleIconButton(
+                  onPressed: _isAdding
+                      ? null
+                      : _isAdded
+                      ? _navigateToChat
+                      : _handleAddToPlaylist,
+                  isLoading: _isAdding,
+                  icon: _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
+                  size: 34,
+                  iconSize: 18,
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                ),
+              ),
+            ],
+          ),
         ),
+      ),
       ),
     );
   }
 
   Future<void> _handleAddToPlaylist() async {
     if (_isAdding || _isAdded) return;
+
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Add stories to your playlist',
+    );
+    if (!mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     setState(() => _isAdding = true);
     try {
       await ref
@@ -489,13 +607,23 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
     } catch (err) {
       if (!mounted) return;
       setState(() => _isAdding = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to add story: $err')));
+      showToast(context, 'Failed to add story: $err');
     }
   }
 
-  void _navigateToChat() {
+  Future<void> _navigateToChat() async {
+    // Check auth first
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (!mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatPage(
@@ -515,22 +643,59 @@ class _StoryImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (_isNetwork) {
-      return Image.network(
-        image,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return Image.asset('assets/images/default.png', fit: BoxFit.cover);
-        },
+      return _StoryImageShimmer(
+        child: Image.network(
+          image,
+          fit: BoxFit.cover,
+          frameBuilder: _frameBuilder,
+          errorBuilder: (context, error, stackTrace) {
+            return Image.asset('assets/images/default.png', fit: BoxFit.cover);
+          },
+        ),
       );
     }
     // Fallback to asset path from API examples or local assets
     final assetPath = image.isNotEmpty ? image : 'assets/images/default.png';
-    return Image.asset(
-      assetPath,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) {
-        return Image.asset('assets/images/default.png', fit: BoxFit.cover);
-      },
+    return _StoryImageShimmer(
+      child: Image.asset(
+        assetPath,
+        fit: BoxFit.cover,
+        frameBuilder: _frameBuilder,
+        errorBuilder: (context, error, stackTrace) {
+          return Image.asset('assets/images/default.png', fit: BoxFit.cover);
+        },
+      ),
+    );
+  }
+
+  Widget _frameBuilder(
+    BuildContext context,
+    Widget child,
+    int? frame,
+    bool wasSynchronouslyLoaded,
+  ) {
+    if (wasSynchronouslyLoaded) return child;
+    return AnimatedOpacity(
+      opacity: frame == null ? 0 : 1,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      child: child,
+    );
+  }
+}
+
+class _StoryImageShimmer extends StatelessWidget {
+  const _StoryImageShimmer({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const ShimmerBox(radius: 0),
+        child,
+      ],
     );
   }
 }
