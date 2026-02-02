@@ -200,7 +200,7 @@ class IOSAudioTrackPlayer implements AudioChunkPlayer {
 /// Android implementation using a lightweight AudioTrack channel to avoid
 /// flutter_sound native crashes when querying player state.
 class AndroidAudioTrackPlayer implements AudioChunkPlayer {
-  static const _channel = MethodChannel('com.antroph.auraapp/pcm_player');
+  static const _channel = MethodChannel('com.antroph.aura/pcm_player');
   Future<void>? _startFuture;
   bool _stopped = true;
   VoidCallback? _onFinished;
