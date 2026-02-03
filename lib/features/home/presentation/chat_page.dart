@@ -680,8 +680,6 @@ class _MuteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.isDarkMode;
-    final baseColor = isDark ? Colors.white : Colors.black;
     return GestureDetector(
       onTap: onToggle,
       child: Container(
@@ -691,17 +689,17 @@ class _MuteButton extends StatelessWidget {
           shape: BoxShape.circle,
           color: isMuted
               ? Colors.red.withOpacity(0.15)
-              : baseColor.withOpacity(isDark ? 0.1 : 0.08),
+              : Colors.white.withOpacity(0.1),
           border: Border.all(
             color: isMuted
                 ? Colors.red.withOpacity(0.5)
-                : baseColor.withOpacity(isDark ? 0.2 : 0.18),
+                : Colors.white.withOpacity(0.2),
             width: 2,
           ),
         ),
         child: Icon(
           isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-          color: isMuted ? Colors.red : (isDark ? Colors.white : Colors.black87),
+          color: isMuted ? Colors.red : Colors.white,
           size: 28,
         ),
       ),
@@ -904,8 +902,6 @@ class _TranscriptButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasError = voiceState.errorMessage?.isNotEmpty ?? false;
-    final iconBase = context.primaryTextColor;
-    final iconIdle = context.tertiaryTextColor;
 
     return GestureDetector(
       onTap: _hasContent ? () => _showTranscriptSheet(context) : null,
@@ -916,8 +912,8 @@ class _TranscriptButton extends StatelessWidget {
           color: hasError
               ? Colors.redAccent
               : _hasContent
-              ? iconBase
-              : iconIdle,
+              ? Colors.white
+              : Colors.white38,
           size: 24,
         ),
       ),

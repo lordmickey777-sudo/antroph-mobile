@@ -195,10 +195,10 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: context.secondaryTextColor,
+                        color: Colors.white70,
                       ),
                     )
-                  : Icon(Icons.restore, color: context.secondaryTextColor),
+                  : const Icon(Icons.restore, color: Colors.white70),
               tooltip: 'Reset to defaults',
               onPressed: controller.isResetting || controller.isSaving
                   ? null
