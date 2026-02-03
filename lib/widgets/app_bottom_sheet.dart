@@ -13,12 +13,29 @@ Future<T?> showAppBottomSheet<T>({
   bool enableDrag = true,
   Color? backgroundColor,
 }) {
+  final theme = Theme.of(context);
+  final cupertinoTheme = CupertinoTheme.of(context);
+  final baseTextStyle =
+      (theme.textTheme.bodyMedium ?? const TextStyle()).copyWith(decoration: TextDecoration.none);
+
   return showCupertinoSheet<T>(
     context: context,
     enableDrag: enableDrag,
-    pageBuilder: (context) => _SheetScaffold(
-      backgroundColor: backgroundColor,
-      builder: builder,
+    pageBuilder: (context) => Theme(
+      data: theme,
+      child: CupertinoTheme(
+        data: cupertinoTheme.copyWith(brightness: theme.brightness),
+        child: DefaultTextStyle(
+          style: baseTextStyle,
+          child: IconTheme(
+            data: theme.iconTheme,
+            child: _SheetScaffold(
+              backgroundColor: backgroundColor,
+              builder: builder,
+            ),
+          ),
+        ),
+      ),
     ),
   );
 }

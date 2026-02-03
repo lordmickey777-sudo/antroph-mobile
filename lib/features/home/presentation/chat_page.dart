@@ -680,6 +680,10 @@ class _MuteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final bgColor = isMuted ? Colors.red : (isDark ? Colors.white : Colors.black87);
+    final iconColor = isMuted ? Colors.white : (isDark ? Colors.black : Colors.white);
+
     return GestureDetector(
       onTap: onToggle,
       child: Container(
@@ -687,19 +691,11 @@ class _MuteButton extends StatelessWidget {
         height: 64,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isMuted
-              ? Colors.red.withOpacity(0.15)
-              : Colors.white.withOpacity(0.1),
-          border: Border.all(
-            color: isMuted
-                ? Colors.red.withOpacity(0.5)
-                : Colors.white.withOpacity(0.2),
-            width: 2,
-          ),
+          color: bgColor,
         ),
         child: Icon(
           isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-          color: isMuted ? Colors.red : Colors.white,
+          color: iconColor,
           size: 28,
         ),
       ),
@@ -714,6 +710,9 @@ class _EndButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final bgColor = isDark ? Colors.red.shade400 : Colors.red;
+
     return GestureDetector(
       onTap: onEnd,
       child: Container(
@@ -721,15 +720,11 @@ class _EndButton extends StatelessWidget {
         height: 64,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.red.withOpacity(0.15),
-          border: Border.all(
-            color: Colors.red.withOpacity(0.5),
-            width: 2,
-          ),
+          color: bgColor,
         ),
         child: const Icon(
           Icons.call_end_rounded,
-          color: Colors.red,
+          color: Colors.white,
           size: 28,
         ),
       ),
@@ -902,19 +897,38 @@ class _TranscriptButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasError = voiceState.errorMessage?.isNotEmpty ?? false;
+    final iconColor = hasError
+        ? Colors.redAccent
+        : _hasContent
+        ? context.primaryTextColor
+        : context.tertiaryTextColor;
+    final activeBg = context.isDarkMode
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    final inactiveBg = context.isDarkMode
+        ? Colors.white.withValues(alpha: 0.04)
+        : Colors.black.withValues(alpha: 0.04);
+    final bgColor = hasError
+        ? Colors.redAccent.withValues(alpha: 0.12)
+        : _hasContent
+        ? activeBg
+        : inactiveBg;
 
     return GestureDetector(
       onTap: _hasContent ? () => _showTranscriptSheet(context) : null,
       child: Padding(
         padding: const EdgeInsets.all(8),
-        child: Icon(
-          hasError ? Icons.error_outline : Icons.chat_bubble_outline,
-          color: hasError
-              ? Colors.redAccent
-              : _hasContent
-              ? Colors.white
-              : Colors.white38,
-          size: 24,
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: bgColor,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            hasError ? Icons.error_rounded : Icons.subtitles_rounded,
+            color: iconColor,
+            size: 20,
+          ),
         ),
       ),
     );
