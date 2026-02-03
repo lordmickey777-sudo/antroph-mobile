@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/core/onboarding/onboarding_storage_service.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
 class SplashPage extends ConsumerStatefulWidget {
   const SplashPage({super.key});
@@ -58,34 +59,38 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Centered logo
-          Center(
-            child: Platform.environment.containsKey('FLUTTER_TEST')
-                ? const SizedBox(width: 180, height: 180)
-                : Image.asset(
-                    'assets/images/logo.png',
-                    width: 180,
-                    fit: BoxFit.contain,
+    // Always use dark theme for splash screen regardless of app theme
+    return Theme(
+      data: AppTheme.darkTheme,
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // Centered logo
+            Center(
+              child: Platform.environment.containsKey('FLUTTER_TEST')
+                  ? const SizedBox(width: 180, height: 180)
+                  : Image.asset(
+                      'assets/images/logo.png',
+                      width: 180,
+                      fit: BoxFit.contain,
+                    ),
+            ),
+            // Version label at bottom center
+            SafeArea(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: const TypographyText(
+                    'Aura 1.0',
+                    variant: TypographyVariant.body2,
+                    color: Colors.white70,
                   ),
-          ),
-          // Version label at bottom center
-          SafeArea(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: const TypographyText(
-                  'Aura 1.0',
-                  variant: TypographyVariant.body2,
-                  color: Colors.white70,
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

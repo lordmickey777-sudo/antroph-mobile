@@ -207,7 +207,7 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
         title: TypographyText(
           widget.storyTitle ?? 'Voice chat',
           variant: TypographyVariant.h4,
-          color: Colors.white,
+          color: context.primaryTextColor,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           softWrap: false,
@@ -680,6 +680,8 @@ class _MuteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final baseColor = isDark ? Colors.white : Colors.black;
     return GestureDetector(
       onTap: onToggle,
       child: Container(
@@ -689,17 +691,17 @@ class _MuteButton extends StatelessWidget {
           shape: BoxShape.circle,
           color: isMuted
               ? Colors.red.withOpacity(0.15)
-              : Colors.white.withOpacity(0.1),
+              : baseColor.withOpacity(isDark ? 0.1 : 0.08),
           border: Border.all(
             color: isMuted
                 ? Colors.red.withOpacity(0.5)
-                : Colors.white.withOpacity(0.2),
+                : baseColor.withOpacity(isDark ? 0.2 : 0.18),
             width: 2,
           ),
         ),
         child: Icon(
           isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-          color: isMuted ? Colors.red : Colors.white,
+          color: isMuted ? Colors.red : (isDark ? Colors.white : Colors.black87),
           size: 28,
         ),
       ),
@@ -902,15 +904,8 @@ class _TranscriptButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasError = voiceState.errorMessage?.isNotEmpty ?? false;
-    final isDark = context.isDarkMode;
-    final baseBg = isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.06);
-    final idleBg = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04);
-    final baseBorder =
-        isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.2);
-    final idleBorder =
-        isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1);
-    final iconBase = isDark ? Colors.white : Colors.black87;
-    final iconIdle = isDark ? Colors.white38 : Colors.black38;
+    final iconBase = context.primaryTextColor;
+    final iconIdle = context.tertiaryTextColor;
 
     return GestureDetector(
       onTap: _hasContent ? () => _showTranscriptSheet(context) : null,
@@ -921,8 +916,8 @@ class _TranscriptButton extends StatelessWidget {
           color: hasError
               ? Colors.redAccent
               : _hasContent
-              ? Colors.white
-              : Colors.white38,
+              ? iconBase
+              : iconIdle,
           size: 24,
         ),
       ),

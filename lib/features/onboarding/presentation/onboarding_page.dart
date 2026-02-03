@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:antroph_mobile/core/onboarding/onboarding_storage_service.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
@@ -47,8 +48,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
   @override
   Widget build(BuildContext context) {
     final horizontalPadding = AppPadding.form.of(context);
-    return Scaffold(
-      body: SafeArea(
+    // Always use dark theme for onboarding screens regardless of app theme
+    return Theme(
+      data: AppTheme.darkTheme,
+      child: Scaffold(
+        body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: ContentWidth.form),
@@ -184,6 +188,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         ),
       ),
       ),
+    ),
     );
   }
 
