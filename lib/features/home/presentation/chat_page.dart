@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/navigation/app_route_observer.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
@@ -195,45 +196,54 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     final userProfile = ref.watch(profileControllerProvider).value;
     final userName = userProfile?.displayName ?? userProfile?.username;
     final headline = _chatHeadline(chatState, voiceState);
+    final isDark = context.isDarkMode;
+    final overlayStyle = SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+    );
 
-    return Scaffold(
-      backgroundColor: context.isDarkMode ? _chatBgDark : _chatBgLight,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        toolbarHeight: 76,
-        automaticallyImplyLeading: false,
-        titleSpacing: 16,
-        title: TypographyText(
-          widget.storyTitle ?? 'Voice chat',
-          variant: TypographyVariant.h4,
-          color: context.primaryTextColor,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          softWrap: false,
-        ),
-        actions: [
-          _TranscriptButton(
-            voiceState: voiceState,
-            headline: headline,
-            userName: userName,
-            onStop: () {
-              if (voiceState.isRecording) {
-                voiceController.stopRecordingAndSend();
-              } else {
-                voiceController.stopPlayback();
-              }
-            },
-            onCancel: () {
-              voiceController.cancelRecording();
-              voiceController.clearError();
-            },
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlayStyle,
+      child: Scaffold(
+        backgroundColor: isDark ? _chatBgDark : _chatBgLight,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          toolbarHeight: 76,
+          automaticallyImplyLeading: false,
+          titleSpacing: 16,
+          title: TypographyText(
+            widget.storyTitle ?? 'Voice chat',
+            variant: TypographyVariant.h4,
+            color: context.primaryTextColor,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
           ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: Container(
-        child: SafeArea(child: ChatScreen(isStoryMode: widget.isStoryMode)),
+          actions: [
+            _TranscriptButton(
+              voiceState: voiceState,
+              headline: headline,
+              userName: userName,
+              onStop: () {
+                if (voiceState.isRecording) {
+                  voiceController.stopRecordingAndSend();
+                } else {
+                  voiceController.stopPlayback();
+                }
+              },
+              onCancel: () {
+                voiceController.cancelRecording();
+                voiceController.clearError();
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
+        body: Container(
+          child: SafeArea(child: ChatScreen(isStoryMode: widget.isStoryMode)),
+        ),
       ),
     );
   }
@@ -562,22 +572,20 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06);
-    final borderColor =
-        isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08);
-    final labelColor = context.primaryTextColor;
+    final isDark = context.isDarkMode;
+    final bgColor = isDark ? const Color(0xFF1E2631) : const Color(0xFFE6EBF1);
+    final labelColor = isDark ? Colors.white : Colors.black87;
+    final iconColor = labelColor;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: borderColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: _accent, size: 14),
+          Icon(icon, color: iconColor, size: 14),
           const SizedBox(width: 6),
           Text(
             label,

@@ -498,9 +498,10 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   }
 
   Widget _buildPersonalitySlider() {
-    final theme = Theme.of(context);
-    final activeColor = theme.colorScheme.primary;
-    final inactiveColor = context.isDarkMode ? Colors.white24 : Colors.black12;
+    final isDark = context.isDarkMode;
+    final activeColor = isDark ? Colors.white : Colors.black87;
+    final inactiveColor = isDark ? Colors.white24 : Colors.black12;
+    final overlayColor = activeColor.withValues(alpha: isDark ? 0.14 : 0.08);
     final maxIndex = _personalityTypeKeys.length - 1;
     final boundedMaxIndex = maxIndex >= 0 ? maxIndex : 0;
     final currentIndex = _personalitySliderValue.round().clamp(
@@ -534,6 +535,7 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
             thumbColor: activeColor,
             activeTrackColor: activeColor,
             inactiveTrackColor: inactiveColor,
+            overlayColor: overlayColor,
           ),
           child: Slider(
             value: _personalitySliderValue,
@@ -557,6 +559,11 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   Widget _buildParentalToggle() {
     final primaryText = context.primaryTextColor;
     final secondaryText = context.secondaryTextColor;
+    final isDark = context.isDarkMode;
+    final activeThumb = isDark ? Colors.white : Colors.black87;
+    final activeTrack = isDark ? Colors.white38 : Colors.black26;
+    final inactiveThumb = isDark ? Colors.white30 : Colors.black26;
+    final inactiveTrack = isDark ? Colors.white12 : Colors.black12;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
@@ -586,7 +593,10 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
           ),
           Switch.adaptive(
             value: _parentalEnabled,
-            activeColor: Colors.greenAccent,
+            activeColor: activeThumb,
+            activeTrackColor: activeTrack,
+            inactiveThumbColor: inactiveThumb,
+            inactiveTrackColor: inactiveTrack,
             onChanged: (value) => setState(() => _parentalEnabled = value),
           ),
         ],
@@ -597,6 +607,11 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   Widget _buildAutoListenToggle() {
     final primaryText = context.primaryTextColor;
     final secondaryText = context.secondaryTextColor;
+    final isDark = context.isDarkMode;
+    final activeThumb = isDark ? Colors.white : Colors.black87;
+    final activeTrack = isDark ? Colors.white38 : Colors.black26;
+    final inactiveThumb = isDark ? Colors.white30 : Colors.black26;
+    final inactiveTrack = isDark ? Colors.white12 : Colors.black12;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
@@ -626,7 +641,10 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
           ),
           Switch.adaptive(
             value: _autoListenAfterResponse,
-            activeColor: Colors.greenAccent,
+            activeColor: activeThumb,
+            activeTrackColor: activeTrack,
+            inactiveThumbColor: inactiveThumb,
+            inactiveTrackColor: inactiveTrack,
             onChanged: (value) =>
                 setState(() => _autoListenAfterResponse = value),
           ),
@@ -636,9 +654,10 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   }
 
   Widget _buildSlider() {
-    final theme = Theme.of(context);
-    final activeColor = theme.colorScheme.primary;
-    final inactiveColor = context.isDarkMode ? Colors.white24 : Colors.black12;
+    final isDark = context.isDarkMode;
+    final activeColor = isDark ? Colors.white : Colors.black87;
+    final inactiveColor = isDark ? Colors.white24 : Colors.black12;
+    final overlayColor = activeColor.withValues(alpha: isDark ? 0.14 : 0.08);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -659,6 +678,7 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
             thumbColor: activeColor,
             activeTrackColor: activeColor,
             inactiveTrackColor: inactiveColor,
+            overlayColor: overlayColor,
           ),
           child: Slider(
             value: _maxAgeRating,
