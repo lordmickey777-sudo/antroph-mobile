@@ -154,6 +154,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Timer? _silenceTimer;
   Timer? _autoListenTimer;
   Timer? _maxRecordingTimer;
+  Timer? _playbackIdleTimer;
+  DateTime? _playbackExpectedEndAt;
   DateTime? _lastSpeechAt;
   DateTime? _lastMicLogAt;
   bool _hasSpeech = false;
@@ -214,6 +216,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _cancelSilenceTimer();
       _cancelMaxRecordingTimer();
       _cancelAutoListenTimer();
+      _cancelPlaybackIdleTimer();
       _stopAiAudioLevelTimer();
       await _stopRecorder();
       await _teardownSocket();
@@ -1191,6 +1194,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       final bytes = base64Decode(normalized);
       if (bytes.isEmpty) return;
       _log.t('Decoded audio delta ${bytes.length} bytes');
+      _schedulePlaybackIdleStop(bytes.length);
 
       _queueAiAudioLevel(bytes);
 
@@ -1229,6 +1233,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     try {
       if (bytes.isEmpty) return;
       _log.t('Received binary audio ${bytes.length} bytes');
+      _schedulePlaybackIdleStop(bytes.length);
 
       _queueAiAudioLevel(bytes);
 
@@ -1262,6 +1267,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _handlePlaybackComplete() {
     unawaited(_player.stop());
+    _cancelPlaybackIdleTimer();
     if (!ref.mounted) return;
     _disableAudio();
     _stopAiAudioLevelTimer();
@@ -1298,7 +1304,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     }
 
     // Brief delay before auto-starting to feel natural
-    const autoListenDelay = Duration(milliseconds: 800);
+    final autoListenDelay = state.isStoryMode
+        ? const Duration(milliseconds: 150)
+        : const Duration(milliseconds: 800);
     _autoListenTimer = Timer(autoListenDelay, () {
       if (!ref.mounted) return;
       if (state.isMuted) return; // Check again after delay
@@ -1318,6 +1326,32 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   void _cancelAutoListenTimer() {
     _autoListenTimer?.cancel();
     _autoListenTimer = null;
+  }
+
+  void _schedulePlaybackIdleStop(int byteLength) {
+    final bytesPerSecond = _sampleRate * 2; // pcm16 mono
+    final chunkMs = (byteLength / bytesPerSecond) * 1000.0;
+    final now = DateTime.now();
+    final expected = _playbackExpectedEndAt;
+    final baseTime = (expected == null || expected.isBefore(now)) ? now : expected;
+    final newExpected = baseTime.add(Duration(milliseconds: chunkMs.round()));
+    _cancelPlaybackIdleTimer(keepExpected: true);
+    _playbackExpectedEndAt = newExpected;
+    final cushionMs = state.isStoryMode ? 200 : 300;
+    final delay = newExpected.difference(now) + Duration(milliseconds: cushionMs);
+    if (delay.isNegative) {
+      _handlePlaybackComplete();
+      return;
+    }
+    _playbackIdleTimer = Timer(delay, _handlePlaybackComplete);
+  }
+
+  void _cancelPlaybackIdleTimer({bool keepExpected = false}) {
+    _playbackIdleTimer?.cancel();
+    _playbackIdleTimer = null;
+    if (!keepExpected) {
+      _playbackExpectedEndAt = null;
+    }
   }
 
   List<String> _extractAudioStrings(Map<String, dynamic> payload) {
@@ -1460,6 +1494,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   /// Cancel current recording and tear down the current session.
   Future<void> cancelRecording() async {
     _cancelAutoListenTimer();
+    _cancelPlaybackIdleTimer();
     _disableAudio();
     _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
@@ -1489,6 +1524,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   /// Stop audio playback
   Future<void> stopPlayback() async {
     _cancelAutoListenTimer();
+    _cancelPlaybackIdleTimer();
     _disableAudio();
     _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
@@ -1685,6 +1721,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _disableAudio() {
     _audioEnabled = false;
+    _cancelPlaybackIdleTimer();
     unawaited(_player.stop());
   }
 }
