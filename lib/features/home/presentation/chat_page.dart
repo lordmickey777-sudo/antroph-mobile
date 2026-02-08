@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/navigation/app_route_observer.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
@@ -60,6 +61,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     // Save controller reference for safe disposal
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _voiceController = ref.read(voiceChatControllerProvider.notifier);
+      // Auto-start listening when entering the page
+      _autoStartListening();
     });
     // Start story session if in story mode
     if (widget.isStoryMode) {
@@ -78,6 +81,25 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
       voiceController.resumeStorySession(widget.storySessionId!);
     } else if (widget.storyId != null) {
       voiceController.startStorySession(widget.storyId!);
+    }
+  }
+
+  /// Auto-start listening when entering chat page
+  Future<void> _autoStartListening() async {
+    // Small delay to let the page settle
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted) return;
+
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    final voiceState = ref.read(voiceChatControllerProvider);
+
+    // Story mode auto-starts via _scheduleAutoListen after AI intro
+    if (widget.isStoryMode) return;
+
+    // Regular mode: start recording immediately
+    if (!voiceState.isBusy && !voiceState.isMuted) {
+      voiceController.startRecording();
     }
   }
 
@@ -168,42 +190,60 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final chatBg = isDark ? _chatBgDark : _chatBgLight;
+    final voiceState = ref.watch(voiceChatControllerProvider);
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    final chatState = widget.isStoryMode ? null : ref.watch(chatControllerProvider);
+    final userProfile = ref.watch(profileControllerProvider).value;
+    final userName = userProfile?.displayName ?? userProfile?.username;
+    final headline = _chatHeadline(chatState, voiceState);
+    final isDark = context.isDarkMode;
+    final overlayStyle = SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+    );
 
-    return Scaffold(
-      backgroundColor: chatBg,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        toolbarHeight: 76,
-        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black87),
-        titleSpacing: 0,
-        title: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TypographyText(
-                      widget.storyTitle ?? 'Voice chat',
-                      variant: TypographyVariant.h4,
-                      color: context.primaryTextColor,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: false,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlayStyle,
+      child: Scaffold(
+        backgroundColor: isDark ? _chatBgDark : _chatBgLight,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          toolbarHeight: 76,
+          automaticallyImplyLeading: false,
+          titleSpacing: 16,
+          title: TypographyText(
+            widget.storyTitle ?? 'Voice chat',
+            variant: TypographyVariant.h4,
+            color: context.primaryTextColor,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
           ),
+          actions: [
+            _TranscriptButton(
+              voiceState: voiceState,
+              headline: headline,
+              userName: userName,
+              onStop: () {
+                if (voiceState.isRecording) {
+                  voiceController.stopRecordingAndSend();
+                } else {
+                  voiceController.stopPlayback();
+                }
+              },
+              onCancel: () {
+                voiceController.cancelRecording();
+                voiceController.clearError();
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
-      ),
-      body: Container(
-        child: SafeArea(child: ChatScreen(isStoryMode: widget.isStoryMode)),
+        body: Container(
+          child: SafeArea(child: ChatScreen(isStoryMode: widget.isStoryMode)),
+        ),
       ),
     );
   }
@@ -268,9 +308,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         : ref.read(chatControllerProvider.notifier);
     final voiceState = ref.watch(voiceChatControllerProvider);
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
-    final headline = _chatHeadline(chatState, voiceState);
-    final userProfile = ref.watch(profileControllerProvider).value;
-    final userName = userProfile?.displayName ?? userProfile?.username;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -313,30 +350,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _TranscriptButton(
-                      voiceState: voiceState,
-                      headline: headline,
-                      userName: userName,
-                      onStop: () {
-                        if (voiceState.isRecording) {
-                          voiceController.stopRecordingAndSend();
-                        } else {
-                          voiceController.stopPlayback();
-                        }
-                      },
-                      onCancel: () {
-                        voiceController.cancelRecording();
-                        voiceController.clearError();
-                      },
+                    _MuteButton(
+                      isMuted: voiceState.isMuted,
+                      onToggle: voiceController.toggleMute,
                     ),
                     const SizedBox(width: 24),
-                    _HeroMicButton(
-                      voiceState: voiceState,
-                      onStart: voiceController.startRecording,
-                      onStop: voiceController.stopRecordingAndSend,
-                      onStopPlayback: voiceController.stopPlayback,
+                    _EndButton(
+                      onEnd: () {
+                        if (widget.isStoryMode) {
+                          voiceController.endStorySession();
+                        } else {
+                          voiceController.cancelRecording();
+                        }
+                        Navigator.of(context).pop();
+                      },
                     ),
-                    const SizedBox(width: 24 + 48),
                   ],
                 ),
               ),
@@ -427,6 +455,11 @@ class _Header extends StatelessWidget {
   }
 
   _StatusData _voiceStatus(VoiceChatState voice) {
+    // Show muted status when muted
+    if (voice.isMuted) {
+      return const _StatusData('Muted', Icons.mic_off);
+    }
+
     // Story mode status
     if (voice.isStoryMode) {
       switch (voice.phase) {
@@ -434,7 +467,7 @@ class _Header extends StatelessWidget {
         case RealtimeVoicePhase.waitingForReady:
           return const _StatusData('Connecting', Icons.wifi);
         case RealtimeVoicePhase.ready:
-          return const _StatusData('Start Talking', Icons.auto_stories);
+          return const _StatusData('Listening', Icons.mic);
         case RealtimeVoicePhase.recording:
           return const _StatusData('Listening', Icons.mic);
         case RealtimeVoicePhase.processing:
@@ -442,7 +475,7 @@ class _Header extends StatelessWidget {
         case RealtimeVoicePhase.playing:
           return const _StatusData('Narrating', Icons.graphic_eq);
         case RealtimeVoicePhase.paused:
-          return const _StatusData('v', Icons.pause_circle);
+          return const _StatusData('Paused', Icons.pause_circle);
         case RealtimeVoicePhase.error:
           return const _StatusData('Error', Icons.error_outline);
         case RealtimeVoicePhase.closed:
@@ -539,22 +572,20 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06);
-    final borderColor =
-        isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08);
-    final labelColor = context.primaryTextColor;
+    final isDark = context.isDarkMode;
+    final bgColor = isDark ? const Color(0xFF1E2631) : const Color(0xFFE6EBF1);
+    final labelColor = isDark ? Colors.white : Colors.black87;
+    final iconColor = labelColor;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: borderColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: _accent, size: 14),
+          Icon(icon, color: iconColor, size: 14),
           const SizedBox(width: 6),
           Text(
             label,
@@ -640,6 +671,69 @@ class _HeroMicButton extends StatelessWidget {
             color: isDark ? Colors.white : Colors.black87,
             size: 30,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MuteButton extends StatelessWidget {
+  const _MuteButton({
+    required this.isMuted,
+    required this.onToggle,
+  });
+
+  final bool isMuted;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final bgColor = isMuted ? Colors.red : (isDark ? Colors.white : Colors.black87);
+    final iconColor = isMuted ? Colors.white : (isDark ? Colors.black : Colors.white);
+
+    return GestureDetector(
+      onTap: onToggle,
+      child: Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: bgColor,
+        ),
+        child: Icon(
+          isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+          color: iconColor,
+          size: 28,
+        ),
+      ),
+    );
+  }
+}
+
+class _EndButton extends StatelessWidget {
+  const _EndButton({required this.onEnd});
+
+  final VoidCallback onEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final bgColor = isDark ? Colors.red.shade400 : Colors.red;
+
+    return GestureDetector(
+      onTap: onEnd,
+      child: Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: bgColor,
+        ),
+        child: const Icon(
+          Icons.call_end_rounded,
+          color: Colors.white,
+          size: 28,
         ),
       ),
     );
@@ -811,40 +905,38 @@ class _TranscriptButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasError = voiceState.errorMessage?.isNotEmpty ?? false;
-    final isDark = context.isDarkMode;
-    final baseBg = isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.06);
-    final idleBg = isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.04);
-    final baseBorder =
-        isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.2);
-    final idleBorder =
-        isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1);
-    final iconBase = isDark ? Colors.white : Colors.black87;
-    final iconIdle = isDark ? Colors.white38 : Colors.black38;
+    final iconColor = hasError
+        ? Colors.redAccent
+        : _hasContent
+        ? context.primaryTextColor
+        : context.tertiaryTextColor;
+    final activeBg = context.isDarkMode
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    final inactiveBg = context.isDarkMode
+        ? Colors.white.withValues(alpha: 0.04)
+        : Colors.black.withValues(alpha: 0.04);
+    final bgColor = hasError
+        ? Colors.redAccent.withValues(alpha: 0.12)
+        : _hasContent
+        ? activeBg
+        : inactiveBg;
 
     return GestureDetector(
       onTap: _hasContent ? () => _showTranscriptSheet(context) : null,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: _hasContent ? baseBg : idleBg,
-          border: Border.all(
-            color: hasError
-                ? Colors.redAccent.withOpacity(0.6)
-                : _hasContent
-                ? baseBorder
-                : idleBorder,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: bgColor,
+            shape: BoxShape.circle,
           ),
-        ),
-        child: Icon(
-          hasError ? Icons.error_outline : Icons.chat_bubble_outline,
-          color: hasError
-              ? Colors.redAccent
-              : _hasContent
-              ? iconBase
-              : iconIdle,
-          size: 22,
+          child: Icon(
+            hasError ? Icons.error_rounded : Icons.subtitles_rounded,
+            color: iconColor,
+            size: 20,
+          ),
         ),
       ),
     );

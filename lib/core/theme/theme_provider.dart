@@ -47,6 +47,25 @@ class AppTheme {
   static const darkSurface = Color(0xFF1B1D1F);
   static const lightBg = Color(0xFFF5F5F7);
   static const lightSurface = Color(0xFFFFFFFF);
+  static final _darkButtonScheme = ColorScheme.fromSeed(
+    seedColor: Colors.deepPurple,
+    brightness: Brightness.dark,
+  );
+  static final _darkElevatedStyle = ElevatedButton.styleFrom(
+    backgroundColor: _darkButtonScheme.primary,
+    foregroundColor: _darkButtonScheme.onPrimary,
+    disabledBackgroundColor: _darkButtonScheme.primary.withValues(alpha: 0.4),
+    disabledForegroundColor: _darkButtonScheme.onPrimary.withValues(alpha: 0.6),
+  );
+  static final _darkTextStyle = TextButton.styleFrom(
+    foregroundColor: _darkButtonScheme.primary,
+    disabledForegroundColor: _darkButtonScheme.primary.withValues(alpha: 0.4),
+  );
+  static final _darkOutlinedStyle = OutlinedButton.styleFrom(
+    foregroundColor: _darkButtonScheme.primary,
+    disabledForegroundColor: _darkButtonScheme.primary.withValues(alpha: 0.4),
+    side: BorderSide(color: _darkButtonScheme.primary),
+  );
 
   static ThemeData get darkTheme => ThemeData(
         brightness: Brightness.dark,
@@ -81,6 +100,9 @@ class AppTheme {
         ),
         fontFamily: 'Aeonik',
         scaffoldBackgroundColor: lightBg,
+        elevatedButtonTheme: ElevatedButtonThemeData(style: _darkElevatedStyle),
+        textButtonTheme: TextButtonThemeData(style: _darkTextStyle),
+        outlinedButtonTheme: OutlinedButtonThemeData(style: _darkOutlinedStyle),
         splashFactory: NoSplash.splashFactory,
         highlightColor: Colors.transparent,
         splashColor: Colors.transparent,

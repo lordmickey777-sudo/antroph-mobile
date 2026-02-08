@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 
-enum HomeTab { story, profile }
+enum HomeTab { story, hardware, profile }
 
 class BottomNav extends StatelessWidget {
   const BottomNav({super.key, required this.current, required this.onChanged});
@@ -17,7 +17,7 @@ class BottomNav extends StatelessWidget {
       builder: (context, constraints) {
         // Responsive nav sizing for phone/tablet/iPad
         final maxWidth = AppSizing.navBarMaxWidth.fromConstraints(constraints);
-        final double navWidth = (constraints.maxWidth * 0.5).clamp(0, maxWidth);
+        final double navWidth = (constraints.maxWidth * 0.65).clamp(0, maxWidth);
         final navHeight = AppSizing.navBarHeight.fromConstraints(constraints);
         return Center(
           child: ClipRRect(
@@ -57,12 +57,21 @@ class BottomNav extends StatelessWidget {
                       context,
                       tab: HomeTab.story,
                       icon: Icons.auto_stories_rounded,
+                      activeIcon: Icons.auto_stories_rounded,
+                      itemHeight: navHeight - 16,
+                    ),
+                    _navItem(
+                      context,
+                      tab: HomeTab.hardware,
+                      icon: Icons.memory_outlined,
+                      activeIcon: Icons.memory_rounded,
                       itemHeight: navHeight - 16,
                     ),
                     _navItem(
                       context,
                       tab: HomeTab.profile,
-                      icon: Icons.person_rounded,
+                      icon: Icons.person_outline_rounded,
+                      activeIcon: Icons.person_rounded,
                       itemHeight: navHeight - 16,
                     ),
                   ],
@@ -79,6 +88,7 @@ class BottomNav extends StatelessWidget {
     BuildContext context, {
     required HomeTab tab,
     required IconData icon,
+    required IconData activeIcon,
     required double itemHeight,
   }) {
     final bool selected = current == tab;
@@ -120,7 +130,7 @@ class BottomNav extends StatelessWidget {
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
                   child: Icon(
-                    icon,
+                    selected ? activeIcon : icon,
                     key: ValueKey('$tab-$selected'),
                     size: 26,
                     color: selected ? iconColor : unselectedIconColor,

@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/core/auth/repository/auth_repository.dart';
@@ -14,11 +15,7 @@ import 'package:antroph_mobile/features/auth/widgets/auth_input.dart';
 /// Content widget for the auth guard sheet.
 /// Shows login or signup forms.
 class AuthSheetContent extends ConsumerStatefulWidget {
-  const AuthSheetContent({
-    super.key,
-    this.actionDescription,
-    required this.scrollController,
-  });
+  const AuthSheetContent({super.key, this.actionDescription, required this.scrollController});
 
   final String? actionDescription;
   final ScrollController scrollController;
@@ -103,10 +100,7 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
       return;
     }
     final controller = ref.read(authControllerProvider.notifier);
-    await controller.login(
-      email: _loginEmailCtrl.text.trim(),
-      password: _loginPasswordCtrl.text,
-    );
+    await controller.login(email: _loginEmailCtrl.text.trim(), password: _loginPasswordCtrl.text);
   }
 
   Future<void> _submitSignup() async {
@@ -130,9 +124,7 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
     await controller.register(
       email: _signupEmailCtrl.text.trim(),
       password: _signupPasswordCtrl.text,
-      displayName: _signupNameCtrl.text.trim().isEmpty
-          ? null
-          : _signupNameCtrl.text.trim(),
+      displayName: _signupNameCtrl.text.trim().isEmpty ? null : _signupNameCtrl.text.trim(),
     );
   }
 
@@ -160,7 +152,9 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black87;
     final secondaryTextColor = isDark ? Colors.white54 : Colors.black54;
-    final iconBgColor = isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08);
+    final iconBgColor = isDark
+        ? Colors.white.withValues(alpha: 0.1)
+        : Colors.black.withValues(alpha: 0.08);
 
     return Material(
       color: Colors.transparent,
@@ -168,114 +162,103 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
         controller: widget.scrollController,
         padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header with close button
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TypographyText(
-                      _showLogin ? 'Login to continue' : 'Create account',
-                      variant: TypographyVariant.h3,
-                      color: textColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    if (widget.actionDescription != null) ...[
-                      const SizedBox(height: 4),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with close button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       TypographyText(
-                        widget.actionDescription!,
-                        variant: TypographyVariant.body2,
-                        color: secondaryTextColor,
+                        _showLogin ? 'Login to continue' : 'Create account',
+                        variant: TypographyVariant.h3,
+                        color: textColor,
+                        fontWeight: FontWeight.w600,
                       ),
+                      if (widget.actionDescription != null) ...[
+                        const SizedBox(height: 4),
+                        TypographyText(
+                          widget.actionDescription!,
+                          variant: TypographyVariant.body2,
+                          color: secondaryTextColor,
+                        ),
+                      ],
                     ],
-                  ],
-                ),
-              ),
-              GestureDetector(
-                onTap: () => Navigator.of(context).pop(AuthGuardResult.dismissed),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: iconBgColor,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    CupertinoIcons.xmark,
-                    color: textColor,
-                    size: 18,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 28),
-
-          // Form content
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: _showLogin
-                ? _LoginForm(
-                    key: const ValueKey('login'),
-                    formKey: _loginFormKey,
-                    emailCtrl: _loginEmailCtrl,
-                    passwordCtrl: _loginPasswordCtrl,
-                    obscure: _loginObscure,
-                    onToggleObscure: () =>
-                        setState(() => _loginObscure = !_loginObscure),
-                    onSubmit: _submitLogin,
-                    loading: loading,
-                    validateEmail: _validateEmail,
-                    validatePassword: _validatePassword,
-                  )
-                : _SignupForm(
-                    key: const ValueKey('signup'),
-                    formKey: _signupFormKey,
-                    nameCtrl: _signupNameCtrl,
-                    emailCtrl: _signupEmailCtrl,
-                    passwordCtrl: _signupPasswordCtrl,
-                    obscure: _signupObscure,
-                    onToggleObscure: () =>
-                        setState(() => _signupObscure = !_signupObscure),
-                    onSubmit: _submitSignup,
-                    loading: loading,
-                    validateEmail: _validateSignupEmail,
-                    validatePassword: _validateSignupPassword,
-                    hasMinLength: _hasMinLength,
-                    hasUppercase: _hasUppercase,
-                    hasLowercase: _hasLowercase,
-                    hasDigit: _hasDigit,
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pop(AuthGuardResult.dismissed),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: iconBgColor, shape: BoxShape.circle),
+                    child: Icon(CupertinoIcons.xmark, color: textColor, size: 18),
                   ),
-          ),
-          const SizedBox(height: 20),
+                ),
+              ],
+            ),
+            const SizedBox(height: 28),
 
-          // Toggle login/signup
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              TypographyText(
-                _showLogin
-                    ? 'Create New Account? '
-                    : 'Already Have An Account? ',
-                variant: TypographyVariant.body2,
-                color: secondaryTextColor,
-              ),
-              GestureDetector(
-                onTap: () => setState(() => _showLogin = !_showLogin),
-                child: TypographyText(
-                  _showLogin ? 'Sign up' : 'Sign In',
+            // Form content
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: _showLogin
+                  ? _LoginForm(
+                      key: const ValueKey('login'),
+                      formKey: _loginFormKey,
+                      emailCtrl: _loginEmailCtrl,
+                      passwordCtrl: _loginPasswordCtrl,
+                      obscure: _loginObscure,
+                      onToggleObscure: () => setState(() => _loginObscure = !_loginObscure),
+                      onSubmit: _submitLogin,
+                      loading: loading,
+                      validateEmail: _validateEmail,
+                      validatePassword: _validatePassword,
+                    )
+                  : _SignupForm(
+                      key: const ValueKey('signup'),
+                      formKey: _signupFormKey,
+                      nameCtrl: _signupNameCtrl,
+                      emailCtrl: _signupEmailCtrl,
+                      passwordCtrl: _signupPasswordCtrl,
+                      obscure: _signupObscure,
+                      onToggleObscure: () => setState(() => _signupObscure = !_signupObscure),
+                      onSubmit: _submitSignup,
+                      loading: loading,
+                      validateEmail: _validateSignupEmail,
+                      validatePassword: _validateSignupPassword,
+                      hasMinLength: _hasMinLength,
+                      hasUppercase: _hasUppercase,
+                      hasLowercase: _hasLowercase,
+                      hasDigit: _hasDigit,
+                    ),
+            ),
+            const SizedBox(height: 20),
+
+            // Toggle login/signup
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TypographyText(
+                  _showLogin ? 'Create New Account? ' : 'Already Have An Account? ',
                   variant: TypographyVariant.body2,
-                  color: textColor,
-                  fontWeight: FontWeight.w600,
+                  color: secondaryTextColor,
                 ),
-              ),
-            ],
-          ),
-        ],
-      ),
+                GestureDetector(
+                  onTap: () => setState(() => _showLogin = !_showLogin),
+                  child: TypographyText(
+                    _showLogin ? 'Sign up' : 'Sign In',
+                    variant: TypographyVariant.body2,
+                    color: textColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -338,6 +321,23 @@ class _LoginForm extends StatelessWidget {
             onToggleObscure: onToggleObscure,
             validator: validatePassword,
           ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: GestureDetector(
+              onTap: () {
+                Navigator.of(context).pop();
+                GoRouter.of(context).goNamed('forgot-password');
+              },
+              child: TypographyText(
+                'Forgot Password? Reset here',
+                variant: TypographyVariant.body2,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white70
+                    : Colors.black54,
+              ),
+            ),
+          ),
           const SizedBox(height: 24),
           AuthButton(label: 'Login', onTap: onSubmit, loading: loading),
         ],
@@ -386,11 +386,7 @@ class _SignupForm extends StatelessWidget {
       key: formKey,
       child: Column(
         children: [
-          AppInput(
-            controller: nameCtrl,
-            hint: 'Full Name',
-            icon: Icons.person_outline,
-          ),
+          AppInput(controller: nameCtrl, hint: 'Full Name', icon: Icons.person_outline),
           const SizedBox(height: 16),
           AppInput(
             controller: emailCtrl,
@@ -458,9 +454,7 @@ class _PasswordChecklist extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  policy.value
-                      ? Icons.check_circle
-                      : Icons.radio_button_unchecked,
+                  policy.value ? Icons.check_circle : Icons.radio_button_unchecked,
                   size: 16,
                   color: policy.value ? Colors.greenAccent : uncheckedColor,
                 ),

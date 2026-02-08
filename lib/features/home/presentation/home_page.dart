@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/bottom_nav.dart';
+import 'package:antroph_mobile/features/hardware/presentation/hardware_page.dart';
 import 'package:antroph_mobile/features/profile/presentation/profile_page.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page.dart';
 
@@ -50,15 +51,12 @@ class _HomePageState extends State<HomePage> {
               onPageChanged: (index) {
                 // Sync the active tab when user swipes
                 setState(() {
-                  if (index == 0) {
-                    _tab = HomeTab.story;
-                  } else {
-                    _tab = HomeTab.profile;
-                  }
+                  _tab = HomeTab.values[index];
                 });
               },
               children: const [
                 StoryPage(),
+                HardwarePage(),
                 ProfilePage(),
               ],
             ),
@@ -76,7 +74,7 @@ class _HomePageState extends State<HomePage> {
                   current: _tab,
                   onChanged: (tab) async {
                     // Animate to the chosen tab with a smooth slide
-                    final targetPage = tab == HomeTab.story ? 0 : 1;
+                    final targetPage = tab.index;
                     if (_pageController.hasClients) {
                       _pageController.animateToPage(
                         targetPage,

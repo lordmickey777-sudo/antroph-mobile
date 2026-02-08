@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/app_dropdown.dart';
@@ -189,7 +190,7 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
           if (state.asData != null)
             IconButton(
               icon: controller.isResetting
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
@@ -221,9 +222,9 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TypographyText('Unable to load settings', color: Colors.white70),
+            TypographyText('Unable to load settings', color: context.secondaryTextColor),
             const SizedBox(height: 12),
-            TypographyText(message, color: Colors.white54),
+            TypographyText(message, color: context.tertiaryTextColor),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () => ref.refresh(customizationControllerProvider),
@@ -457,17 +458,18 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   }
 
   Future<void> _handleReset(CustomizationController controller) async {
+    final theme = Theme.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1F2223),
-        title: const Text(
+        backgroundColor: theme.colorScheme.surface,
+        title: Text(
           'Reset to defaults?',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: context.primaryTextColor),
         ),
-        content: const Text(
+        content: Text(
           'This will restore all AI settings to their default values.',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: context.secondaryTextColor),
         ),
         actions: [
           TextButton(
@@ -496,6 +498,10 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   }
 
   Widget _buildPersonalitySlider() {
+    final isDark = context.isDarkMode;
+    final activeColor = isDark ? Colors.white : Colors.black87;
+    final inactiveColor = isDark ? Colors.white24 : Colors.black12;
+    final overlayColor = activeColor.withValues(alpha: isDark ? 0.14 : 0.08);
     final maxIndex = _personalityTypeKeys.length - 1;
     final boundedMaxIndex = maxIndex >= 0 ? maxIndex : 0;
     final currentIndex = _personalitySliderValue.round().clamp(
@@ -513,12 +519,12 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
           children: [
             TypographyText(
               'Personality type',
-              color: Colors.white70,
+              color: context.secondaryTextColor,
               variant: TypographyVariant.body2,
             ),
             TypographyText(
               selectedLabel,
-              color: Colors.white,
+              color: context.primaryTextColor,
               variant: TypographyVariant.body2,
             ),
           ],
@@ -526,9 +532,10 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
         const SizedBox(height: 6),
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            thumbColor: Colors.white,
-            activeTrackColor: Colors.white,
-            inactiveTrackColor: Colors.white24,
+            thumbColor: activeColor,
+            activeTrackColor: activeColor,
+            inactiveTrackColor: inactiveColor,
+            overlayColor: overlayColor,
           ),
           child: Slider(
             value: _personalitySliderValue,
@@ -550,10 +557,17 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   }
 
   Widget _buildParentalToggle() {
+    final primaryText = context.primaryTextColor;
+    final secondaryText = context.secondaryTextColor;
+    final isDark = context.isDarkMode;
+    final activeThumb = isDark ? Colors.white : Colors.black87;
+    final activeTrack = isDark ? Colors.white38 : Colors.black26;
+    final inactiveThumb = isDark ? Colors.white30 : Colors.black26;
+    final inactiveTrack = isDark ? Colors.white12 : Colors.black12;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F2223),
+        color: context.cardBackground,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
@@ -562,16 +576,16 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 TypographyText(
                   'Parental controls',
-                  color: Colors.white,
+                  color: primaryText,
                   variant: TypographyVariant.body1,
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 TypographyText(
                   'Restrict topics and approval flows',
-                  color: Colors.white70,
+                  color: secondaryText,
                   variant: TypographyVariant.body2,
                 ),
               ],
@@ -579,7 +593,10 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
           ),
           Switch.adaptive(
             value: _parentalEnabled,
-            activeColor: Colors.greenAccent,
+            activeColor: activeThumb,
+            activeTrackColor: activeTrack,
+            inactiveThumbColor: inactiveThumb,
+            inactiveTrackColor: inactiveTrack,
             onChanged: (value) => setState(() => _parentalEnabled = value),
           ),
         ],
@@ -588,10 +605,17 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   }
 
   Widget _buildAutoListenToggle() {
+    final primaryText = context.primaryTextColor;
+    final secondaryText = context.secondaryTextColor;
+    final isDark = context.isDarkMode;
+    final activeThumb = isDark ? Colors.white : Colors.black87;
+    final activeTrack = isDark ? Colors.white38 : Colors.black26;
+    final inactiveThumb = isDark ? Colors.white30 : Colors.black26;
+    final inactiveTrack = isDark ? Colors.white12 : Colors.black12;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F2223),
+        color: context.cardBackground,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
@@ -600,16 +624,16 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 TypographyText(
                   'Continuous conversation',
-                  color: Colors.white,
+                  color: primaryText,
                   variant: TypographyVariant.body1,
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 TypographyText(
                   'Auto-listen after AI finishes speaking',
-                  color: Colors.white70,
+                  color: secondaryText,
                   variant: TypographyVariant.body2,
                 ),
               ],
@@ -617,7 +641,10 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
           ),
           Switch.adaptive(
             value: _autoListenAfterResponse,
-            activeColor: Colors.greenAccent,
+            activeColor: activeThumb,
+            activeTrackColor: activeTrack,
+            inactiveThumbColor: inactiveThumb,
+            inactiveTrackColor: inactiveTrack,
             onChanged: (value) =>
                 setState(() => _autoListenAfterResponse = value),
           ),
@@ -627,26 +654,31 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   }
 
   Widget _buildSlider() {
+    final isDark = context.isDarkMode;
+    final activeColor = isDark ? Colors.white : Colors.black87;
+    final inactiveColor = isDark ? Colors.white24 : Colors.black12;
+    final overlayColor = activeColor.withValues(alpha: isDark ? 0.14 : 0.08);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TypographyText(
           'Max age rating',
-          color: Colors.white70,
+          color: context.secondaryTextColor,
           variant: TypographyVariant.body2,
         ),
         const SizedBox(height: 6),
         TypographyText(
           '${_maxAgeRating.round()}+',
-          color: Colors.white,
+          color: context.primaryTextColor,
           variant: TypographyVariant.body1,
         ),
         const SizedBox(height: 6),
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            thumbColor: Colors.white,
-            activeTrackColor: Colors.white,
-            inactiveTrackColor: Colors.white24,
+            thumbColor: activeColor,
+            activeTrackColor: activeColor,
+            inactiveTrackColor: inactiveColor,
+            overlayColor: overlayColor,
           ),
           child: Slider(
             value: _maxAgeRating,
@@ -665,7 +697,7 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
     return TypographyText(
       title,
       variant: TypographyVariant.body1,
-      color: Colors.white,
+      color: context.primaryTextColor,
     );
   }
 
