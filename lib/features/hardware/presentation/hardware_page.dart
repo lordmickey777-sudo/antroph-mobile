@@ -1,66 +1,88 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
-class HardwarePage extends StatelessWidget {
+class HardwarePage extends StatefulWidget {
   const HardwarePage({super.key});
+
+  @override
+  State<HardwarePage> createState() => _HardwarePageState();
+}
+
+class _HardwarePageState extends State<HardwarePage> {
+  static const _kMiddlePage = 50; // large offset for infinite scroll
+  late final PageController _pageController;
+  double _currentPage = _kMiddlePage + 1.0;
+
+  static const _items = [
+    _CarouselItem('assets/images/hw1.png', 'Brio Penguin'),
+    _CarouselItem('assets/images/hw2.png', 'Aura Table top'),
+    _CarouselItem('assets/images/hw3.png', 'Brio Guinea pig'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(
+      viewportFraction: 0.72,
+      initialPage: _kMiddlePage + 1, // start on middle real item
+    );
+    _pageController.addListener(() {
+      setState(() => _currentPage = _pageController.page ?? (_kMiddlePage + 1.0));
+    });
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
-    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Glowing icon container
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      scheme.primary.withValues(alpha: 0.25),
-                      scheme.primary.withValues(alpha: 0.08),
-                    ],
-                  ),
-                  border: Border.all(
-                    color: scheme.primary.withValues(alpha: 0.3),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: scheme.primary.withValues(alpha: 0.2),
-                      blurRadius: 32,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.memory_rounded,
-                  size: 44,
-                  color: scheme.primary,
-                ),
+      body: Column(
+        children: [
+          SizedBox(height: MediaQuery.of(context).padding.top + 40),
+          // 3D Carousel
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.50,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: _kMiddlePage * 2, // virtually infinite
+              clipBehavior: Clip.none,
+              itemBuilder: (context, index) {
+                final realIndex = index % _items.length;
+                final delta = index - _currentPage;
+                return _buildCarouselCard(delta, _items[realIndex], isDark);
+              },
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Title & subtitle with fade transition
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: Text(
+              _items[_currentPage.round() % _items.length].label,
+              key: ValueKey(_currentPage.round() % _items.length),
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: context.primaryTextColor,
+                letterSpacing: -0.5,
               ),
-              const SizedBox(height: 32),
-              Text(
-                'Hardware',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : Colors.black87,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Coming to your location soon',
+            ),
+          ),
+          const SizedBox(height: 12),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            child: Padding(
+              key: ValueKey(_currentPage.round() % _items.length),
+              padding: const EdgeInsets.symmetric(horizontal: 48.0),
+              child: Text(
+                'Our Robots are coming to your location soon',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 17,
@@ -71,20 +93,67 @@ class HardwarePage extends StatelessWidget {
                   height: 1.4,
                 ),
               ),
-              const SizedBox(height: 24),
-              // Subtle decorative divider
-              Container(
-                width: 40,
-                height: 3,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(2),
-                  color: scheme.primary.withValues(alpha: 0.4),
-                ),
+            ),
+          ),
+          const Spacer(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCarouselCard(double delta, _CarouselItem item, bool isDark) {
+    // Clamp delta so the max rotation is bounded
+    final clampedDelta = delta.clamp(-1.5, 1.5);
+
+    // Rotation angle: center = 0, sides rotate up to ~15 degrees
+    final rotationY = clampedDelta * (math.pi / 22);
+
+    // Scale: center = 1.05 (pop), sides shrink slightly
+    final scale = 1.05 - (clampedDelta.abs() * 0.12);
+
+    // Opacity: center = 1.0, sides slightly dimmed
+    final opacity = (1.0 - clampedDelta.abs() * 0.2).clamp(0.6, 1.0);
+
+    // Lateral translation for depth spacing
+    final translateX = clampedDelta * 14;
+
+    final transform = Matrix4.identity()
+      ..setEntry(3, 2, 0.001) // perspective
+      ..translate(translateX, 0.0, 0.0)
+      ..rotateY(-rotationY)
+      ..scale(scale);
+
+    return Transform(
+      transform: transform,
+      alignment: Alignment.center,
+      child: Opacity(
+        opacity: opacity,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            color: isDark ? const Color(0xFF1F2223) : Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
+                spreadRadius: -4,
               ),
             ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Image.asset(item.image, fit: BoxFit.cover),
           ),
         ),
       ),
     );
   }
+}
+
+class _CarouselItem {
+  const _CarouselItem(this.image, this.label);
+  final String image;
+  final String label;
 }

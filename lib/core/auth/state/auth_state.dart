@@ -81,11 +81,22 @@ class AuthController extends AsyncNotifier<AuthUser?> {
         tokenType: refreshedTokens.tokenType,
       );
       await _persistTokens(refreshedTokens);
-    } catch (_) {
-      _tokens = null;
-      ApiClient.I.clearAuthTokens();
-      await _clearTokens();
-      return null;
+    } catch (e) {
+      // Only clear tokens when the refresh token is definitively rejected by the server.
+      // Network errors (timeout, no connection) should preserve tokens so the
+      // 401 interceptor can retry later when connectivity is restored.
+      final isAuthFailure = e is DioException &&
+          e.response != null &&
+          (e.response!.statusCode == 401 ||
+              e.response!.statusCode == 403 ||
+              e.response!.statusCode == 422);
+      if (isAuthFailure) {
+        _tokens = null;
+        ApiClient.I.clearAuthTokens();
+        await _clearTokens();
+        return null;
+      }
+      // Transient error – keep existing tokens (already set above in ApiClient).
     }
 
     final email = await EmailStorageService.getLastEmail() ?? '';
@@ -110,13 +121,20 @@ class AuthController extends AsyncNotifier<AuthUser?> {
         await _persistTokens(newTokens);
         // Keep the current user; just refreshed tokens.
         return true;
-      } catch (_) {
-        // On refresh failure ensure tokens are cleared and auth state reset.
-        _tokens = null;
-        ApiClient.I.clearAuthTokens();
-        await _clearTokens();
-        // Expose unauth state (do not emit error from build).
-        state = const AsyncValue.data(null);
+      } catch (e) {
+        // Only clear tokens when the server definitively rejects the refresh token.
+        // Network errors should preserve tokens for future retry.
+        final isAuthFailure = e is DioException &&
+            e.response != null &&
+            (e.response!.statusCode == 401 ||
+                e.response!.statusCode == 403 ||
+                e.response!.statusCode == 422);
+        if (isAuthFailure) {
+          _tokens = null;
+          ApiClient.I.clearAuthTokens();
+          await _clearTokens();
+          state = const AsyncValue.data(null);
+        }
         return false;
       }
     });
@@ -130,13 +148,26 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   }) async {
     state = const AsyncValue.loading();
     try {
-      final user = await _repo.register(
+      await _repo.register(
         email: email,
         password: password,
         displayName: displayName,
         username: username,
       );
-      state = AsyncValue.data(user);
+      // Auto-login after registration to obtain auth tokens.
+      final tokensMap = await _repo.login(email: email, password: password);
+      _tokens = AuthTokens(
+        accessToken: tokensMap['access_token']!,
+        refreshToken: tokensMap['refresh_token']!,
+        tokenType: tokensMap['token_type']!,
+      );
+      ApiClient.I.setAuthTokens(
+        accessToken: _tokens!.accessToken,
+        refreshToken: _tokens!.refreshToken,
+        tokenType: _tokens!.tokenType,
+      );
+      await _persistTokens(_tokens!);
+      state = AsyncValue.data(AuthUser(id: 'self', email: email, emailVerificationRequired: false));
     } on DioException catch (e, st) {
       final apiError = ErrorFormatter.fromDio(e);
       state = AsyncValue.error(apiError.message, st);

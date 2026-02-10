@@ -4,27 +4,34 @@ import '../data/stories_repository.dart';
 import '../models/story_models.dart';
 import '../models/story_detail.dart';
 import '../../../core/network/error_formatter.dart';
+import '../../../core/auth/state/auth_state.dart';
 import '../data/stories_cache.dart';
 
 final storiesRepositoryProvider = Provider<StoriesRepository>((ref) {
   return StoriesRepository();
 });
 
+/// Stable boolean derived from auth state.
+/// Only changes on login/logout, not during loading transitions.
+final _isAuthenticatedProvider = Provider.autoDispose<bool>((ref) {
+  return ref.watch(authControllerProvider).asData?.value != null;
+});
+
 /// Hybrid provider: returns cached data immediately when available, then refreshes from network.
+/// Watches auth state so stories refresh automatically when user logs in/out
+/// (the API returns personalized data for authenticated users).
 final storiesHomeSectionsProvider = FutureProvider.autoDispose<StoriesHomeResponse>((ref) async {
   final repo = ref.read(storiesRepositoryProvider);
-  // Try cache first
-  final cached = await StoriesCacheService.load();
+  final isAuthenticated = ref.watch(_isAuthenticatedProvider);
+
+  // Try cache first (cache validates auth context to avoid serving stale guest data)
+  final cached = await StoriesCacheService.load(isAuthenticated: isAuthenticated);
   if (cached != null) {
-    // Fire-and-forget refresh; listeners will be able to refetch manually when needed.
-    // For a more reactive refresh, consider using a Notifier and state.
-    // We still return cached immediately to avoid infinite shimmer.
-    // Attempt to refresh in background; ignore errors.
     // Background refresh; ignore result/errors.
     () async {
       try {
         final fresh = await repo.fetchHomeSections();
-        await StoriesCacheService.save(fresh);
+        await StoriesCacheService.save(fresh, isAuthenticated: isAuthenticated);
       } catch (_) {
         // swallow
       }
@@ -34,7 +41,7 @@ final storiesHomeSectionsProvider = FutureProvider.autoDispose<StoriesHomeRespon
   // No cache: fetch from network
   try {
     final res = await repo.fetchHomeSections();
-    await StoriesCacheService.save(res);
+    await StoriesCacheService.save(res, isAuthenticated: isAuthenticated);
     return res;
   } on ApiError catch (e) {
     throw e;

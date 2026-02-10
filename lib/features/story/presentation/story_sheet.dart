@@ -8,6 +8,7 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/features/story/providers/story_session_provider.dart';
+import 'package:antroph_mobile/features/story/data/stories_cache.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 
 /// Content widget for the story bottom sheet.
@@ -154,6 +155,9 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
       if (!mounted) return;
       setState(() => _isAdded = true);
       showToast(context, 'Story added to playlist', success: true);
+      // Clear cache and refresh stories so the home page reflects the change
+      await StoriesCacheService.clear();
+      ref.invalidate(storiesHomeSectionsProvider);
     } catch (err) {
       if (!mounted) return;
       showToast(context, 'Failed to add story: $err');
