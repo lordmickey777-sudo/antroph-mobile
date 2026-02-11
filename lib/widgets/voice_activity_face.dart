@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:antroph_mobile/features/story/models/mascot_model.dart';
+import 'package:antroph_mobile/features/story/services/mascot_cache_service.dart';
 import 'package:flutter/material.dart';
 import 'package:rive/rive.dart';
 
@@ -9,15 +12,24 @@ import 'package:rive/rive.dart';
 class VoiceActivityFace extends StatefulWidget {
   const VoiceActivityFace({
     super.key,
-    this.assetPath = 'assets/antroph_face.riv',
-    this.stateMachineName = 'FaceSm',
+    this.audioLevelStream,
+    this.levelStream,
+    this.mascotConfig,
+    this.fallbackAsset = MascotConfig.defaultFallbackAsset,
+    this.stateMachineName = MascotConfig.defaultStateMachine,
     this.threshold = 0.02,
     this.silenceDelay = const Duration(milliseconds: 300),
-    required this.levelStream,
     this.fit = BoxFit.contain,
-  });
+  }) : assert(audioLevelStream != null || levelStream != null);
 
-  final String assetPath;
+  final Stream<double>? audioLevelStream;
+  final Stream<double>? levelStream;
+
+  /// Dynamic mascot configuration. When provided, this takes precedence over bundled assets.
+  final MascotConfig? mascotConfig;
+
+  /// Bundled fallback Rive asset when mascot loading fails.
+  final String fallbackAsset;
   final String stateMachineName;
 
   /// RMS threshold above which we consider "speaking".
@@ -26,9 +38,6 @@ class VoiceActivityFace extends StatefulWidget {
   /// How long to wait after falling below threshold before closing mouth.
   final Duration silenceDelay;
 
-  /// External audio level stream (0..1-ish RMS).
-  final Stream<double> levelStream;
-
   final BoxFit fit;
 
   @override
@@ -36,10 +45,13 @@ class VoiceActivityFace extends StatefulWidget {
 }
 
 class _VoiceActivityFaceState extends State<VoiceActivityFace> {
+  final MascotCacheService _mascotCacheService = MascotCacheService();
+
   StreamSubscription<double>? _levelSubscription;
   Timer? _silenceTimer;
   Timer? _idleAnimationTimer;
   Timer? _smoothingTimer;
+  Future<_ResolvedRiveSource>? _sourceFuture;
 
   // Rive inputs - Try to find these in your state machine
   SMINumber? _mouthOpenInput; // 0-100: mouth openness
@@ -57,10 +69,14 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
 
   final _random = math.Random();
 
+  Stream<double> get _effectiveLevelStream =>
+      widget.audioLevelStream ?? widget.levelStream ?? Stream<double>.empty();
+
   @override
   void initState() {
     super.initState();
-    _subscribeToLevelStream(widget.levelStream);
+    _sourceFuture = _resolveRiveSource();
+    _subscribeToLevelStream(_effectiveLevelStream);
     _startIdleAnimations();
     _startSmoothingLoop();
   }
@@ -69,13 +85,24 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
   void didUpdateWidget(covariant VoiceActivityFace oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.levelStream != widget.levelStream) {
+    if (oldWidget.audioLevelStream != widget.audioLevelStream ||
+        oldWidget.levelStream != widget.levelStream) {
       _levelSubscription?.cancel();
       _levelSubscription = null;
 
       _silenceTimer?.cancel();
       _silenceTimer = null;
-      _subscribeToLevelStream(widget.levelStream);
+      _subscribeToLevelStream(_effectiveLevelStream);
+    }
+
+    if (oldWidget.mascotConfig != widget.mascotConfig ||
+        oldWidget.fallbackAsset != widget.fallbackAsset ||
+        oldWidget.stateMachineName != widget.stateMachineName) {
+      _resetRiveInputs();
+      _sourceFuture = _resolveRiveSource();
+      if (mounted) {
+        setState(() {});
+      }
     }
   }
 
@@ -118,12 +145,11 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
       // Map RMS to mouth openness (0-100)
       // Add some randomness for natural variation
       final baseOpenness = (rms / widget.threshold).clamp(0.3, 1.0) * 100;
-      final variation = _random.nextDouble() * 15 - 7.5; // ±7.5
+      final variation = _random.nextDouble() * 15 - 7.5; // +/-7.5
       _targetMouthValue = (baseOpenness + variation).clamp(20.0, 100.0);
 
       // Subtle head bob when speaking
       _setHeadBob(5.0 + _random.nextDouble() * 3);
-
     } else {
       _scheduleStopSpeaking();
     }
@@ -148,11 +174,14 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
     const fps = 60;
     const easingSpeed = 0.25; // Higher = snappier, lower = smoother
 
-    _smoothingTimer = Timer.periodic(Duration(milliseconds: 1000 ~/ fps), (timer) {
+    _smoothingTimer = Timer.periodic(Duration(milliseconds: 1000 ~/ fps), (
+      timer,
+    ) {
       if (!mounted) return;
 
       // Smooth mouth movement
-      _currentMouthValue += (_targetMouthValue - _currentMouthValue) * easingSpeed;
+      _currentMouthValue +=
+          (_targetMouthValue - _currentMouthValue) * easingSpeed;
       if ((_currentMouthValue - _targetMouthValue).abs() < 0.5) {
         _currentMouthValue = _targetMouthValue;
       }
@@ -162,7 +191,9 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
 
   /// Idle animations: random blinks, subtle expressions
   void _startIdleAnimations() {
-    _idleAnimationTimer = Timer.periodic(const Duration(milliseconds: 2500), (timer) {
+    _idleAnimationTimer = Timer.periodic(const Duration(milliseconds: 2500), (
+      timer,
+    ) {
       if (!mounted) return;
 
       _blinkCounter++;
@@ -225,14 +256,125 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
     }
   }
 
-  void _onRiveInit(Artboard artboard) {
-    final controller = StateMachineController.fromArtboard(
-      artboard,
-      widget.stateMachineName,
+  Future<_ResolvedRiveSource> _resolveRiveSource() async {
+    final mascot = widget.mascotConfig;
+    final fallback = widget.fallbackAsset.trim().isEmpty
+        ? MascotConfig.defaultFallbackAsset
+        : widget.fallbackAsset.trim();
+    final stateMachine =
+        mascot?.effectiveStateMachine ?? widget.stateMachineName;
+    final artboard = mascot?.artboard?.trim().isNotEmpty == true
+        ? mascot!.artboard!.trim()
+        : null;
+
+    if (mascot == null) {
+      return _ResolvedRiveSource.asset(fallback, stateMachine: stateMachine);
+    }
+
+    final localAssetPath = mascot.localAssetPath?.trim() ?? '';
+    if (localAssetPath.isNotEmpty) {
+      final localFile = File(localAssetPath);
+      if (await localFile.exists()) {
+        return _ResolvedRiveSource.file(
+          localAssetPath,
+          stateMachine: stateMachine,
+          artboard: artboard,
+        );
+      }
+    }
+
+    final assetRef = mascot.riveAssetUrl.trim();
+    if (assetRef.startsWith('assets/')) {
+      return _ResolvedRiveSource.asset(
+        assetRef,
+        stateMachine: stateMachine,
+        artboard: artboard,
+      );
+    }
+
+    if (_looksLikeLocalFilePath(assetRef)) {
+      final file = assetRef.startsWith('file://')
+          ? File(Uri.parse(assetRef).toFilePath())
+          : File(assetRef);
+      if (await file.exists()) {
+        return _ResolvedRiveSource.file(
+          file.path,
+          stateMachine: stateMachine,
+          artboard: artboard,
+        );
+      }
+    }
+
+    if (assetRef.isNotEmpty) {
+      try {
+        final cached = await _mascotCacheService.cacheMascot(mascot);
+        return _ResolvedRiveSource.file(
+          cached.path,
+          stateMachine: stateMachine,
+          artboard: artboard,
+        );
+      } catch (_) {
+        final cachedPath = await _mascotCacheService.getCachedPath(mascot.id);
+        if (cachedPath != null) {
+          return _ResolvedRiveSource.file(
+            cachedPath,
+            stateMachine: stateMachine,
+            artboard: artboard,
+          );
+        }
+      }
+    }
+
+    return _ResolvedRiveSource.asset(
+      mascot.effectiveFallbackAsset,
+      stateMachine: stateMachine,
+      artboard: artboard,
     );
+  }
+
+  bool _looksLikeLocalFilePath(String value) {
+    if (value.isEmpty) return false;
+    return value.startsWith('/') ||
+        value.startsWith('./') ||
+        value.startsWith('../') ||
+        value.startsWith('file://');
+  }
+
+  void _resetRiveInputs() {
+    _mouthOpenInput = null;
+    _eyeOpenInput = null;
+    _blinkInput = null;
+    _eyeExpressionInput = null;
+    _headTiltInput = null;
+    _headBobInput = null;
+  }
+
+  void _onRiveInit(Artboard artboard, String configuredStateMachine) {
+    _resetRiveInputs();
+
+    var controller = StateMachineController.fromArtboard(
+      artboard,
+      configuredStateMachine,
+    );
+    if (controller == null &&
+        configuredStateMachine != widget.stateMachineName) {
+      controller = StateMachineController.fromArtboard(
+        artboard,
+        widget.stateMachineName,
+      );
+    }
+    if (controller == null &&
+        widget.stateMachineName != MascotConfig.defaultStateMachine) {
+      controller = StateMachineController.fromArtboard(
+        artboard,
+        MascotConfig.defaultStateMachine,
+      );
+    }
 
     if (controller == null) {
-      debugPrint('⚠️ State machine "${widget.stateMachineName}" not found in Rive file');
+      debugPrint(
+        '⚠️ State machine "$configuredStateMachine" not found in Rive file',
+      );
       return;
     }
 
@@ -242,7 +384,8 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
     _mouthOpenInput = controller.findInput<double>('mouthOpen') as SMINumber?;
     _eyeOpenInput = controller.findInput<double>('eyeOpen') as SMINumber?;
     _blinkInput = controller.findInput<bool>('blink') as SMITrigger?;
-    _eyeExpressionInput = controller.findInput<double>('eyeExpression') as SMINumber?;
+    _eyeExpressionInput =
+        controller.findInput<double>('eyeExpression') as SMINumber?;
     _headTiltInput = controller.findInput<double>('headTilt') as SMINumber?;
     _headBobInput = controller.findInput<double>('headBob') as SMINumber?;
 
@@ -261,6 +404,52 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
     _setEyeExpression(1); // Cute expression
   }
 
+  Widget _buildLoadingFace(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? Colors.white10 : Colors.black12;
+    final border = isDark ? Colors.white24 : Colors.black12;
+    final spinnerColor = isDark ? Colors.white70 : Colors.black54;
+
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: bg,
+        border: Border.all(color: border),
+      ),
+      child: Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2, color: spinnerColor),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRiveWidget(_ResolvedRiveSource source) {
+    final key = ValueKey(
+      '${source.type.name}:${source.path}:${source.stateMachine}:${source.artboard ?? ''}',
+    );
+
+    if (source.type == _RiveSourceType.file) {
+      return RiveAnimation.file(
+        source.path,
+        key: key,
+        artboard: source.artboard,
+        onInit: (artboard) => _onRiveInit(artboard, source.stateMachine),
+        fit: widget.fit,
+      );
+    }
+
+    return RiveAnimation.asset(
+      source.path,
+      key: key,
+      artboard: source.artboard,
+      onInit: (artboard) => _onRiveInit(artboard, source.stateMachine),
+      fit: widget.fit,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -268,11 +457,43 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
         // Debug: Trigger a blink on tap
         _triggerBlink();
       },
-      child: RiveAnimation.asset(
-        widget.assetPath,
-        onInit: _onRiveInit,
-        fit: widget.fit,
+      child: FutureBuilder<_ResolvedRiveSource>(
+        future: _sourceFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return _buildLoadingFace(context);
+          }
+
+          final source =
+              snapshot.data ??
+              _ResolvedRiveSource.asset(
+                widget.fallbackAsset,
+                stateMachine: widget.stateMachineName,
+              );
+          return _buildRiveWidget(source);
+        },
       ),
     );
   }
+}
+
+enum _RiveSourceType { asset, file }
+
+class _ResolvedRiveSource {
+  const _ResolvedRiveSource.asset(
+    this.path, {
+    required this.stateMachine,
+    this.artboard,
+  }) : type = _RiveSourceType.asset;
+
+  const _ResolvedRiveSource.file(
+    this.path, {
+    required this.stateMachine,
+    this.artboard,
+  }) : type = _RiveSourceType.file;
+
+  final _RiveSourceType type;
+  final String path;
+  final String stateMachine;
+  final String? artboard;
 }

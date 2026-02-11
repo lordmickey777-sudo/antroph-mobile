@@ -1,3 +1,5 @@
+import 'mascot_model.dart';
+
 class PlaylistDto {
   PlaylistDto({
     required this.id,
@@ -10,6 +12,8 @@ class PlaylistDto {
     required this.coverImageUrl,
     required this.createdAt,
     required this.updatedAt,
+    this.mascotId,
+    this.mascot,
   });
 
   final String id;
@@ -22,6 +26,8 @@ class PlaylistDto {
   final bool isPublic;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? mascotId;
+  final MascotConfig? mascot;
 
   factory PlaylistDto.fromJson(Map<String, dynamic> json) {
     final createdAt = DateTime.tryParse((json['created_at'] as String?) ?? '');
@@ -30,13 +36,20 @@ class PlaylistDto {
         .map((e) => (e as String?)?.trim() ?? '')
         .where((e) => e.isNotEmpty)
         .toList();
-    final computedStoryCount = (json['story_count'] as num?)?.toInt() ??
+    final computedStoryCount =
+        (json['story_count'] as num?)?.toInt() ??
         (json['stories_count'] as num?)?.toInt() ??
         storyIds.length;
-    final name = (json['name'] as String?)?.trim() ?? (json['title'] as String?)?.trim() ?? '';
+    final name =
+        (json['name'] as String?)?.trim() ??
+        (json['title'] as String?)?.trim() ??
+        '';
     final description =
-        (json['description'] as String?)?.trim() ?? (json['subtitle'] as String?)?.trim() ?? '';
-    final coverImage = (json['cover_image_url'] as String?) ??
+        (json['description'] as String?)?.trim() ??
+        (json['subtitle'] as String?)?.trim() ??
+        '';
+    final coverImage =
+        (json['cover_image_url'] as String?) ??
         (json['image_url'] as String?) ??
         (json['image'] as String?) ??
         (json['thumbnail_url'] as String?) ??
@@ -48,10 +61,14 @@ class PlaylistDto {
       description: description,
       coverImageUrl: coverImage.trim(),
       storyIds: storyIds,
-      storyCount: computedStoryCount > 0 ? computedStoryCount : (name.isNotEmpty ? 1 : 0),
+      storyCount: computedStoryCount > 0
+          ? computedStoryCount
+          : (name.isNotEmpty ? 1 : 0),
       isPublic: (json['is_public'] as bool?) ?? false,
       createdAt: createdAt ?? DateTime.now(),
       updatedAt: updatedAt ?? DateTime.now(),
+      mascotId: (json['mascot_id'] as String?)?.trim(),
+      mascot: MascotConfig.maybeFromJson(json['mascot']),
     );
   }
 }
@@ -61,7 +78,8 @@ class PlaylistDetailDto {
 
   final List<PlaylistStoryDto> stories;
 
-  factory PlaylistDetailDto.fromJson(Map<String, dynamic> json) => PlaylistDetailDto(
+  factory PlaylistDetailDto.fromJson(Map<String, dynamic> json) =>
+      PlaylistDetailDto(
         stories: ((json['stories'] as List?) ?? const [])
             .map((e) => PlaylistStoryDto.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -77,6 +95,8 @@ class PlaylistStoryDto {
     required this.imageUrl,
     required this.users,
     required this.views,
+    this.mascotId,
+    this.mascot,
   });
 
   final String id;
@@ -86,21 +106,29 @@ class PlaylistStoryDto {
   final String imageUrl;
   final int users;
   final int views;
+  final String? mascotId;
+  final MascotConfig? mascot;
 
   factory PlaylistStoryDto.fromJson(Map<String, dynamic> json) {
-    final rawImage = (json['cover_image_url'] as String?) ??
+    final rawImage =
+        (json['cover_image_url'] as String?) ??
         (json['image_url'] as String?) ??
         (json['image'] as String?) ??
         (json['thumbnail_url'] as String?) ??
         '';
     return PlaylistStoryDto(
       id: (json['id'] as String?)?.trim() ?? '',
-      storyId: (json['story_id'] as String?)?.trim() ?? (json['id'] as String?)?.trim() ?? '',
+      storyId:
+          (json['story_id'] as String?)?.trim() ??
+          (json['id'] as String?)?.trim() ??
+          '',
       title: (json['title'] as String?)?.trim() ?? '',
       subtitle: (json['subtitle'] as String?)?.trim() ?? '',
       imageUrl: rawImage.trim(),
       users: (json['users'] as num?)?.toInt() ?? 0,
       views: (json['views'] as num?)?.toInt() ?? 0,
+      mascotId: (json['mascot_id'] as String?)?.trim(),
+      mascot: MascotConfig.maybeFromJson(json['mascot']),
     );
   }
 }

@@ -24,7 +24,9 @@ class _StoryPlayerPageState extends ConsumerState<StoryPlayerPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(storySocketProvider.notifier).startStory(
+      ref
+          .read(storySocketProvider.notifier)
+          .startStory(
             storyId: widget.story.storyId,
             storyTitle: widget.story.title,
           );
@@ -47,6 +49,7 @@ class _StoryPlayerPageState extends ConsumerState<StoryPlayerPage> {
         builder: (context) => ChatPage(
           storyTitle: widget.story.title,
           storyId: widget.story.storyId,
+          mascotConfig: widget.story.mascot,
         ),
       ),
     );
@@ -75,7 +78,11 @@ class _StoryPlayerPageState extends ConsumerState<StoryPlayerPage> {
           ),
           TextButton(
             onPressed: () => notifier.endStory(),
-            child: const TypographyText('End', variant: TypographyVariant.body2, color: Colors.white),
+            child: const TypographyText(
+              'End',
+              variant: TypographyVariant.body2,
+              color: Colors.white,
+            ),
           ),
         ],
       ),
@@ -90,10 +97,7 @@ class _StoryPlayerPageState extends ConsumerState<StoryPlayerPage> {
             _NodeCard(state: state),
             if (state.choices.isNotEmpty) ...[
               const SizedBox(height: 12),
-              _ChoicesCard(
-                state: state,
-                onSelect: notifier.sendChoice,
-              ),
+              _ChoicesCard(state: state, onSelect: notifier.sendChoice),
             ],
             if (state.currentAudio != null) ...[
               const SizedBox(height: 12),
@@ -157,7 +161,11 @@ class _StatusRow extends StatelessWidget {
               foregroundColor: Colors.black,
               elevation: 0,
             ),
-            child: const TypographyText('Retry', variant: TypographyVariant.body2, color: Colors.black),
+            child: const TypographyText(
+              'Retry',
+              variant: TypographyVariant.body2,
+              color: Colors.black,
+            ),
           ),
       ],
     );
@@ -229,7 +237,11 @@ class _SessionInfo extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const TypographyText('Session', variant: TypographyVariant.body1, color: Colors.white),
+          const TypographyText(
+            'Session',
+            variant: TypographyVariant.body1,
+            color: Colors.white,
+          ),
           const SizedBox(height: 6),
           TypographyText(
             state.sessionId ?? 'Awaiting ack…',
@@ -283,7 +295,9 @@ class _NodeCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           TypographyText(
-            node?.text.isNotEmpty == true ? node!.text : 'Waiting for story content…',
+            node?.text.isNotEmpty == true
+                ? node!.text
+                : 'Waiting for story content…',
             variant: TypographyVariant.body2,
             color: Colors.white70,
             height: 1.4,
@@ -299,7 +313,9 @@ class _NodeCard extends StatelessWidget {
           if (state.lastTranscript != null) ...[
             const SizedBox(height: 10),
             TypographyText(
-              state.lastTranscriptIsFinal ? 'Transcript (final)' : 'Transcript (partial)',
+              state.lastTranscriptIsFinal
+                  ? 'Transcript (final)'
+                  : 'Transcript (partial)',
               variant: TypographyVariant.body2,
               color: Colors.white,
             ),
@@ -342,7 +358,11 @@ class _ChoicesCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const TypographyText('Choices', variant: TypographyVariant.body1, color: Colors.white),
+          const TypographyText(
+            'Choices',
+            variant: TypographyVariant.body1,
+            color: Colors.white,
+          ),
           const SizedBox(height: 10),
           for (final choice in state.choices) ...[
             AppButton(
@@ -394,7 +414,11 @@ class _AudioCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const TypographyText('Audio stream', variant: TypographyVariant.body1, color: Colors.white),
+          const TypographyText(
+            'Audio stream',
+            variant: TypographyVariant.body1,
+            color: Colors.white,
+          ),
           const SizedBox(height: 6),
           TypographyText(
             'ID: ${audio.audioId}',
@@ -444,7 +468,11 @@ class _LogList extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const TypographyText('Events', variant: TypographyVariant.body1, color: Colors.white),
+          const TypographyText(
+            'Events',
+            variant: TypographyVariant.body1,
+            color: Colors.white,
+          ),
           const SizedBox(height: 8),
           if (entries.isEmpty)
             const TypographyText(
@@ -480,8 +508,12 @@ class _TextInput extends StatelessWidget {
     final borderColor = context.dividerColor;
     final backgroundColor = context.inputBackground;
     final isDark = context.isDarkMode;
-    final sendBg = isDark ? Colors.white : Theme.of(context).colorScheme.primary;
-    final sendFg = isDark ? Colors.black : Theme.of(context).colorScheme.onPrimary;
+    final sendBg = isDark
+        ? Colors.white
+        : Theme.of(context).colorScheme.primary;
+    final sendFg = isDark
+        ? Colors.black
+        : Theme.of(context).colorScheme.onPrimary;
 
     return Container(
       padding: const EdgeInsets.all(12),

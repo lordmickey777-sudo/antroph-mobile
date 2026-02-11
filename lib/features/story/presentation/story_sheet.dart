@@ -9,6 +9,7 @@ import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/features/story/providers/story_session_provider.dart';
 import 'package:antroph_mobile/features/story/data/stories_cache.dart';
+import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 
 /// Content widget for the story bottom sheet.
@@ -21,6 +22,7 @@ class StorySheetContent extends ConsumerStatefulWidget {
     required this.subtitle,
     required this.imageAsset,
     required this.scrollController,
+    this.mascotConfig,
     this.users,
     this.views,
     this.isAdded = false,
@@ -31,6 +33,7 @@ class StorySheetContent extends ConsumerStatefulWidget {
   final String subtitle;
   final String imageAsset;
   final ScrollController scrollController;
+  final MascotConfig? mascotConfig;
   final int? users;
   final int? views;
   final bool isAdded;
@@ -125,7 +128,8 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
             right: 16,
             child: _ErrorBanner(
               message: sessionState.error!,
-              onDismiss: () => ref.read(storySessionProvider.notifier).clearError(),
+              onDismiss: () =>
+                  ref.read(storySessionProvider.notifier).clearError(),
             ),
           ),
       ],
@@ -186,12 +190,12 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
         builder: (_) => ChatPage(
           storyTitle: widget.title.isNotEmpty ? widget.title : 'Chat',
           storyId: widget.storyId,
+          mascotConfig: widget.mascotConfig,
         ),
       ),
     );
   }
 }
-
 
 class _HeroCard extends ConsumerWidget {
   const _HeroCard({
@@ -325,8 +329,8 @@ class _ActionButton extends StatelessWidget {
       onPressed: isLoading
           ? null
           : isAdded
-              ? onPlayPressed
-              : onAddPressed,
+          ? onPlayPressed
+          : onAddPressed,
       isLoading: isLoading,
       icon: isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
       label: isLoading ? 'Adding...' : (isAdded ? 'Play' : 'My List'),
@@ -363,15 +367,27 @@ class _ErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(CupertinoIcons.exclamationmark_circle_fill, color: Colors.white, size: 20),
+          const Icon(
+            CupertinoIcons.exclamationmark_circle_fill,
+            color: Colors.white,
+            size: 20,
+          ),
           const SizedBox(width: 12),
           Expanded(
-            child: TypographyText(message, variant: TypographyVariant.body2, color: Colors.white),
+            child: TypographyText(
+              message,
+              variant: TypographyVariant.body2,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(width: 8),
           GestureDetector(
             onTap: onDismiss,
-            child: const Icon(CupertinoIcons.xmark, color: Colors.white, size: 18),
+            child: const Icon(
+              CupertinoIcons.xmark,
+              color: Colors.white,
+              size: 18,
+            ),
           ),
         ],
       ),

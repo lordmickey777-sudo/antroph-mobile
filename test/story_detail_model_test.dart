@@ -9,6 +9,17 @@ void main() {
     {
       "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
       "category_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "mascot_id": "toad_mascot",
+      "mascot": {
+        "id": "toad_mascot",
+        "name": "Toad",
+        "rive_asset_url": "https://cdn.example.com/mascots/toad.riv",
+        "state_machine": "FaceSm",
+        "fallback_asset": "default_face",
+        "expression_config": {
+          "happy": { "eyeExpression": 2, "mouthOpen": 60 }
+        }
+      },
       "title": "string",
       "description": "string",
       "author": "string",
@@ -31,6 +42,10 @@ void main() {
     final dto = StoryDetailDto.fromJson(map);
     expect(dto.id.isNotEmpty, true);
     expect(dto.categoryId.isNotEmpty, true);
+    expect(dto.mascotId, 'toad_mascot');
+    expect(dto.mascot, isNotNull);
+    expect(dto.mascot!.name, 'Toad');
+    expect(dto.mascot!.expressions['happy']?.eyeExpression, 2);
     expect(dto.title, 'string');
     expect(dto.ageRating, 12);
     expect(dto.tags.length, 2);

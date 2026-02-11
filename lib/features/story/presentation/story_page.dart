@@ -30,7 +30,9 @@ class StoryPage extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF141718) : const Color(0xFFF5F5F7),
+      backgroundColor: isDark
+          ? const Color(0xFF141718)
+          : const Color(0xFFF5F5F7),
       body: asyncHome.when(
         loading: () => const StoryPageShimmer(),
         error: (err, st) {
@@ -43,11 +45,14 @@ class StoryPage extends ConsumerWidget {
         data: (data) {
           final sections = data.sections;
           final featuredStories = data.featuredStories;
-          if (sections.isEmpty && featuredStories.isEmpty) return const _EmptyView();
+          if (sections.isEmpty && featuredStories.isEmpty)
+            return const _EmptyView();
 
           return ScrollFadeGradient(
             child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
               slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
@@ -56,7 +61,11 @@ class StoryPage extends ConsumerWidget {
                       bottom: false,
                       child: Row(
                         children: [
-                          Image.asset('assets/images/app_logo.png', width: 38, height: 38),
+                          Image.asset(
+                            'assets/images/app_logo.png',
+                            width: 38,
+                            height: 38,
+                          ),
                           const SizedBox(width: 2),
                           TypographyText(
                             'Stories',
@@ -69,7 +78,8 @@ class StoryPage extends ConsumerWidget {
                   ),
                 ),
                 CupertinoSliverRefreshControl(
-                  onRefresh: () => ref.refresh(storiesHomeSectionsProvider.future),
+                  onRefresh: () =>
+                      ref.refresh(storiesHomeSectionsProvider.future),
                 ),
                 if (featuredStories.isNotEmpty)
                   SliverToBoxAdapter(
@@ -79,7 +89,10 @@ class StoryPage extends ConsumerWidget {
                     ),
                   ),
                 for (final section in sections)
-                  _SectionSliver(section: section, onTap: (card) => _openStory(context, card)),
+                  _SectionSliver(
+                    section: section,
+                    onTap: (card) => _openStory(context, card),
+                  ),
                 const SliverToBoxAdapter(child: SizedBox(height: 120)),
               ],
             ),
@@ -97,6 +110,7 @@ class StoryPage extends ConsumerWidget {
         title: card.title,
         subtitle: card.subtitle,
         imageAsset: card.image,
+        mascotConfig: card.mascot,
         users: card.users,
         views: card.views,
         isAdded: card.isAdded,
@@ -105,7 +119,10 @@ class StoryPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _openFeaturedStory(BuildContext context, FeaturedStoryDto story) async {
+  Future<void> _openFeaturedStory(
+    BuildContext context,
+    FeaturedStoryDto story,
+  ) async {
     await showAppBottomSheet(
       context: context,
       builder: (_, scrollController) => StorySheetContent(
@@ -113,6 +130,7 @@ class StoryPage extends ConsumerWidget {
         title: story.title,
         subtitle: story.description,
         imageAsset: story.coverImageUrl,
+        mascotConfig: story.mascot,
         users: 0,
         views: 0,
         isAdded: story.isAdded,
@@ -224,11 +242,18 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
                               ? _navigateToChat
                               : _handleAddToPlaylist,
                           isLoading: _isAdding,
-                          icon: _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
-                          label: _isAdding ? 'Adding...' : (_isAdded ? 'Play' : 'My List'),
+                          icon: _isAdded
+                              ? CupertinoIcons.play_fill
+                              : CupertinoIcons.add,
+                          label: _isAdding
+                              ? 'Adding...'
+                              : (_isAdded ? 'Play' : 'My List'),
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 24,
+                          ),
                           variant: TypographyVariant.body1,
                           fontWeight: FontWeight.w600,
                         ),
@@ -261,7 +286,9 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
 
     setState(() => _isAdding = true);
     try {
-      await ref.read(storiesRepositoryProvider).addStoriesToPlaylist(storyIds: [widget.story.id]);
+      await ref
+          .read(storiesRepositoryProvider)
+          .addStoriesToPlaylist(storyIds: [widget.story.id]);
       if (!mounted) return;
       setState(() {
         _isAdding = false;
@@ -292,8 +319,11 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatPage(
-          storyTitle: widget.story.title.isNotEmpty ? widget.story.title : 'Chat',
+          storyTitle: widget.story.title.isNotEmpty
+              ? widget.story.title
+              : 'Chat',
           storyId: widget.story.id,
+          mascotConfig: widget.story.mascot,
         ),
       ),
     );
@@ -307,7 +337,8 @@ class _FeaturedStoriesCarousel extends StatefulWidget {
   final void Function(FeaturedStoryDto story) onTap;
 
   @override
-  State<_FeaturedStoriesCarousel> createState() => _FeaturedStoriesCarouselState();
+  State<_FeaturedStoriesCarousel> createState() =>
+      _FeaturedStoriesCarouselState();
 }
 
 class _FeaturedStoriesCarouselState extends State<_FeaturedStoriesCarousel> {
@@ -371,27 +402,30 @@ class _FeaturedStoriesCarouselState extends State<_FeaturedStoriesCarousel> {
                   },
                   physics: const BouncingScrollPhysics(),
                   itemCount: widget.stories.length,
-                itemBuilder: (context, index) {
-                  final story = widget.stories[index];
+                  itemBuilder: (context, index) {
+                    final story = widget.stories[index];
 
-                  // Calculate text opacity based on how centered this card is
-                  double textOpacity = 1.0;
-                  if (_pageController.position.haveDimensions) {
-                    final page = _pageController.page ?? _currentPage.toDouble();
-                    final distance = (page - index).abs();
-                    // Fade out quickly as we scroll away (opacity goes from 1 to 0 as distance goes from 0 to 0.5)
-                    textOpacity = (1.0 - (distance * 2)).clamp(0.0, 1.0);
-                  }
+                    // Calculate text opacity based on how centered this card is
+                    double textOpacity = 1.0;
+                    if (_pageController.position.haveDimensions) {
+                      final page =
+                          _pageController.page ?? _currentPage.toDouble();
+                      final distance = (page - index).abs();
+                      // Fade out quickly as we scroll away (opacity goes from 1 to 0 as distance goes from 0 to 0.5)
+                      textOpacity = (1.0 - (distance * 2)).clamp(0.0, 1.0);
+                    }
 
-                  return Padding(
-                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding * 0.1),
-                    child: _FeaturedStoryCard(
-                      story: story,
-                      onTap: () => widget.onTap(story),
-                      textOpacity: textOpacity,
-                    ),
-                  );
-                },
+                    return Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: horizontalPadding * 0.1,
+                      ),
+                      child: _FeaturedStoryCard(
+                        story: story,
+                        onTap: () => widget.onTap(story),
+                        textOpacity: textOpacity,
+                      ),
+                    );
+                  },
                 ),
               );
             },
@@ -504,75 +538,77 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
       child: SizedBox(
         width: 125,
         child: SmoothClipRRect(
-        smoothness: 0.6,
-        borderRadius: BorderRadius.circular(cardRadius),
-        side: BorderSide(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Colors.white.withValues(alpha: 0.15)
-              : Colors.black.withValues(alpha: 0.1),
-          width: 1,
-        ),
-        child: AspectRatio(
-          aspectRatio: 0.75,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Positioned.fill(child: _StoryImage(image: item.image)),
-              // Gradient overlay for title readability
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  height: 60,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.0),
-                        Colors.black.withValues(alpha: 0.7),
-                      ],
+          smoothness: 0.6,
+          borderRadius: BorderRadius.circular(cardRadius),
+          side: BorderSide(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.white.withValues(alpha: 0.15)
+                : Colors.black.withValues(alpha: 0.1),
+            width: 1,
+          ),
+          child: AspectRatio(
+            aspectRatio: 0.75,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned.fill(child: _StoryImage(image: item.image)),
+                // Gradient overlay for title readability
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    height: 60,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.0),
+                          Colors.black.withValues(alpha: 0.7),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              // Title at bottom left
-              Positioned(
-                left: 10,
-                right: 10,
-                bottom: 10,
-                child: TypographyText(
-                  item.title,
-                  variant: TypographyVariant.body1,
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  maxLines: 2,
+                // Title at bottom left
+                Positioned(
+                  left: 10,
+                  right: 10,
+                  bottom: 10,
+                  child: TypographyText(
+                    item.title,
+                    variant: TypographyVariant.body1,
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    maxLines: 2,
+                  ),
                 ),
-              ),
-              // Button at top right
-              Positioned(
-                right: 6,
-                top: 6,
-                child: AppCircleIconButton(
-                  onPressed: _isAdding
-                      ? null
-                      : _isAdded
-                      ? _navigateToChat
-                      : _handleAddToPlaylist,
-                  isLoading: _isAdding,
-                  icon: _isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
-                  size: 34,
-                  iconSize: 18,
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
+                // Button at top right
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: AppCircleIconButton(
+                    onPressed: _isAdding
+                        ? null
+                        : _isAdded
+                        ? _navigateToChat
+                        : _handleAddToPlaylist,
+                    isLoading: _isAdding,
+                    icon: _isAdded
+                        ? CupertinoIcons.play_fill
+                        : CupertinoIcons.add,
+                    size: 34,
+                    iconSize: 18,
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -629,6 +665,7 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
         builder: (_) => ChatPage(
           storyTitle: widget.item.title.isNotEmpty ? widget.item.title : 'Chat',
           storyId: widget.item.storyId,
+          mascotConfig: widget.item.mascot,
         ),
       ),
     );
@@ -692,10 +729,7 @@ class _StoryImageShimmer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       fit: StackFit.expand,
-      children: [
-        const ShimmerBox(radius: 0),
-        child,
-      ],
+      children: [const ShimmerBox(radius: 0), child],
     );
   }
 }

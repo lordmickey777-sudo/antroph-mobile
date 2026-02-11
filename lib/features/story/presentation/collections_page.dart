@@ -57,27 +57,31 @@ class CollectionsPage extends ConsumerWidget {
               constraints: const BoxConstraints(maxWidth: ContentWidth.content),
               child: ListView.separated(
                 physics: const BouncingScrollPhysics(),
-                padding: EdgeInsets.symmetric(vertical: 12, horizontal: horizontalPadding),
+                padding: EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: horizontalPadding,
+                ),
                 itemCount: items.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
-              final collection = items[index];
-              return _CollectionCard(
-                  collection: collection,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          CollectionDetailPage(collection: collection),
+                  final collection = items[index];
+                  return _CollectionCard(
+                    collection: collection,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            CollectionDetailPage(collection: collection),
+                      ),
                     ),
-                  ),
-                  onStartChat: () => _startChatForCollection(context, ref, collection),
-                  onRemove: () =>
-                      _removeCollectionStories(context, ref, collection),
-                );
-              },
+                    onStartChat: () =>
+                        _startChatForCollection(context, ref, collection),
+                    onRemove: () =>
+                        _removeCollectionStories(context, ref, collection),
+                  );
+                },
+              ),
             ),
-          ),
-        );
+          );
         },
       ),
     );
@@ -111,6 +115,7 @@ class CollectionsPage extends ConsumerWidget {
         builder: (_) => ChatPage(
           storyTitle: collection.name.isNotEmpty ? collection.name : 'Chat',
           storyId: storyId,
+          mascotConfig: collection.mascot,
         ),
       ),
     );
@@ -259,6 +264,7 @@ class CollectionDetailPage extends ConsumerWidget {
         builder: (_) => ChatPage(
           storyTitle: story.title.isNotEmpty ? story.title : 'Chat',
           storyId: story.storyId,
+          mascotConfig: story.mascot,
         ),
       ),
     );
@@ -375,7 +381,10 @@ class _CollectionCard extends StatelessWidget {
                       label: 'Start story',
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 20,
+                      ),
                       variant: TypographyVariant.body1,
                       fontWeight: FontWeight.w600,
                     ),
@@ -479,7 +488,10 @@ class _CollectionStoryCard extends StatelessWidget {
                           label: 'Play',
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                            horizontal: 20,
+                          ),
                           variant: TypographyVariant.body1,
                           fontWeight: FontWeight.w600,
                         ),
@@ -491,7 +503,10 @@ class _CollectionStoryCard extends StatelessWidget {
                           backgroundColor: Colors.white.withValues(alpha: 0.15),
                           foregroundColor: Colors.white,
                           borderColor: Colors.white.withValues(alpha: 0.2),
-                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                            horizontal: 20,
+                          ),
                           variant: TypographyVariant.body1,
                           fontWeight: FontWeight.w600,
                         ),
