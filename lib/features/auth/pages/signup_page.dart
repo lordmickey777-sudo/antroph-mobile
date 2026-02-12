@@ -8,6 +8,7 @@ import '../widgets/auth_input.dart';
 import '../../../core/auth/state/auth_state.dart';
 import '../../../core/auth/repository/auth_repository.dart';
 import '../../../widgets/toast.dart';
+import '../widgets/social_sign_in_buttons.dart';
 
 class SignUpPage extends ConsumerStatefulWidget {
   const SignUpPage({super.key, this.onSwitchLogin});
@@ -159,6 +160,10 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                 ),
                 const SizedBox(height: 28),
                 AuthButton(label: 'Register', onTap: _submit, loading: loading),
+                const SizedBox(height: 20),
+                const OrDivider(),
+                const SizedBox(height: 20),
+                const SocialSignInButtons(),
                 const SizedBox(height: 28),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

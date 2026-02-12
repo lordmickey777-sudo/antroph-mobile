@@ -66,6 +66,26 @@ class AuthRepository {
     };
   }
 
+  /// Authenticate with a Firebase ID token (social login).
+  ///
+  /// API contract:
+  /// POST /auth/firebase
+  /// { "id_token": "string" }
+  /// -> { "access_token": "string", "refresh_token": "string", "token_type": "bearer" }
+  Future<Map<String, String>> firebaseAuth({required String idToken}) async {
+    final res = await _dio.post(
+      '/auth/firebase',
+      data: {'id_token': idToken},
+      options: Options(extra: const {'skipAuth': true}),
+    );
+    final map = res.data as Map<String, dynamic>;
+    return {
+      'access_token': map['access_token'] as String? ?? '',
+      'refresh_token': map['refresh_token'] as String? ?? '',
+      'token_type': map['token_type'] as String? ?? 'bearer',
+    };
+  }
+
   /// Calls the logout endpoint to invalidate the refresh token.
   ///
   /// API contract:

@@ -11,6 +11,7 @@ import 'package:antroph_mobile/widgets/app_input.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/features/auth/widgets/auth_input.dart';
+import 'package:antroph_mobile/features/auth/widgets/social_sign_in_buttons.dart';
 
 /// Content widget for the auth guard sheet.
 /// Shows login or signup forms.
@@ -340,6 +341,10 @@ class _LoginForm extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           AuthButton(label: 'Login', onTap: onSubmit, loading: loading),
+          const SizedBox(height: 16),
+          const OrDivider(),
+          const SizedBox(height: 16),
+          const SocialSignInButtons(),
         ],
       ),
     );
@@ -413,6 +418,10 @@ class _SignupForm extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           AuthButton(label: 'Register', onTap: onSubmit, loading: loading),
+          const SizedBox(height: 16),
+          const OrDivider(),
+          const SizedBox(height: 16),
+          const SocialSignInButtons(),
         ],
       ),
     );

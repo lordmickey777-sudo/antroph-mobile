@@ -8,6 +8,7 @@ import 'package:antroph_mobile/widgets/app_input.dart';
 import '../../../core/auth/state/auth_state.dart';
 import '../../../core/auth/services/email_storage_service.dart';
 import '../../../widgets/toast.dart';
+import '../widgets/social_sign_in_buttons.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key, this.onSwitchSignup});
@@ -146,6 +147,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
                 const SizedBox(height: 24),
                 AuthButton(label: 'Login', onTap: _submit, loading: loading),
+                const SizedBox(height: 20),
+                const OrDivider(),
+                const SizedBox(height: 20),
+                const SocialSignInButtons(),
                 const SizedBox(height: 28),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

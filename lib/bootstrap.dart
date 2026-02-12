@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart' as l;
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -19,6 +20,7 @@ Future<void> bootstrap(AppRunner runAppCallback) async {
     await runZonedGuarded(
       () async {
         WidgetsFlutterBinding.ensureInitialized();
+        await Firebase.initializeApp();
         await AppEnv.load();
         // Initialize logger
         Log.init();
@@ -42,6 +44,7 @@ Future<void> bootstrap(AppRunner runAppCallback) async {
       await runZonedGuarded(
         () async {
           WidgetsFlutterBinding.ensureInitialized();
+          await Firebase.initializeApp();
           await AppEnv.load();
           // Initialize logger
           Log.init();
