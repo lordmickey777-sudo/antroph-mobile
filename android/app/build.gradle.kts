@@ -25,12 +25,26 @@ val releaseStoreFilePath = getSigningProperty("storeFile", "ANDROID_KEYSTORE_PAT
 val releaseStorePassword = getSigningProperty("storePassword", "ANDROID_KEYSTORE_PASSWORD")
 val releaseKeyAlias = getSigningProperty("keyAlias", "ANDROID_KEY_ALIAS")
 val releaseKeyPassword = getSigningProperty("keyPassword", "ANDROID_KEY_PASSWORD")
+
+val releaseStoreFile = releaseStoreFilePath
+    ?.takeIf { it.isNotBlank() }
+    ?.let { configuredPath ->
+        val configuredFile = File(configuredPath)
+        if (configuredFile.isAbsolute) configuredFile else rootProject.file(configuredPath)
+    }
+
 val isReleaseSigningConfigured = listOf(
-    releaseStoreFilePath,
+    releaseStoreFile,
     releaseStorePassword,
     releaseKeyAlias,
     releaseKeyPassword,
-).all { !it.isNullOrBlank() }
+).all { property ->
+    when (property) {
+        is String -> property.isNotBlank()
+        is File -> property.exists()
+        else -> false
+    }
+}
 
 android {
     namespace = "com.antroph.aura"
@@ -60,7 +74,7 @@ android {
     signingConfigs {
         if (isReleaseSigningConfigured) {
             create("release") {
-                storeFile = File(releaseStoreFilePath!!)
+                storeFile = releaseStoreFile!!
                 storePassword = releaseStorePassword!!
                 keyAlias = releaseKeyAlias!!
                 keyPassword = releaseKeyPassword!!
@@ -71,8 +85,22 @@ android {
     buildTypes {
         release {
             if (!isReleaseSigningConfigured) {
+                val configHint = when {
+                    releaseStoreFilePath.isNullOrBlank() ->
+                        "Missing storeFile in android/key.properties or ANDROID_KEYSTORE_PATH."
+                    releaseStoreFile?.exists() != true ->
+                        "Keystore not found at ${releaseStoreFile?.absolutePath}."
+                    releaseStorePassword.isNullOrBlank() ->
+                        "Missing storePassword in android/key.properties or ANDROID_KEYSTORE_PASSWORD."
+                    releaseKeyAlias.isNullOrBlank() ->
+                        "Missing keyAlias in android/key.properties or ANDROID_KEY_ALIAS."
+                    releaseKeyPassword.isNullOrBlank() ->
+                        "Missing keyPassword in android/key.properties or ANDROID_KEY_PASSWORD."
+                    else ->
+                        "Release signing is not configured."
+                }
                 throw GradleException(
-                    "Release signing is not configured. Add android/key.properties or set ANDROID_* env vars.",
+                    "$configHint Add android/key.properties or set ANDROID_* env vars.",
                 )
             }
 

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -22,31 +23,31 @@ class SocialSignInButtons extends ConsumerWidget {
       children: [
         _SocialButton(
           label: 'Continue with Google',
-          icon: _googleIcon(),
+          icon: _socialIcon('assets/images/google.svg'),
           onTap: loading
               ? null
-              : () => ref.read(authControllerProvider.notifier).signInWithGoogle(),
+              : () => ref
+                    .read(authControllerProvider.notifier)
+                    .signInWithGoogle(),
         ),
         if (Platform.isIOS) ...[
           const SizedBox(height: 12),
           _SocialButton(
             label: 'Continue with Apple',
-            icon: const Icon(IconData(0xF04BE, fontFamily: 'CupertinoIcons', fontPackage: 'cupertino_icons'), color: Colors.white, size: 20),
+            icon: _socialIcon('assets/images/apple.svg'),
             onTap: loading
                 ? null
-                : () => ref.read(authControllerProvider.notifier).signInWithApple(),
+                : () => ref
+                      .read(authControllerProvider.notifier)
+                      .signInWithApple(),
           ),
         ],
       ],
     );
   }
 
-  Widget _googleIcon() {
-    return SizedBox(
-      width: 20,
-      height: 20,
-      child: CustomPaint(painter: _GoogleLogoPainter()),
-    );
+  Widget _socialIcon(String assetPath) {
+    return SizedBox(width: 20, height: 20, child: SvgPicture.asset(assetPath));
   }
 }
 
@@ -74,7 +75,11 @@ class OrDivider extends StatelessWidget {
 }
 
 class _SocialButton extends StatelessWidget {
-  const _SocialButton({required this.label, required this.icon, required this.onTap});
+  const _SocialButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
 
   final String label;
   final Widget icon;
@@ -115,72 +120,4 @@ class _SocialButton extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Paints the Google "G" logo with the four brand colours.
-class _GoogleLogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double w = size.width;
-    final double h = size.height;
-
-    final paint = Paint()
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true;
-
-    // Blue
-    paint.color = const Color(0xFF4285F4);
-    canvas.drawArc(
-      Rect.fromLTWH(0, 0, w, h),
-      -0.5,
-      -2.6,
-      true,
-      paint,
-    );
-
-    // Green
-    paint.color = const Color(0xFF34A853);
-    canvas.drawArc(
-      Rect.fromLTWH(0, 0, w, h),
-      0.5,
-      1.1,
-      true,
-      paint,
-    );
-
-    // Yellow
-    paint.color = const Color(0xFFFBBC05);
-    canvas.drawArc(
-      Rect.fromLTWH(0, 0, w, h),
-      1.6,
-      1.1,
-      true,
-      paint,
-    );
-
-    // Red
-    paint.color = const Color(0xFFEA4335);
-    canvas.drawArc(
-      Rect.fromLTWH(0, 0, w, h),
-      2.7,
-      0.9,
-      true,
-      paint,
-    );
-
-    // White centre
-    paint.color = Colors.white;
-    canvas.drawCircle(Offset(w / 2, h / 2), w * 0.32, paint);
-
-    // Blue bar (right side of G)
-    paint.color = const Color(0xFF4285F4);
-    final barRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(w * 0.48, h * 0.36, w * 0.52, h * 0.28),
-      const Radius.circular(1),
-    );
-    canvas.drawRRect(barRect, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

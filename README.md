@@ -63,12 +63,7 @@ Below are common Flutter commands to build Android and iOS release artifacts. Ru
 3) Build: `flutter build apk --release`
 4) Artifact: `build/app/outputs/flutter-apk/app-release.apk`
 
-**Per-ABI APKs (smaller, device-specific)**
 
-```sh
-flutter build apk --split-per-abi --release
-# Artifacts: build/app/outputs/flutter-apk/app-<abi>-release.apk
-```
 
 **Android App Bundle (Play Store)**
 

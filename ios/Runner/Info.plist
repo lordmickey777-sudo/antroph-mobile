@@ -11,15 +11,16 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<!-- Replace with REVERSED_CLIENT_ID from GoogleService-Info.plist -->
-				<string>com.googleusercontent.apps.YOUR_CLIENT_ID</string>
+				<string>com.googleusercontent.apps.760875540633-lamivlfo0r2f8p7r41aii7eo20ve50ic</string>
 			</array>
 		</dict>
 	</array>
+	<key>GIDClientID</key>
+	<string>760875540633-lamivlfo0r2f8p7r41aii7eo20ve50ic.apps.googleusercontent.com</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Antroph</string>
+	<string>Aura</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
