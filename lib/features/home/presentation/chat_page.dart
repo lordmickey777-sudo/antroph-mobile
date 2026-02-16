@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,8 @@ import 'package:antroph_mobile/features/home/models/chat_models.dart';
 import 'package:antroph_mobile/features/home/models/realtime_voice_bridge_models.dart';
 import 'package:antroph_mobile/features/home/providers/chat_provider.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
+import 'package:antroph_mobile/features/story/models/mascot_model.dart';
+import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
 import 'package:antroph_mobile/features/profile/providers/profile_controller.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -31,7 +34,13 @@ const _assistantBubbleLight = Color(0xFFE9E9EB);
 const _accent = Color(0xFF9CC6FF);
 
 class ChatPage extends ConsumerStatefulWidget {
-  const ChatPage({super.key, this.storyTitle, this.storyId, this.storySessionId});
+  const ChatPage({
+    super.key,
+    this.storyTitle,
+    this.storyId,
+    this.storySessionId,
+    this.mascotConfig,
+  });
 
   final String? storyTitle;
 
@@ -40,6 +49,7 @@ class ChatPage extends ConsumerStatefulWidget {
 
   /// If provided, resumes an existing story voice session
   final String? storySessionId;
+  final MascotConfig? mascotConfig;
 
   /// Whether this chat page is in story mode
   bool get isStoryMode => storyId != null || storySessionId != null;
@@ -48,9 +58,11 @@ class ChatPage extends ConsumerStatefulWidget {
   ConsumerState<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver, RouteAware {
+class _ChatPageState extends ConsumerState<ChatPage>
+    with WidgetsBindingObserver, RouteAware {
   ModalRoute<void>? _modalRoute;
   bool _storySessionStarted = false;
+  String? _lastPrecachedMascotId;
   // Store reference for safe use in dispose()
   VoiceChatController? _voiceController;
 
@@ -103,6 +115,21 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     }
   }
 
+  void _precacheMascot(MascotConfig mascot) {
+    final mascotId = mascot.id.trim();
+    if (mascotId.isEmpty || mascotId == _lastPrecachedMascotId) return;
+    final riveRef = mascot.riveAssetUrl.trim();
+    if (riveRef.isEmpty || riveRef.startsWith('assets/')) return;
+    _lastPrecachedMascotId = mascotId;
+    unawaited(() async {
+      try {
+        await ref.read(mascotCacheServiceProvider).cacheMascot(mascot);
+      } catch (_) {
+        // Cache warmup is best effort.
+      }
+    }());
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -138,7 +165,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
       // Only use chatController in non-story mode
       if (!widget.isStoryMode) {
         ref.read(chatControllerProvider.notifier).pause();
@@ -192,7 +220,17 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     final voiceState = ref.watch(voiceChatControllerProvider);
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
-    final chatState = widget.isStoryMode ? null : ref.watch(chatControllerProvider);
+    final chatState = widget.isStoryMode
+        ? null
+        : ref.watch(chatControllerProvider);
+    MascotConfig? mascotConfig = widget.mascotConfig;
+    if (mascotConfig == null && widget.storyId != null) {
+      final detailAsync = ref.watch(storyDetailProvider(widget.storyId!));
+      mascotConfig = detailAsync.asData?.value.effectiveMascot;
+    }
+    if (mascotConfig != null) {
+      _precacheMascot(mascotConfig);
+    }
     final userProfile = ref.watch(profileControllerProvider).value;
     final userName = userProfile?.displayName ?? userProfile?.username;
     final headline = _chatHeadline(chatState, voiceState);
@@ -242,7 +280,12 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
           ],
         ),
         body: Container(
-          child: SafeArea(child: ChatScreen(isStoryMode: widget.isStoryMode)),
+          child: SafeArea(
+            child: ChatScreen(
+              isStoryMode: widget.isStoryMode,
+              mascotConfig: mascotConfig,
+            ),
+          ),
         ),
       ),
     );
@@ -250,16 +293,20 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
 }
 
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({super.key, this.isStoryMode = false});
+  const ChatScreen({super.key, this.isStoryMode = false, this.mascotConfig});
 
   final bool isStoryMode;
+  final MascotConfig? mascotConfig;
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
-  void _handleVoicePermissionDialogs(VoiceChatState? previous, VoiceChatState next) async {
+  void _handleVoicePermissionDialogs(
+    VoiceChatState? previous,
+    VoiceChatState next,
+  ) async {
     if (!mounted || previous?.permissionDialog == next.permissionDialog) {
       return;
     }
@@ -280,11 +327,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<VoiceChatState>(voiceChatControllerProvider, (previous, next) async {
+    ref.listen<VoiceChatState>(voiceChatControllerProvider, (
+      previous,
+      next,
+    ) async {
       _handleVoicePermissionDialogs(previous, next);
       if (!mounted) return;
       final error = next.errorMessage;
-      if (error != null && error.isNotEmpty && error != (previous?.errorMessage ?? '')) {
+      if (error != null &&
+          error.isNotEmpty &&
+          error != (previous?.errorMessage ?? '')) {
         showToast(context, error);
       }
     });
@@ -295,14 +347,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ref.listen<ChatState>(chatControllerProvider, (previous, next) {
         if (!mounted) return;
         final error = next.error;
-        if (error != null && error.isNotEmpty && error != (previous?.error ?? '')) {
+        if (error != null &&
+            error.isNotEmpty &&
+            error != (previous?.error ?? '')) {
           showToast(context, error);
         }
       });
     }
 
     // Only watch chatControllerProvider in non-story mode to avoid double WebSocket connection
-    final ChatState? chatState = widget.isStoryMode ? null : ref.watch(chatControllerProvider);
+    final ChatState? chatState = widget.isStoryMode
+        ? null
+        : ref.watch(chatControllerProvider);
     final ChatController? chatController = widget.isStoryMode
         ? null
         : ref.read(chatControllerProvider.notifier);
@@ -312,19 +368,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         // Use centralized responsive utilities for consistent breakpoints
-        final horizontalPadding = AppPadding.horizontal.fromConstraints(constraints);
+        final horizontalPadding = AppPadding.horizontal.fromConstraints(
+          constraints,
+        );
         final faceSize = (constraints.maxWidth * 0.75).clamp(250.0, 380.0);
-        final availableWidth = math.max(0, constraints.maxWidth - horizontalPadding * 2);
+        final availableWidth = math.max(
+          0,
+          constraints.maxWidth - horizontalPadding * 2,
+        );
         final bubbleMaxWidth = math.min(460.0, availableWidth * 0.95);
         const bottomPadding = 200.0;
 
         return Column(
           children: [
             Padding(
-              padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 4),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                12,
+                horizontalPadding,
+                4,
+              ),
               child: _Header(
                 voiceState: voiceState,
                 aiAudioLevelStream: voiceController.aiAudioLevelStream,
+                mascotConfig: widget.mascotConfig,
                 onReconnect: chatController?.forceReconnect,
                 onStartVoice: voiceController.startRecording,
                 onStopVoice: voiceController.stopRecordingAndSend,
@@ -346,7 +413,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             SafeArea(
               top: false,
               child: Padding(
-                padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 16),
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  12,
+                  horizontalPadding,
+                  16,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -394,6 +466,7 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.voiceState,
     required this.aiAudioLevelStream,
+    this.mascotConfig,
     this.onReconnect,
     required this.onStartVoice,
     required this.onStopVoice,
@@ -403,6 +476,7 @@ class _Header extends StatelessWidget {
 
   final VoiceChatState voiceState;
   final Stream<double> aiAudioLevelStream;
+  final MascotConfig? mascotConfig;
   final VoidCallback? onReconnect;
   final VoidCallback onStartVoice;
   final VoidCallback onStopVoice;
@@ -427,7 +501,11 @@ class _Header extends StatelessWidget {
                 child: SizedBox(
                   width: faceSize,
                   height: faceSize,
-                  child: VoiceActivityFace(levelStream: aiAudioLevelStream, threshold: 0.008),
+                  child: VoiceActivityFace(
+                    levelStream: aiAudioLevelStream,
+                    threshold: 0.008,
+                    mascotConfig: mascotConfig,
+                  ),
                 ),
               ),
             ),
@@ -506,7 +584,9 @@ class _ConnectionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.04);
+    final bgColor = isDark
+        ? Colors.white.withOpacity(0.04)
+        : Colors.black.withOpacity(0.04);
     final borderColor = isDark ? Colors.white12 : Colors.black12;
     final labelColor = isDark ? Colors.white70 : Colors.black54;
     final actionColor = isDark ? Colors.white : Colors.black87;
@@ -545,9 +625,15 @@ class _ConnectionChip extends StatelessWidget {
             TextButton(
               onPressed: onReconnect,
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 foregroundColor: actionColor,
-                textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               child: const Text('Reconnect'),
             ),
@@ -589,7 +675,11 @@ class _StatusPill extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: TextStyle(color: labelColor, fontSize: 12, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: labelColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -622,7 +712,9 @@ class _HeroMicButton extends StatelessWidget {
           ? [isDark ? Colors.white : Colors.black87, _accent]
           : [
               _accent.withOpacity(0.8),
-              isDark ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.08),
+              isDark
+                  ? Colors.white.withOpacity(0.2)
+                  : Colors.black.withOpacity(0.08),
             ],
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
@@ -647,7 +739,9 @@ class _HeroMicButton extends StatelessWidget {
           gradient: gradient,
           boxShadow: [
             BoxShadow(
-              color: _accent.withOpacity(recording ? 0.6 : (isDark ? 0.25 : 0.18)),
+              color: _accent.withOpacity(
+                recording ? 0.6 : (isDark ? 0.25 : 0.18),
+              ),
               blurRadius: 30,
               spreadRadius: 1,
             ),
@@ -657,9 +751,13 @@ class _HeroMicButton extends StatelessWidget {
           margin: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isDark ? Colors.black.withOpacity(0.55) : Colors.white.withOpacity(0.9),
+            color: isDark
+                ? Colors.black.withOpacity(0.55)
+                : Colors.white.withOpacity(0.9),
             border: Border.all(
-              color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.12),
+              color: isDark
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.black.withOpacity(0.12),
             ),
           ),
           child: Icon(
@@ -678,10 +776,7 @@ class _HeroMicButton extends StatelessWidget {
 }
 
 class _MuteButton extends StatelessWidget {
-  const _MuteButton({
-    required this.isMuted,
-    required this.onToggle,
-  });
+  const _MuteButton({required this.isMuted, required this.onToggle});
 
   final bool isMuted;
   final VoidCallback onToggle;
@@ -689,18 +784,19 @@ class _MuteButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
-    final bgColor = isMuted ? Colors.red : (isDark ? Colors.white : Colors.black87);
-    final iconColor = isMuted ? Colors.white : (isDark ? Colors.black : Colors.white);
+    final bgColor = isMuted
+        ? Colors.red
+        : (isDark ? Colors.white : Colors.black87);
+    final iconColor = isMuted
+        ? Colors.white
+        : (isDark ? Colors.black : Colors.white);
 
     return GestureDetector(
       onTap: onToggle,
       child: Container(
         width: 64,
         height: 64,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: bgColor,
-        ),
+        decoration: BoxDecoration(shape: BoxShape.circle, color: bgColor),
         child: Icon(
           isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
           color: iconColor,
@@ -726,10 +822,7 @@ class _EndButton extends StatelessWidget {
       child: Container(
         width: 64,
         height: 64,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: bgColor,
-        ),
+        decoration: BoxDecoration(shape: BoxShape.circle, color: bgColor),
         child: const Icon(
           Icons.call_end_rounded,
           color: Colors.white,
@@ -777,7 +870,11 @@ class ChatList extends StatelessWidget {
 }
 
 class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({required this.message, required this.onRetry, required this.maxWidth});
+  const _ChatBubble({
+    required this.message,
+    required this.onRetry,
+    required this.maxWidth,
+  });
 
   final ChatMessageModel message;
   final VoidCallback onRetry;
@@ -786,13 +883,20 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final alignment = message.isUser ? Alignment.centerRight : Alignment.centerLeft;
+    final alignment = message.isUser
+        ? Alignment.centerRight
+        : Alignment.centerLeft;
     final userBubble = isDark ? _userBubbleDark : _userBubbleLight;
-    final assistantBubble = isDark ? _assistantBubbleDark : _assistantBubbleLight;
+    final assistantBubble = isDark
+        ? _assistantBubbleDark
+        : _assistantBubbleLight;
     final bgColor = message.isUser ? userBubble : assistantBubble;
-    final textColor = message.isUser ? Colors.white : (isDark ? Colors.white : Colors.black87);
-    final statusColor =
-        message.isUser ? Colors.white70 : (isDark ? Colors.white70 : Colors.black45);
+    final textColor = message.isUser
+        ? Colors.white
+        : (isDark ? Colors.white : Colors.black87);
+    final statusColor = message.isUser
+        ? Colors.white70
+        : (isDark ? Colors.white70 : Colors.black45);
     final isStreaming = !message.isUser && message.isStreaming;
 
     return Align(
@@ -800,12 +904,18 @@ class _ChatBubble extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: Container(
-          decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(18)),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(18),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(message.message, style: TextStyle(color: textColor, fontSize: 15, height: 1.4)),
+              Text(
+                message.message,
+                style: TextStyle(color: textColor, fontSize: 15, height: 1.4),
+              ),
               if (isStreaming) ...[
                 const SizedBox(height: 6),
                 Row(
@@ -814,10 +924,16 @@ class _ChatBubble extends StatelessWidget {
                     SizedBox(
                       width: 14,
                       height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: statusColor),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: statusColor,
+                      ),
                     ),
                     const SizedBox(width: 6),
-                    Text('Streaming...', style: TextStyle(color: statusColor, fontSize: 11)),
+                    Text(
+                      'Streaming...',
+                      style: TextStyle(color: statusColor, fontSize: 11),
+                    ),
                   ],
                 ),
               ] else if (message.isPending || message.isFailed) ...[
@@ -841,10 +957,12 @@ class _StatusRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final statusColor =
-        message.isUser ? Colors.white70 : (isDark ? Colors.white70 : Colors.black45);
-    final actionColor =
-        message.isUser ? Colors.white : (isDark ? Colors.white : Colors.black87);
+    final statusColor = message.isUser
+        ? Colors.white70
+        : (isDark ? Colors.white70 : Colors.black45);
+    final actionColor = message.isUser
+        ? Colors.white
+        : (isDark ? Colors.white : Colors.black87);
     if (message.isPending) {
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -852,10 +970,16 @@ class _StatusRow extends StatelessWidget {
           SizedBox(
             width: 14,
             height: 14,
-            child: CircularProgressIndicator(strokeWidth: 2, color: statusColor),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: statusColor,
+            ),
           ),
           const SizedBox(width: 6),
-          Text('Sending...', style: TextStyle(color: statusColor, fontSize: 11)),
+          Text(
+            'Sending...',
+            style: TextStyle(color: statusColor, fontSize: 11),
+          ),
         ],
       );
     }
@@ -864,7 +988,10 @@ class _StatusRow extends StatelessWidget {
       children: [
         const Icon(Icons.error_outline, color: Colors.redAccent, size: 16),
         const SizedBox(width: 6),
-        const Text('Failed', style: TextStyle(color: Colors.redAccent, fontSize: 11)),
+        const Text(
+          'Failed',
+          style: TextStyle(color: Colors.redAccent, fontSize: 11),
+        ),
         TextButton(
           onPressed: onRetry,
           style: TextButton.styleFrom(
@@ -872,7 +999,10 @@ class _StatusRow extends StatelessWidget {
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             foregroundColor: actionColor,
-            textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            textStyle: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           child: const Text('Retry'),
         ),
@@ -928,10 +1058,7 @@ class _TranscriptButton extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         child: Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: bgColor,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
           child: Icon(
             hasError ? Icons.error_rounded : Icons.subtitles_rounded,
             color: iconColor,
@@ -944,7 +1071,10 @@ class _TranscriptButton extends StatelessWidget {
 
   void _showTranscriptSheet(BuildContext context) {
     final hasError = voiceState.errorMessage?.isNotEmpty ?? false;
-    final active = voiceState.isRecording || voiceState.isProcessing || voiceState.isPlaying;
+    final active =
+        voiceState.isRecording ||
+        voiceState.isProcessing ||
+        voiceState.isPlaying;
     final title = voiceState.isRecording
         ? 'Listening...'
         : voiceState.isProcessing
@@ -1026,7 +1156,10 @@ class _TranscriptSheetContent extends StatelessWidget {
                   },
                   style: TextButton.styleFrom(
                     foregroundColor: hasError ? Colors.redAccent : textColor,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                   ),
                   child: Text(hasError ? 'Dismiss' : 'Stop'),
                 ),
@@ -1065,16 +1198,25 @@ class _TranscriptSheetContent extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Colors.redAccent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: Colors.redAccent.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
+                      const Icon(
+                        Icons.error_outline,
+                        color: Colors.redAccent,
+                        size: 18,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           voiceState.errorMessage!,
-                          style: TextStyle(color: context.secondaryTextColor, fontSize: 13),
+                          style: TextStyle(
+                            color: context.secondaryTextColor,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ],
@@ -1090,7 +1232,11 @@ class _TranscriptSheetContent extends StatelessWidget {
 }
 
 class _TranscriptLine extends StatelessWidget {
-  const _TranscriptLine({required this.label, required this.text, this.isUser = false});
+  const _TranscriptLine({
+    required this.label,
+    required this.text,
+    this.isUser = false,
+  });
 
   final String label;
   final String text;
@@ -1100,8 +1246,9 @@ class _TranscriptLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final textColor = context.primaryTextColor;
     final isDark = context.isDarkMode;
-    final userLabelColor =
-        isDark ? _accent : Theme.of(context).colorScheme.primary;
+    final userLabelColor = isDark
+        ? _accent
+        : Theme.of(context).colorScheme.primary;
     final assistantLabelColor = isDark ? Colors.lightGreenAccent : Colors.green;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1115,7 +1262,10 @@ class _TranscriptLine extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(text, style: TextStyle(color: textColor, fontSize: 15, height: 1.4)),
+        Text(
+          text,
+          style: TextStyle(color: textColor, fontSize: 15, height: 1.4),
+        ),
       ],
     );
   }
@@ -1131,7 +1281,10 @@ class _EmptyState extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const SizedBox(height: 10),
-          Text('', style: TextStyle(color: context.secondaryTextColor, fontSize: 14)),
+          Text(
+            '',
+            style: TextStyle(color: context.secondaryTextColor, fontSize: 14),
+          ),
         ],
       ),
     );

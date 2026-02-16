@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>760875540633-lamivlfo0r2f8p7r41aii7eo20ve50ic.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.760875540633-lamivlfo0r2f8p7r41aii7eo20ve50ic</string>
+	<key>API_KEY</key>
+	<string>AIzaSyBEYP1BOI9IXp17RJxGC79F-g1vvj5LRFo</string>
+	<key>GCM_SENDER_ID</key>
+	<string>760875540633</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.antroph.auraapp</string>
+	<key>PROJECT_ID</key>
+	<string>anthroph-11199</string>
+	<key>STORAGE_BUCKET</key>
+	<string>anthroph-11199.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:760875540633:ios:1cd127457691b3c17a5808</string>
+</dict>
+</plist>

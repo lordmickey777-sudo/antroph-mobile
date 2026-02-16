@@ -54,6 +54,15 @@ import AVFoundation
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
+  override func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    NSLog("[AuthRedirect] openURL: %@", url.absoluteString)
+    return super.application(app, open: url, options: options)
+  }
+
   private func startAudioEngine(sampleRate: Int) {
     stopAudioEngine()
 

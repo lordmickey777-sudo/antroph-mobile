@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../models/user.dart';
 import '../repository/auth_repository.dart';
 import '../services/email_storage_service.dart';
+import '../services/social_auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../network/error_formatter.dart';
 import '../../network/api_client.dart';
@@ -23,6 +25,7 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   AuthTokens? _tokens;
   AuthTokens? get tokens => _tokens;
   late final AuthRepository _repo = AuthRepository();
+  late final SocialAuthService _socialAuth = SocialAuthService();
 
   static const _prefsAccessToken = 'auth_access_token';
   static const _prefsRefreshToken = 'auth_refresh_token';
@@ -198,6 +201,70 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     } catch (e, st) {
       state = AsyncValue.error(e.toString(), st);
     }
+  }
+
+  Future<void> signInWithGoogle() async {
+    state = const AsyncValue.loading();
+    try {
+      debugPrint('[AuthController] signInWithGoogle start');
+      final idToken = await _socialAuth.signInWithGoogle().timeout(
+            const Duration(seconds: 75),
+            onTimeout: () => throw Exception(
+              'Google sign-in timed out before returning to the app.',
+            ),
+          );
+      debugPrint('[AuthController] received Firebase ID token (${idToken.length} chars)');
+      await _handleFirebaseAuth(idToken);
+      debugPrint('[AuthController] backend /auth/firebase success');
+    } on DioException catch (e, st) {
+      final apiError = ErrorFormatter.fromDio(e);
+      debugPrint('[AuthController] backend /auth/firebase failed: ${apiError.message}');
+      state = AsyncValue.error(apiError.message, st);
+    } catch (e, st) {
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      debugPrint('[AuthController] Google sign-in failed before backend: $msg');
+      state = AsyncValue.error(msg, st);
+    }
+  }
+
+  Future<void> signInWithApple() async {
+    state = const AsyncValue.loading();
+    try {
+      debugPrint('[AuthController] signInWithApple start');
+      final idToken = await _socialAuth.signInWithApple().timeout(
+            const Duration(seconds: 75),
+            onTimeout: () => throw Exception(
+              'Apple sign-in timed out before returning to the app.',
+            ),
+          );
+      debugPrint('[AuthController] received Firebase ID token (${idToken.length} chars)');
+      await _handleFirebaseAuth(idToken);
+      debugPrint('[AuthController] backend /auth/firebase success');
+    } on DioException catch (e, st) {
+      final apiError = ErrorFormatter.fromDio(e);
+      debugPrint('[AuthController] backend /auth/firebase failed: ${apiError.message}');
+      state = AsyncValue.error(apiError.message, st);
+    } catch (e, st) {
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      debugPrint('[AuthController] Apple sign-in failed before backend: $msg');
+      state = AsyncValue.error(msg, st);
+    }
+  }
+
+  Future<void> _handleFirebaseAuth(String idToken) async {
+    final tokensMap = await _repo.firebaseAuth(idToken: idToken);
+    _tokens = AuthTokens(
+      accessToken: tokensMap['access_token']!,
+      refreshToken: tokensMap['refresh_token']!,
+      tokenType: tokensMap['token_type']!,
+    );
+    ApiClient.I.setAuthTokens(
+      accessToken: _tokens!.accessToken,
+      refreshToken: _tokens!.refreshToken,
+      tokenType: _tokens!.tokenType,
+    );
+    await _persistTokens(_tokens!);
+    state = AsyncValue.data(AuthUser(id: 'self', email: '', emailVerificationRequired: false));
   }
 
   Future<void> logout() async {

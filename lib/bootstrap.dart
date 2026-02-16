@@ -1,27 +1,43 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart' as l;
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'core/env/env.dart';
+import 'firebase_options.dart';
 
 import 'core/logging/logger.dart';
 
 typedef AppRunner = Future<void> Function();
 
+Future<void> _initializeCoreServices() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
+  await AppEnv.load();
+  Log.init();
+}
+
 Future<void> bootstrap(AppRunner runAppCallback) async {
-  final sentryDsn = const String.fromEnvironment('SENTRY_DSN', defaultValue: '');
-  final release = const String.fromEnvironment('APP_RELEASE', defaultValue: 'dev');
+  final sentryDsn = const String.fromEnvironment(
+    'SENTRY_DSN',
+    defaultValue: '',
+  );
+  final release = const String.fromEnvironment(
+    'APP_RELEASE',
+    defaultValue: 'dev',
+  );
 
   if (sentryDsn.isEmpty) {
     // Run without Sentry
     l.Logger().i('Starting app without Sentry (no DSN provided).');
     await runZonedGuarded(
       () async {
-        WidgetsFlutterBinding.ensureInitialized();
-        await AppEnv.load();
-        // Initialize logger
-        Log.init();
+        await _initializeCoreServices();
         await runAppCallback();
       },
       (error, stack) {
@@ -41,10 +57,7 @@ Future<void> bootstrap(AppRunner runAppCallback) async {
     appRunner: () async {
       await runZonedGuarded(
         () async {
-          WidgetsFlutterBinding.ensureInitialized();
-          await AppEnv.load();
-          // Initialize logger
-          Log.init();
+          await _initializeCoreServices();
           await runAppCallback();
         },
         (error, stack) async {

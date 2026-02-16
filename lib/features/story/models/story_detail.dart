@@ -1,7 +1,10 @@
+import 'mascot_model.dart';
+
 class StoryDetailDto {
   StoryDetailDto({
     required this.id,
     required this.categoryId,
+    required this.mascotId,
     required this.title,
     required this.description,
     required this.author,
@@ -18,10 +21,13 @@ class StoryDetailDto {
     required this.updatedAt,
     required this.tree,
     required this.previewNodeIds,
+    this.mascot,
   });
 
   final String id;
   final String categoryId;
+  final String mascotId;
+  final MascotConfig? mascot;
   final String title;
   final String description;
   final String author;
@@ -42,6 +48,8 @@ class StoryDetailDto {
   factory StoryDetailDto.fromJson(Map<String, dynamic> json) => StoryDetailDto(
     id: (json['id'] as String?)?.trim() ?? '',
     categoryId: (json['category_id'] as String?)?.trim() ?? '',
+    mascotId: (json['mascot_id'] as String?)?.trim() ?? '',
+    mascot: MascotConfig.maybeFromJson(json['mascot']),
     title: (json['title'] as String?)?.trim() ?? '',
     description: (json['description'] as String?)?.trim() ?? '',
     author: (json['author'] as String?)?.trim() ?? '',
@@ -56,8 +64,11 @@ class StoryDetailDto {
     createdByAdminId: (json['created_by_admin_id'] as String?)?.trim() ?? '',
     createdAt: _parseDate(json['created_at']),
     updatedAt: _parseDate(json['updated_at']),
-    tree: (json['tree'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{},
-    previewNodeIds: ((json['preview_node_ids'] as List?) ?? const []).whereType<String>().toList(),
+    tree:
+        (json['tree'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{},
+    previewNodeIds: ((json['preview_node_ids'] as List?) ?? const [])
+        .whereType<String>()
+        .toList(),
   );
 
   static DateTime? _parseDate(dynamic v) {
@@ -75,6 +86,8 @@ class StoryDetailDto {
   Map<String, dynamic> toJson() => {
     'id': id,
     'category_id': categoryId,
+    'mascot_id': mascotId,
+    if (mascot != null) 'mascot': mascot!.toJson(),
     'title': title,
     'description': description,
     'author': author,
@@ -92,4 +105,6 @@ class StoryDetailDto {
     'tree': tree,
     'preview_node_ids': previewNodeIds,
   };
+
+  MascotConfig get effectiveMascot => mascot ?? MascotConfig.defaultAnthroph();
 }
