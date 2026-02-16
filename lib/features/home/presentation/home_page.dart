@@ -4,6 +4,7 @@ import 'package:antroph_mobile/widgets/bottom_nav.dart';
 import 'package:antroph_mobile/features/hardware/presentation/hardware_page.dart';
 import 'package:antroph_mobile/features/profile/presentation/profile_page.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page.dart';
+import 'package:antroph_mobile/features/community_stories/presentation/create_story_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -56,6 +57,7 @@ class _HomePageState extends State<HomePage> {
               },
               children: const [
                 StoryPage(),
+                CreateStoryPage(),
                 HardwarePage(),
                 ProfilePage(),
               ],

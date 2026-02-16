@@ -51,6 +51,8 @@
 	<string>Location access is used to scan for Bluetooth and Wi‑Fi networks.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>We need access to your microphone for recording audio.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>This app uses speech recognition to let you dictate story content using your voice.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs access to your photo library to let you choose an avatar.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

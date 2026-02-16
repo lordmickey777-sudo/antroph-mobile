@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 
-enum HomeTab { story, hardware, profile }
+enum HomeTab { story, create, hardware, profile }
 
 class BottomNav extends StatelessWidget {
   const BottomNav({super.key, required this.current, required this.onChanged});
@@ -58,6 +58,13 @@ class BottomNav extends StatelessWidget {
                       tab: HomeTab.story,
                       icon: Icons.auto_stories_rounded,
                       activeIcon: Icons.auto_stories_rounded,
+                      itemHeight: navHeight - 16,
+                    ),
+                    _navItem(
+                      context,
+                      tab: HomeTab.create,
+                      icon: Icons.add_circle_outline_rounded,
+                      activeIcon: Icons.add_circle_rounded,
                       itemHeight: navHeight - 16,
                     ),
                     _navItem(
