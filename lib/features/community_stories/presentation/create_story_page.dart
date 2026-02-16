@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -64,9 +65,20 @@ class CreateStoryPage extends ConsumerWidget {
                     icon: Icons.edit_note_rounded,
                     title: 'New Story',
                     subtitle: 'Create a new community story with AI assistance',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const StoryFormPage()),
-                    ),
+                    onTap: () async {
+                      final result = await showAuthGuardSheet(
+                        context,
+                        ref,
+                        actionDescription: 'Create a new story',
+                      );
+                      if (!context.mounted) return;
+                      if (result == AuthGuardResult.authenticated ||
+                          result == AuthGuardResult.loginSuccessful) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const StoryFormPage()),
+                        );
+                      }
+                    },
                     isDark: isDark,
                   ),
                   const SizedBox(height: 16),
@@ -74,9 +86,20 @@ class CreateStoryPage extends ConsumerWidget {
                     icon: Icons.library_books_rounded,
                     title: 'My Stories',
                     subtitle: 'View and manage your created stories',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const MyStoriesPage()),
-                    ),
+                    onTap: () async {
+                      final result = await showAuthGuardSheet(
+                        context,
+                        ref,
+                        actionDescription: 'View your stories',
+                      );
+                      if (!context.mounted) return;
+                      if (result == AuthGuardResult.authenticated ||
+                          result == AuthGuardResult.loginSuccessful) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const MyStoriesPage()),
+                        );
+                      }
+                    },
                     isDark: isDark,
                   ),
                   const SizedBox(height: 120),

@@ -58,7 +58,7 @@ class _HomePageState extends State<HomePage> {
               children: const [
                 StoryPage(),
                 CreateStoryPage(),
-                HardwarePage(),
+                ClipRect(child: HardwarePage()),
                 ProfilePage(),
               ],
             ),
@@ -94,5 +94,4 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-
 }

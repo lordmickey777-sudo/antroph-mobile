@@ -1,13 +1,16 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
 import '../models/rive_element_model.dart';
+import '../providers/community_stories_providers.dart';
+import 'my_stories_page.dart';
 
 /// Wraps [ChatPage] in preview mode so the user can voice-test their story
 /// before it goes through moderation.
-class StoryPreviewPage extends StatelessWidget {
+class StoryPreviewPage extends ConsumerWidget {
   const StoryPreviewPage({
     super.key,
     required this.storyId,
@@ -20,7 +23,7 @@ class StoryPreviewPage extends StatelessWidget {
   final RiveElementDto? riveElement;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bannerBg = isDark
         ? const Color(0xFF1B2530)
@@ -63,6 +66,46 @@ class StoryPreviewPage extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  GestureDetector(
+                    onTap: () {
+                      ref.invalidate(myStoriesProvider);
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(
+                          builder: (_) => const MyStoriesPage(),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : Colors.black.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            CupertinoIcons.book,
+                            color: bannerText,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'My Stories',
+                            style: TextStyle(
+                              color: bannerText,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
                     child: Container(
