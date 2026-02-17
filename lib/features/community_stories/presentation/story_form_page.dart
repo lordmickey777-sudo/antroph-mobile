@@ -269,11 +269,9 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
             const SizedBox(height: 32),
 
             // Submit
-            Center(
-              child: AppPillButton(
-                label: 'Create Story',
-                icon: Icons.auto_stories_rounded,
-                isLoading: creation.isSubmitting,
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
                 onPressed: creation.isSubmitting
                     ? null
                     : () {
@@ -281,6 +279,18 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
                           notifier.submit();
                         }
                       },
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                ),
+                child: creation.isSubmitting
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Create Story'),
               ),
             ),
 
