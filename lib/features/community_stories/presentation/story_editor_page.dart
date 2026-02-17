@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/app_input.dart';
 import 'package:antroph_mobile/widgets/app_dropdown.dart';
-import 'package:antroph_mobile/widgets/app_action_button.dart';
+
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 
@@ -211,12 +211,22 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
                   },
                 ),
                 const SizedBox(height: 32),
-                Center(
-                  child: AppPillButton(
-                    label: 'Save Changes',
-                    icon: Icons.save_rounded,
-                    isLoading: _saving,
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
                     onPressed: _saving ? null : _save,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                    ),
+                    child: _saving
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save Changes'),
                   ),
                 ),
                 const SizedBox(height: 120),

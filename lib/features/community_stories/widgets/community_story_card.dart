@@ -17,6 +17,17 @@ class CommunityStoryCard extends StatelessWidget {
   final VoidCallback? onTap;
   final bool showStatus;
 
+  String? _resolveImageUrl() {
+    if (story.coverImageUrl != null && story.coverImageUrl!.isNotEmpty) {
+      return story.coverImageUrl;
+    }
+    final thumb = story.riveElement?.thumbnailUrl;
+    if (thumb != null && thumb.isNotEmpty && thumb.startsWith('http')) {
+      return thumb;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -42,19 +53,22 @@ class CommunityStoryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Cover image
-            if (story.coverImageUrl != null &&
-                story.coverImageUrl!.isNotEmpty)
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Image.network(
-                  story.coverImageUrl!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _PlaceholderCover(isDark: isDark),
-                ),
-              )
-            else
-              _PlaceholderCover(isDark: isDark),
+            // Cover image (fallback to rive element thumbnail)
+            Builder(builder: (_) {
+              final imageUrl = _resolveImageUrl();
+              if (imageUrl != null) {
+                return AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        _PlaceholderCover(isDark: isDark),
+                  ),
+                );
+              }
+              return _PlaceholderCover(isDark: isDark);
+            }),
 
             Padding(
               padding: const EdgeInsets.all(14),

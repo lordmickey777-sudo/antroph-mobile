@@ -926,6 +926,28 @@ class _CommunityStoryCompactCard extends StatelessWidget {
   final bool isDark;
   final VoidCallback onTap;
 
+  Widget _buildCoverImage() {
+    final coverUrl = story.coverImageUrl;
+    if (coverUrl != null && coverUrl.isNotEmpty) {
+      return Image.network(
+        coverUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) =>
+            Image.asset('assets/images/default.png', fit: BoxFit.cover),
+      );
+    }
+    final thumb = story.riveElement?.thumbnailUrl;
+    if (thumb != null && thumb.isNotEmpty && thumb.startsWith('http')) {
+      return Image.network(
+        thumb,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) =>
+            Image.asset('assets/images/default.png', fit: BoxFit.cover),
+      );
+    }
+    return Image.asset('assets/images/default.png', fit: BoxFit.cover);
+  }
+
   @override
   Widget build(BuildContext context) {
     final borderColor = isDark
@@ -946,38 +968,8 @@ class _CommunityStoryCompactCard extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Cover image
-                if (story.coverImageUrl != null &&
-                    story.coverImageUrl!.isNotEmpty)
-                  Image.network(
-                    story.coverImageUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.04)
-                          : Colors.black.withValues(alpha: 0.04),
-                      child: Icon(
-                        Icons.auto_stories_rounded,
-                        size: 36,
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.15)
-                            : Colors.black.withValues(alpha: 0.12),
-                      ),
-                    ),
-                  )
-                else
-                  Container(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.04)
-                        : Colors.black.withValues(alpha: 0.04),
-                    child: Icon(
-                      Icons.auto_stories_rounded,
-                      size: 36,
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.15)
-                          : Colors.black.withValues(alpha: 0.12),
-                    ),
-                  ),
+                // Cover image (fallback to rive thumbnail, then default asset)
+                _buildCoverImage(),
 
                 // Gradient overlay
                 Positioned(
