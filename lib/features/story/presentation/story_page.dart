@@ -20,6 +20,9 @@ import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
+import 'package:antroph_mobile/features/community_stories/providers/community_stories_providers.dart';
+import 'package:antroph_mobile/features/community_stories/models/community_story_model.dart';
+import 'package:antroph_mobile/features/community_stories/presentation/community_browse_page.dart';
 
 class StoryPage extends ConsumerWidget {
   const StoryPage({super.key});
@@ -93,6 +96,7 @@ class StoryPage extends ConsumerWidget {
                     section: section,
                     onTap: (card) => _openStory(context, card),
                   ),
+                _CommunityStoriesSliver(),
                 const SliverToBoxAdapter(child: SizedBox(height: 120)),
               ],
             ),
@@ -730,6 +734,302 @@ class _StoryImageShimmer extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [const ShimmerBox(radius: 0), child],
+    );
+  }
+}
+
+class _CommunityStoriesSliver extends ConsumerWidget {
+  const _CommunityStoriesSliver();
+
+  static const double _cardWidth = 200;
+  static const double _cardHeight = 240;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final asyncCommunity = ref.watch(communityBrowseProvider(null));
+
+    return asyncCommunity.when(
+      loading: () => const SliverToBoxAdapter(child: SizedBox.shrink()),
+      error: (_, __) => const SliverToBoxAdapter(child: SizedBox.shrink()),
+      data: (stories) {
+        if (stories.isEmpty) {
+          return const SliverToBoxAdapter(child: SizedBox.shrink());
+        }
+
+        return SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TypographyText(
+                      'Community Stories',
+                      variant: TypographyVariant.body1,
+                      color: isDark ? Colors.white : Colors.black87,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const CommunityBrowsePage(),
+                        ),
+                      ),
+                      child: TypographyText(
+                        'See All',
+                        variant: TypographyVariant.body2,
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.5)
+                            : Colors.black.withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                height: _cardHeight,
+                child: ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: stories.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    final story = stories[index];
+                    return _CommunityStoryCompactCard(
+                      story: story,
+                      width: _cardWidth,
+                      isDark: isDark,
+                      onTap: () => _openCommunityStory(context, story),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _openCommunityStory(BuildContext context, CommunityStoryDto story) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showAppBottomSheet(
+      context: context,
+      builder: (context, scrollController) => CustomScrollView(
+        controller: scrollController,
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (story.coverImageUrl != null &&
+                      story.coverImageUrl!.isNotEmpty)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        story.coverImageUrl!,
+                        width: double.infinity,
+                        height: 200,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  Text(
+                    story.title,
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (story.creatorName != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'by ${story.creatorName}',
+                      style: TextStyle(
+                        color: isDark ? Colors.white70 : Colors.black54,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                  if (story.description != null &&
+                      story.description!.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      story.description!,
+                      style: TextStyle(
+                        color: isDark ? Colors.white70 : Colors.black54,
+                        fontSize: 15,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                  if (story.themes.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: story.themes
+                          .map(
+                            (t) => Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.08)
+                                    : Colors.black.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                t,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white70
+                                      : Colors.black54,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommunityStoryCompactCard extends StatelessWidget {
+  const _CommunityStoryCompactCard({
+    required this.story,
+    required this.width,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  final CommunityStoryDto story;
+  final double width;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  Widget _buildCoverImage() {
+    final coverUrl = story.coverImageUrl;
+    if (coverUrl != null && coverUrl.isNotEmpty) {
+      return Image.network(
+        coverUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) =>
+            Image.asset('assets/images/default.png', fit: BoxFit.cover),
+      );
+    }
+    final thumb = story.riveElement?.thumbnailUrl;
+    if (thumb != null && thumb.isNotEmpty && thumb.startsWith('http')) {
+      return Image.network(
+        thumb,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) =>
+            Image.asset('assets/images/default.png', fit: BoxFit.cover),
+      );
+    }
+    return Image.asset('assets/images/default.png', fit: BoxFit.cover);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.15)
+        : Colors.black.withValues(alpha: 0.1);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: width,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: borderColor),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Cover image (fallback to rive thumbnail, then default asset)
+                _buildCoverImage(),
+
+                // Gradient overlay
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    height: 80,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.0),
+                          Colors.black.withValues(alpha: 0.7),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Title + author
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        story.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (story.creatorName != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          story.creatorName!,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 11,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

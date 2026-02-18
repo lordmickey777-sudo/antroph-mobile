@@ -11,6 +11,9 @@ PODS:
     - PromisesObjC (~> 2.4)
   - audio_session (0.0.1):
     - Flutter
+  - CwlCatchException (2.2.1):
+    - CwlCatchExceptionSupport (~> 2.2.1)
+  - CwlCatchExceptionSupport (2.2.1)
   - device_info_plus (0.0.1):
     - Flutter
   - Firebase/Auth (12.8.0):
@@ -158,6 +161,10 @@ PODS:
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
+  - speech_to_text (7.2.0):
+    - CwlCatchException
+    - Flutter
+    - FlutterMacOS
   - sqlite3 (3.50.4):
     - sqlite3/common (= 3.50.4)
   - sqlite3/common (3.50.4)
@@ -208,6 +215,7 @@ DEPENDENCIES:
   - rive_common (from `.symlinks/plugins/rive_common/ios`)
   - sentry_flutter (from `.symlinks/plugins/sentry_flutter/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
+  - speech_to_text (from `.symlinks/plugins/speech_to_text/darwin`)
   - sqlite3_flutter_libs (from `.symlinks/plugins/sqlite3_flutter_libs/darwin`)
   - webview_flutter_wkwebview (from `.symlinks/plugins/webview_flutter_wkwebview/darwin`)
   - wifi_iot (from `.symlinks/plugins/wifi_iot/ios`)
@@ -216,6 +224,8 @@ SPEC REPOS:
   trunk:
     - AppAuth
     - AppCheckCore
+    - CwlCatchException
+    - CwlCatchExceptionSupport
     - Firebase
     - FirebaseAppCheckInterop
     - FirebaseAuth
@@ -278,6 +288,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/sentry_flutter/ios"
   shared_preferences_foundation:
     :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
+  speech_to_text:
+    :path: ".symlinks/plugins/speech_to_text/darwin"
   sqlite3_flutter_libs:
     :path: ".symlinks/plugins/sqlite3_flutter_libs/darwin"
   webview_flutter_wkwebview:
@@ -289,6 +301,8 @@ SPEC CHECKSUMS:
   AppAuth: 1c1a8afa7e12f2ec3a294d9882dfa5ab7d3cb063
   AppCheckCore: cc8fd0a3a230ddd401f326489c99990b013f0c4f
   audio_session: 9bb7f6c970f21241b19f5a3658097ae459681ba0
+  CwlCatchException: 7acc161b299a6de7f0a46a6ed741eae2c8b4d75a
+  CwlCatchExceptionSupport: 54ccab8d8c78907b57f99717fb19d4cc3bce02dc
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
   Firebase: 9a58fdbc9d8655ed7b79a19cf9690bb007d3d46d
   firebase_auth: e9031a1dbe04a90d98e8d11ff2302352a1c6d9e8
@@ -329,6 +343,7 @@ SPEC CHECKSUMS:
   Sentry: b53951377b78e21a734f5dc8318e333dbfc682d7
   sentry_flutter: 7f88e12d1882ec6e648644a7c0ff5b1466f07f99
   shared_preferences_foundation: 9e1978ff2562383bd5676f64ec4e9aa8fa06a6f7
+  speech_to_text: 3b313d98516d3d0406cea424782ec25470c59d19
   sqlite3: 73513155ec6979715d3904ef53a8d68892d4032b
   sqlite3_flutter_libs: 83f8e9f5b6554077f1d93119fe20ebaa5f3a9ef1
   webview_flutter_wkwebview: 1821ceac936eba6f7984d89a9f3bcb4dea99ebb2

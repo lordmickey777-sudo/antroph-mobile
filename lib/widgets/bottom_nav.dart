@@ -1,8 +1,50 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:antroph_mobile/core/responsive/responsive.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:glass_kit/glass_kit.dart';
 
-enum HomeTab { story, hardware, profile }
+enum HomeTab { story, create, hardware, profile }
+
+extension _HomeTabLabel on HomeTab {
+  String get label {
+    switch (this) {
+      case HomeTab.story:
+        return 'Stories';
+      case HomeTab.create:
+        return 'Create';
+      case HomeTab.hardware:
+        return 'Hardware';
+      case HomeTab.profile:
+        return 'Profile';
+    }
+  }
+
+  String get assetPath {
+    switch (this) {
+      case HomeTab.story:
+        return 'assets/icons/story-com.svg';
+      case HomeTab.create:
+        return 'assets/icons/create.svg';
+      case HomeTab.hardware:
+        return 'assets/icons/hardware.svg';
+      case HomeTab.profile:
+        return 'assets/icons/profile.svg';
+    }
+  }
+
+  /// Pill width when selected (icon + gap + text + visual padding).
+  double get pillWidth {
+    switch (this) {
+      case HomeTab.story:
+        return 124;
+      case HomeTab.create:
+        return 116;
+      case HomeTab.hardware:
+        return 132;
+      case HomeTab.profile:
+        return 118;
+    }
+  }
+}
 
 class BottomNav extends StatelessWidget {
   const BottomNav({super.key, required this.current, required this.onChanged});
@@ -12,134 +54,161 @@ class BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Responsive nav sizing for phone/tablet/iPad
-        final maxWidth = AppSizing.navBarMaxWidth.fromConstraints(constraints);
-        final double navWidth = (constraints.maxWidth * 0.65).clamp(0, maxWidth);
-        final navHeight = AppSizing.navBarHeight.fromConstraints(constraints);
-        return Center(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(50),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: Container(
-                width: navWidth,
-                height: navHeight,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(50),
-                  // Glass morphism: subtle gradient + translucent border + shadow
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: isDark
-                        ? [Colors.white.withOpacity(0.10), Colors.white.withOpacity(0.04)]
-                        : [Colors.black.withOpacity(0.06), Colors.black.withOpacity(0.02)],
-                  ),
-                  border: Border.all(
-                    color: isDark ? Colors.white.withOpacity(0.22) : Colors.black.withOpacity(0.15),
-                    width: 1.2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(isDark ? 0.4 : 0.15),
-                      blurRadius: 28,
-                      offset: const Offset(0, 12),
-                      spreadRadius: -4,
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                child: Row(
-                  children: [
-                    _navItem(
-                      context,
-                      tab: HomeTab.story,
-                      icon: Icons.auto_stories_rounded,
-                      activeIcon: Icons.auto_stories_rounded,
-                      itemHeight: navHeight - 16,
-                    ),
-                    _navItem(
-                      context,
-                      tab: HomeTab.hardware,
-                      icon: Icons.memory_outlined,
-                      activeIcon: Icons.memory_rounded,
-                      itemHeight: navHeight - 16,
-                    ),
-                    _navItem(
-                      context,
-                      tab: HomeTab.profile,
-                      icon: Icons.person_outline_rounded,
-                      activeIcon: Icons.person_rounded,
-                      itemHeight: navHeight - 16,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _NavGlassItem(
+            tab: HomeTab.story,
+            selected: current == HomeTab.story,
+            onTap: () => onChanged(HomeTab.story),
           ),
-        );
-      },
+          const SizedBox(width: 12),
+          _NavGlassItem(
+            tab: HomeTab.create,
+            selected: current == HomeTab.create,
+            onTap: () => onChanged(HomeTab.create),
+          ),
+          const SizedBox(width: 12),
+          _NavGlassItem(
+            tab: HomeTab.hardware,
+            selected: current == HomeTab.hardware,
+            onTap: () => onChanged(HomeTab.hardware),
+          ),
+          const SizedBox(width: 12),
+          _NavGlassItem(
+            tab: HomeTab.profile,
+            selected: current == HomeTab.profile,
+            onTap: () => onChanged(HomeTab.profile),
+          ),
+        ],
+      ),
     );
   }
+}
 
-  Widget _navItem(
-    BuildContext context, {
-    required HomeTab tab,
-    required IconData icon,
-    required IconData activeIcon,
-    required double itemHeight,
-  }) {
-    final bool selected = current == tab;
+class _NavGlassItem extends StatelessWidget {
+  const _NavGlassItem({
+    required this.tab,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final HomeTab tab;
+  final bool selected;
+  final VoidCallback onTap;
+
+  static const double _size = 56.0;
+  static const double _iconSize = 24.0;
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final iconColor = isDark ? Colors.white : Colors.black87;
-    final unselectedIconColor = isDark ? Colors.white.withValues(alpha: 0.5) : Colors.black.withValues(alpha: 0.4);
-    final selectedBgColor = isDark ? Colors.black.withOpacity(0.30) : Colors.white.withOpacity(0.50);
 
-    return Expanded(
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
+    final iconColor = isDark
+        ? Colors.white
+        : (selected ? Colors.black87 : Colors.black54);
+    final labelColor = isDark ? Colors.white : Colors.black87;
+
+    // Glass fill gradient — more opaque when selected
+    final glassFill = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: isDark
+          ? [
+              Colors.white.withValues(alpha: selected ? 0.16 : 0.09),
+              Colors.white.withValues(alpha: selected ? 0.07 : 0.03),
+            ]
+          : [
+              Colors.white.withValues(alpha: selected ? 0.80 : 0.55),
+              Colors.white.withValues(alpha: selected ? 0.60 : 0.35),
+            ],
+    );
+
+    // Luminous border gradient
+    final borderGrad = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: isDark
+          ? [
+              Colors.white.withValues(alpha: selected ? 0.30 : 0.14),
+              Colors.white.withValues(alpha: selected ? 0.10 : 0.05),
+            ]
+          : [
+              Colors.white.withValues(alpha: selected ? 0.90 : 0.55),
+              Colors.white.withValues(alpha: selected ? 0.30 : 0.15),
+            ],
+    );
+
+    final shadow = [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.08),
+        blurRadius: 18,
+        offset: const Offset(0, 5),
+        spreadRadius: -4,
+      ),
+      BoxShadow(
+        color: Colors.black.withValues(alpha: isDark ? 0.12 : 0.03),
+        blurRadius: 5,
+        offset: const Offset(0, 2),
+      ),
+    ];
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: selected ? tab.pillWidth : _size),
+        duration: const Duration(milliseconds: 350),
         curve: Curves.easeOutCubic,
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        height: itemHeight,
-        decoration: BoxDecoration(
-          color: selected ? selectedBgColor : Colors.transparent,
-          borderRadius: BorderRadius.circular(50),
-        ),
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(50),
-            onTap: () => onChanged(tab),
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            hoverColor: Colors.transparent,
-            overlayColor: WidgetStatePropertyAll(Colors.transparent),
-            child: Center(
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: selected ? 1.0 : 0.85, end: selected ? 1.0 : 0.85),
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOutBack,
-                builder: (context, scale, child) {
-                  return Transform.scale(
-                    scale: scale,
-                    child: child,
-                  );
-                },
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    selected ? activeIcon : icon,
-                    key: ValueKey('$tab-$selected'),
-                    size: 26,
-                    color: selected ? iconColor : unselectedIconColor,
+        builder: (context, animWidth, _) {
+          return GlassContainer.frostedGlass(
+            height: _size,
+            width: animWidth,
+            borderRadius: BorderRadius.circular(_size / 2),
+            blur: 20,
+            frostedOpacity: 0.10,
+            gradient: glassFill,
+            borderGradient: borderGrad,
+            borderWidth: 1.2,
+            boxShadow: shadow,
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SvgPicture.asset(
+                  tab.assetPath,
+                  width: _iconSize,
+                  height: _iconSize,
+                  colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+                ),
+                ClipRect(
+                  child: AnimatedAlign(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.centerLeft,
+                    widthFactor: selected ? 1.0 : 0.0,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Text(
+                        tab.label,
+                        style: TextStyle(
+                          color: labelColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.1,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.clip,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
