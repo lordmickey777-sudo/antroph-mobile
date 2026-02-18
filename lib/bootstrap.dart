@@ -43,6 +43,12 @@ Future<void> bootstrap(AppRunner runAppCallback) async {
         await runAppCallback();
       },
       (error, stack) {
+        unawaited(
+          PostHogService.captureRunZonedGuardedError(
+            error: error,
+            stackTrace: stack,
+          ),
+        );
         l.Logger().e('Uncaught error', error: error, stackTrace: stack);
       },
     );
@@ -63,6 +69,12 @@ Future<void> bootstrap(AppRunner runAppCallback) async {
           await runAppCallback();
         },
         (error, stack) async {
+          unawaited(
+            PostHogService.captureRunZonedGuardedError(
+              error: error,
+              stackTrace: stack,
+            ),
+          );
           l.Logger().e('Uncaught error', error: error, stackTrace: stack);
           await Sentry.captureException(error, stackTrace: stack);
         },

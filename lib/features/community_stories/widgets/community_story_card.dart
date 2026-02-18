@@ -62,12 +62,23 @@ class CommunityStoryCard extends StatelessWidget {
                   child: Image.network(
                     imageUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        _PlaceholderCover(isDark: isDark),
+                    errorBuilder: (_, __, ___) => AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Image.asset(
+                        'assets/images/default.png',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
                   ),
                 );
               }
-              return _PlaceholderCover(isDark: isDark);
+              return AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Image.asset(
+                  'assets/images/default.png',
+                  fit: BoxFit.cover,
+                ),
+              );
             }),
 
             Padding(
@@ -137,27 +148,3 @@ String _formatDate(DateTime date) {
   return '${months[date.month - 1]} ${date.day}';
 }
 
-class _PlaceholderCover extends StatelessWidget {
-  const _PlaceholderCover({required this.isDark});
-
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: Container(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.black.withValues(alpha: 0.04),
-        child: Icon(
-          Icons.auto_stories_rounded,
-          size: 40,
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.15)
-              : Colors.black.withValues(alpha: 0.12),
-        ),
-      ),
-    );
-  }
-}

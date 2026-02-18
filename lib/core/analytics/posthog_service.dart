@@ -34,6 +34,13 @@ class PostHogService {
     config.sessionReplayConfig.throttleDelay = const Duration(
       milliseconds: 1000,
     );
+    config.errorTrackingConfig.captureFlutterErrors = true;
+    config.errorTrackingConfig.capturePlatformDispatcherErrors = true;
+    config.errorTrackingConfig.captureIsolateErrors = true;
+    config.errorTrackingConfig.captureNativeExceptions = true;
+    config.errorTrackingConfig.captureSilentFlutterErrors = false;
+    config.errorTrackingConfig.inAppIncludes.add('package:antroph_mobile');
+    config.errorTrackingConfig.inAppByDefault = true;
 
     try {
       await _posthog.setup(config);
@@ -95,6 +102,32 @@ class PostHogService {
   static Future<void> reset() async {
     if (!_isInitialized) return;
     await _posthog.reset();
+  }
+
+  static Future<void> captureException({
+    required Object error,
+    StackTrace? stackTrace,
+    Map<String, Object>? properties,
+  }) async {
+    if (!_isInitialized) return;
+    await _posthog.captureException(
+      error: error,
+      stackTrace: stackTrace,
+      properties: properties,
+    );
+  }
+
+  static Future<void> captureRunZonedGuardedError({
+    required Object error,
+    StackTrace? stackTrace,
+    Map<String, Object>? properties,
+  }) async {
+    if (!_isInitialized) return;
+    await _posthog.captureRunZonedGuardedError(
+      error: error,
+      stackTrace: stackTrace,
+      properties: properties,
+    );
   }
 
   static String resolveDistinctId({

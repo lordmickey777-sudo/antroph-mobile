@@ -832,16 +832,28 @@ class _CommunityStoriesSliver extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (story.coverImageUrl != null &&
-                      story.coverImageUrl!.isNotEmpty)
-                    ClipRRect(
+                  ClipRRect(
                       borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        story.coverImageUrl!,
-                        width: double.infinity,
-                        height: 200,
-                        fit: BoxFit.cover,
-                      ),
+                      child: story.coverImageUrl != null &&
+                              story.coverImageUrl!.isNotEmpty
+                          ? Image.network(
+                              story.coverImageUrl!,
+                              width: double.infinity,
+                              height: 200,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Image.asset(
+                                'assets/images/default.png',
+                                width: double.infinity,
+                                height: 200,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : Image.asset(
+                              'assets/images/default.png',
+                              width: double.infinity,
+                              height: 200,
+                              fit: BoxFit.cover,
+                            ),
                     ),
                   const SizedBox(height: 16),
                   Text(
