@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -6,6 +8,7 @@ import '../repository/auth_repository.dart';
 import '../services/email_storage_service.dart';
 import '../services/social_auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../analytics/posthog_service.dart';
 import '../../network/error_formatter.dart';
 import '../../network/api_client.dart';
 
@@ -44,7 +47,11 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     final refresh = prefs.getString(_prefsRefreshToken) ?? '';
     final type = prefs.getString(_prefsTokenType) ?? 'Bearer';
     if (access.isNotEmpty && refresh.isNotEmpty) {
-      return AuthTokens(accessToken: access, refreshToken: refresh, tokenType: type);
+      return AuthTokens(
+        accessToken: access,
+        refreshToken: refresh,
+        tokenType: type,
+      );
     }
     return null;
   }
@@ -54,6 +61,56 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     await prefs.remove(_prefsAccessToken);
     await prefs.remove(_prefsRefreshToken);
     await prefs.remove(_prefsTokenType);
+  }
+
+  String _resolveUserId({String fallback = 'self'}) {
+    return PostHogService.extractUserIdFromAccessToken(_tokens?.accessToken) ??
+        fallback;
+  }
+
+  void _trackAuthenticatedUser(
+    AuthUser user, {
+    required String authMethod,
+    required String source,
+  }) {
+    final distinctId = PostHogService.resolveDistinctId(
+      userId: user.id,
+      email: user.email,
+      accessToken: _tokens?.accessToken,
+    );
+    if (distinctId.isEmpty) return;
+
+    unawaited(
+      PostHogService.identifyUser(
+        distinctId: distinctId,
+        email: user.email,
+        displayName: user.displayName,
+        username: user.username,
+        authMethod: authMethod,
+        source: source,
+      ),
+    );
+
+    unawaited(
+      PostHogService.capture(
+        'user_authenticated',
+        properties: {
+          'auth_method': authMethod,
+          'auth_source': source,
+          'distinct_id': distinctId,
+        },
+      ),
+    );
+  }
+
+  void _resetTrackedUser({required String source}) {
+    unawaited(() async {
+      await PostHogService.capture(
+        'user_logged_out',
+        properties: {'source': source},
+      );
+      await PostHogService.reset();
+    }());
   }
 
   @override
@@ -71,7 +128,9 @@ class AuthController extends AsyncNotifier<AuthUser?> {
 
     // Refresh tokens on launch so we don't drop the session due to an expired access token.
     try {
-      final refreshedMap = await _repo.refreshToken(refreshToken: restored.refreshToken);
+      final refreshedMap = await _repo.refreshToken(
+        refreshToken: restored.refreshToken,
+      );
       final refreshedTokens = AuthTokens(
         accessToken: refreshedMap['access_token'] ?? restored.accessToken,
         refreshToken: refreshedMap['refresh_token'] ?? restored.refreshToken,
@@ -88,7 +147,8 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       // Only clear tokens when the refresh token is definitively rejected by the server.
       // Network errors (timeout, no connection) should preserve tokens so the
       // 401 interceptor can retry later when connectivity is restored.
-      final isAuthFailure = e is DioException &&
+      final isAuthFailure =
+          e is DioException &&
           e.response != null &&
           (e.response!.statusCode == 401 ||
               e.response!.statusCode == 403 ||
@@ -97,13 +157,24 @@ class AuthController extends AsyncNotifier<AuthUser?> {
         _tokens = null;
         ApiClient.I.clearAuthTokens();
         await _clearTokens();
+        _resetTrackedUser(source: 'startup_refresh_rejected');
         return null;
       }
       // Transient error – keep existing tokens (already set above in ApiClient).
     }
 
     final email = await EmailStorageService.getLastEmail() ?? '';
-    return AuthUser(id: 'self', email: email, emailVerificationRequired: false);
+    final user = AuthUser(
+      id: _resolveUserId(),
+      email: email,
+      emailVerificationRequired: false,
+    );
+    _trackAuthenticatedUser(
+      user,
+      authMethod: 'token_refresh',
+      source: 'startup_restore',
+    );
+    return user;
   }
 
   void _setupTokenRefresher() {
@@ -127,7 +198,8 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       } catch (e) {
         // Only clear tokens when the server definitively rejects the refresh token.
         // Network errors should preserve tokens for future retry.
-        final isAuthFailure = e is DioException &&
+        final isAuthFailure =
+            e is DioException &&
             e.response != null &&
             (e.response!.statusCode == 401 ||
                 e.response!.statusCode == 403 ||
@@ -137,6 +209,7 @@ class AuthController extends AsyncNotifier<AuthUser?> {
           ApiClient.I.clearAuthTokens();
           await _clearTokens();
           state = const AsyncValue.data(null);
+          _resetTrackedUser(source: 'token_refresh_rejected');
         }
         return false;
       }
@@ -151,7 +224,7 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   }) async {
     state = const AsyncValue.loading();
     try {
-      await _repo.register(
+      final registeredUser = await _repo.register(
         email: email,
         password: password,
         displayName: displayName,
@@ -170,7 +243,17 @@ class AuthController extends AsyncNotifier<AuthUser?> {
         tokenType: _tokens!.tokenType,
       );
       await _persistTokens(_tokens!);
-      state = AsyncValue.data(AuthUser(id: 'self', email: email, emailVerificationRequired: false));
+      final user = AuthUser(
+        id: _resolveUserId(
+          fallback: registeredUser.id.isNotEmpty ? registeredUser.id : 'self',
+        ),
+        email: email,
+        emailVerificationRequired: registeredUser.emailVerificationRequired,
+        displayName: registeredUser.displayName ?? displayName,
+        username: registeredUser.username ?? username,
+      );
+      state = AsyncValue.data(user);
+      _trackAuthenticatedUser(user, authMethod: 'password', source: 'register');
     } on DioException catch (e, st) {
       final apiError = ErrorFormatter.fromDio(e);
       state = AsyncValue.error(apiError.message, st);
@@ -194,7 +277,13 @@ class AuthController extends AsyncNotifier<AuthUser?> {
         tokenType: _tokens!.tokenType,
       );
       await _persistTokens(_tokens!);
-      state = AsyncValue.data(AuthUser(id: 'self', email: email, emailVerificationRequired: false));
+      final user = AuthUser(
+        id: _resolveUserId(),
+        email: email,
+        emailVerificationRequired: false,
+      );
+      state = AsyncValue.data(user);
+      _trackAuthenticatedUser(user, authMethod: 'password', source: 'login');
     } on DioException catch (e, st) {
       final apiError = ErrorFormatter.fromDio(e);
       state = AsyncValue.error(apiError.message, st);
@@ -208,17 +297,21 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     try {
       debugPrint('[AuthController] signInWithGoogle start');
       final idToken = await _socialAuth.signInWithGoogle().timeout(
-            const Duration(seconds: 75),
-            onTimeout: () => throw Exception(
-              'Google sign-in timed out before returning to the app.',
-            ),
-          );
-      debugPrint('[AuthController] received Firebase ID token (${idToken.length} chars)');
-      await _handleFirebaseAuth(idToken);
+        const Duration(seconds: 75),
+        onTimeout: () => throw Exception(
+          'Google sign-in timed out before returning to the app.',
+        ),
+      );
+      debugPrint(
+        '[AuthController] received Firebase ID token (${idToken.length} chars)',
+      );
+      await _handleFirebaseAuth(idToken, authMethod: 'google');
       debugPrint('[AuthController] backend /auth/firebase success');
     } on DioException catch (e, st) {
       final apiError = ErrorFormatter.fromDio(e);
-      debugPrint('[AuthController] backend /auth/firebase failed: ${apiError.message}');
+      debugPrint(
+        '[AuthController] backend /auth/firebase failed: ${apiError.message}',
+      );
       state = AsyncValue.error(apiError.message, st);
     } catch (e, st) {
       final msg = e.toString().replaceFirst('Exception: ', '');
@@ -232,17 +325,21 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     try {
       debugPrint('[AuthController] signInWithApple start');
       final idToken = await _socialAuth.signInWithApple().timeout(
-            const Duration(seconds: 75),
-            onTimeout: () => throw Exception(
-              'Apple sign-in timed out before returning to the app.',
-            ),
-          );
-      debugPrint('[AuthController] received Firebase ID token (${idToken.length} chars)');
-      await _handleFirebaseAuth(idToken);
+        const Duration(seconds: 75),
+        onTimeout: () => throw Exception(
+          'Apple sign-in timed out before returning to the app.',
+        ),
+      );
+      debugPrint(
+        '[AuthController] received Firebase ID token (${idToken.length} chars)',
+      );
+      await _handleFirebaseAuth(idToken, authMethod: 'apple');
       debugPrint('[AuthController] backend /auth/firebase success');
     } on DioException catch (e, st) {
       final apiError = ErrorFormatter.fromDio(e);
-      debugPrint('[AuthController] backend /auth/firebase failed: ${apiError.message}');
+      debugPrint(
+        '[AuthController] backend /auth/firebase failed: ${apiError.message}',
+      );
       state = AsyncValue.error(apiError.message, st);
     } catch (e, st) {
       final msg = e.toString().replaceFirst('Exception: ', '');
@@ -251,7 +348,10 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     }
   }
 
-  Future<void> _handleFirebaseAuth(String idToken) async {
+  Future<void> _handleFirebaseAuth(
+    String idToken, {
+    required String authMethod,
+  }) async {
     final tokensMap = await _repo.firebaseAuth(idToken: idToken);
     _tokens = AuthTokens(
       accessToken: tokensMap['access_token']!,
@@ -264,7 +364,19 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       tokenType: _tokens!.tokenType,
     );
     await _persistTokens(_tokens!);
-    state = AsyncValue.data(AuthUser(id: 'self', email: '', emailVerificationRequired: false));
+    final tokenEmail =
+        PostHogService.extractEmailFromAccessToken(_tokens?.accessToken) ?? '';
+    final user = AuthUser(
+      id: _resolveUserId(),
+      email: tokenEmail,
+      emailVerificationRequired: false,
+    );
+    state = AsyncValue.data(user);
+    _trackAuthenticatedUser(
+      user,
+      authMethod: authMethod,
+      source: 'social_login',
+    );
   }
 
   Future<void> logout() async {
@@ -284,9 +396,10 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       ApiClient.I.clearAuthTokens();
       await _clearTokens();
       // Clear the stored email for privacy
-      EmailStorageService.clearLastEmail();
+      await EmailStorageService.clearLastEmail();
       // Clear the authenticated user
       state = const AsyncValue.data(null);
+      _resetTrackedUser(source: 'logout');
     }
   }
 
@@ -309,7 +422,11 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     required String newPassword,
   }) async {
     try {
-      return await _repo.resetPassword(email: email, token: token, newPassword: newPassword);
+      return await _repo.resetPassword(
+        email: email,
+        token: token,
+        newPassword: newPassword,
+      );
     } on DioException catch (e) {
       final apiError = ErrorFormatter.fromDio(e);
       throw apiError;
@@ -317,4 +434,6 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   }
 }
 
-final authControllerProvider = AsyncNotifierProvider<AuthController, AuthUser?>(AuthController.new);
+final authControllerProvider = AsyncNotifierProvider<AuthController, AuthUser?>(
+  AuthController.new,
+);

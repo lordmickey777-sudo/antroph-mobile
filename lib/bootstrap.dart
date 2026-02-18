@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart' as l;
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'core/analytics/posthog_service.dart';
 import 'core/env/env.dart';
 import 'firebase_options.dart';
 
@@ -20,6 +21,7 @@ Future<void> _initializeCoreServices() async {
   }
   await AppEnv.load();
   Log.init();
+  await PostHogService.setup();
 }
 
 Future<void> bootstrap(AppRunner runAppCallback) async {

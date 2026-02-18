@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 
 import 'app_router.dart';
 import 'core/theme/theme_provider.dart';
@@ -12,13 +13,15 @@ class App extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
 
-    return MaterialApp.router(
-      title: 'Antroph',
-      debugShowCheckedModeBanner: false,
-      routerConfig: router,
-      themeMode: themeMode,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
+    return PostHogWidget(
+      child: MaterialApp.router(
+        title: 'Antroph',
+        debugShowCheckedModeBanner: false,
+        routerConfig: router,
+        themeMode: themeMode,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+      ),
     );
   }
 }

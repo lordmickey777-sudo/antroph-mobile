@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 
 import 'core/navigation/app_route_observer.dart';
 import 'features/auth/pages/forgot_password_page.dart';
@@ -18,14 +19,26 @@ import 'features/splash/presentation/splash_page.dart';
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     routes: <RouteBase>[
-      GoRoute(path: '/', name: 'splash', builder: (context, state) => const SplashPage()),
+      GoRoute(
+        path: '/',
+        name: 'splash',
+        builder: (context, state) => const SplashPage(),
+      ),
       GoRoute(
         path: '/onboarding',
         name: 'onboarding',
         builder: (context, state) => const OnboardingPage(),
       ),
-      GoRoute(path: '/home', name: 'home', builder: (context, state) => const HomePage()),
-      GoRoute(path: '/auth/login', name: 'login', builder: (context, state) => const LoginPage()),
+      GoRoute(
+        path: '/home',
+        name: 'home',
+        builder: (context, state) => const HomePage(),
+      ),
+      GoRoute(
+        path: '/auth/login',
+        name: 'login',
+        builder: (context, state) => const LoginPage(),
+      ),
       GoRoute(
         path: '/auth/forgot-password',
         name: 'forgot-password',
@@ -46,7 +59,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'subscription',
         builder: (context, state) => const SubscriptionPage(),
       ),
-      GoRoute(path: '/profile/scan', name: 'scan', builder: (context, state) => const ScanPage()),
+      GoRoute(
+        path: '/profile/scan',
+        name: 'scan',
+        builder: (context, state) => const ScanPage(),
+      ),
       GoRoute(
         path: '/profile/support',
         name: 'support',
@@ -65,10 +82,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           if (args is! RobotPairingPageArgs) {
             return const ScanPage();
           }
-          return RobotPairingPage(pairingToken: args.pairingToken, serial: args.serial);
+          return RobotPairingPage(
+            pairingToken: args.pairingToken,
+            serial: args.serial,
+          );
         },
       ),
     ],
-    observers: [appRouteObserver],
+    observers: [appRouteObserver, PosthogObserver()],
   );
 });
