@@ -40,7 +40,7 @@ class MyStoriesPage extends ConsumerWidget {
         ),
       ),
       body: asyncStories.when(
-        loading: () => const CommunityStoryListShimmer(showStatus: true),
+        loading: () => const CommunityStoryListShimmer(showStatus: true, compact: true),
         error: (err, _) => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -99,6 +99,7 @@ class MyStoriesPage extends ConsumerWidget {
                 return CommunityStoryCard(
                   story: story,
                   showStatus: true,
+                  compact: true,
                   onTap: () {
                     final status = story.moderationStatus;
                     if (status == 'pending' ||

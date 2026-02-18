@@ -7,10 +7,12 @@ class CommunityStoryListShimmer extends StatelessWidget {
     super.key,
     this.cards = 4,
     this.showStatus = false,
+    this.compact = false,
   });
 
   final int cards;
   final bool showStatus;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -19,8 +21,9 @@ class CommunityStoryListShimmer extends StatelessWidget {
         physics: const NeverScrollableScrollPhysics(),
         itemCount: cards,
         separatorBuilder: (_, __) => const SizedBox(height: 14),
-        itemBuilder: (_, __) =>
-            CommunityStoryCardShimmer(showStatus: showStatus),
+        itemBuilder: (_, __) => compact
+            ? CommunityStoryCardCompactShimmer(showStatus: showStatus)
+            : CommunityStoryCardShimmer(showStatus: showStatus),
       ),
     );
   }
@@ -82,6 +85,61 @@ class CommunityStoryCardShimmer extends StatelessWidget {
                   ],
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CommunityStoryCardCompactShimmer extends StatelessWidget {
+  const CommunityStoryCardCompactShimmer({super.key, required this.showStatus});
+
+  final bool showStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: context.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.dividerColor),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const ShimmerBox(width: 125, height: 167, radius: 0),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (showStatus) ...[
+                    const ShimmerBox(width: 80, height: 22, radius: 999),
+                    const SizedBox(height: 10),
+                  ],
+                  const ShimmerText(width: 140, height: 16),
+                  const SizedBox(height: 6),
+                  const ShimmerText(width: 180, height: 13),
+                  const SizedBox(height: 4),
+                  const ShimmerText(width: 120, height: 13),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: const [
+                      ShimmerCircle(size: 14),
+                      SizedBox(width: 4),
+                      ShimmerBox(width: 54, height: 12, radius: 4),
+                      SizedBox(width: 12),
+                      ShimmerCircle(size: 14),
+                      SizedBox(width: 4),
+                      ShimmerBox(width: 44, height: 12, radius: 4),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],

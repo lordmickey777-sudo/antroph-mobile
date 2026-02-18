@@ -12,6 +12,7 @@ import 'package:antroph_mobile/widgets/toast.dart';
 import '../models/community_story_model.dart';
 import '../providers/community_stories_providers.dart';
 import '../widgets/voice_form_input.dart';
+import 'story_preview_page.dart';
 
 /// Edit page for pending or rejected community stories.
 class StoryEditorPage extends ConsumerStatefulWidget {
@@ -126,6 +127,29 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
           ),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        actions: [
+          asyncStory.whenOrNull(
+                data: (story) => IconButton(
+                  icon: Icon(
+                    CupertinoIcons.play_circle,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
+                  tooltip: 'Preview',
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => StoryPreviewPage(
+                          storyId: story.id,
+                          storyTitle: story.title,
+                          riveElement: story.riveElement,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ) ??
+              const SizedBox.shrink(),
+        ],
       ),
       body: asyncStory.when(
         loading: () => const _StoryEditorPageShimmer(),
