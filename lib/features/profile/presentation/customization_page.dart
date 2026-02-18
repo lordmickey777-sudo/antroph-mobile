@@ -6,6 +6,7 @@ import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/app_dropdown.dart';
 import 'package:antroph_mobile/widgets/app_input.dart';
+import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
@@ -207,7 +208,7 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
         ],
       ),
       body: state.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const _CustomizationPageShimmer(),
         error: (error, stack) => _buildError(context, error, stack),
         data: (_) => _buildForm(controller),
       ),
@@ -222,7 +223,10 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TypographyText('Unable to load settings', color: context.secondaryTextColor),
+            TypographyText(
+              'Unable to load settings',
+              color: context.secondaryTextColor,
+            ),
             const SizedBox(height: 12),
             TypographyText(message, color: context.tertiaryTextColor),
             const SizedBox(height: 20),
@@ -290,112 +294,118 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
             child: Form(
               key: _formKey,
               child: ListView(
-                padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, listBottomPadding),
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  12,
+                  horizontalPadding,
+                  listBottomPadding,
+                ),
                 children: [
-              _sectionTitle('Personality'),
-              const SizedBox(height: 12),
-              _buildPersonalitySlider(),
-              const SizedBox(height: 12),
-              AppDropdown(
-                label: 'Tone',
-                value: _tone,
-                options: _toneOptions,
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _tone = value);
-                },
-              ),
-              const SizedBox(height: 12),
-              AppDropdown(
-                label: 'Verbosity',
-                value: _verbosity,
-                options: _verbosityOptions,
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _verbosity = value);
-                },
-              ),
-              const SizedBox(height: 12),
-              AppDropdown(
-                label: 'Language complexity',
-                value: _languageComplexity,
-                options: _languageComplexityOptions,
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _languageComplexity = value);
-                },
-              ),
-              const SizedBox(height: 12),
-              AppInput(
-                controller: _companionNameController,
-                hint: 'Companion name',
-                icon: Icons.star_outline,
-                validator: (value) => value != null && value.trim().isNotEmpty
-                    ? null
-                    : 'Enter a name',
-              ),
-              const SizedBox(height: 24),
-              _sectionTitle('Voice & language'),
-              const SizedBox(height: 12),
-              AppDropdown(
-                label: 'Voice',
-                value: _ttsVoice,
-                options: _ttsVoiceOptions,
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _ttsVoice = value);
-                },
-              ),
-              const SizedBox(height: 12),
-              AppDropdown(
-                label: 'Language',
-                value: _selectedLanguage,
-                options: _defaultLanguageOptions,
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _selectedLanguage = value);
-                },
-              ),
-              const SizedBox(height: 12),
-              _buildAutoListenToggle(),
-              const SizedBox(height: 24),
-              _sectionTitle('Parental controls'),
-              const SizedBox(height: 12),
-              _buildParentalToggle(),
-              const SizedBox(height: 12),
-              AppDropdown(
-                label: 'Filter level',
-                value: _contentFilterLevel,
-                options: _filterLevelOptions,
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _contentFilterLevel = value);
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildSlider(),
-              const SizedBox(height: 16),
-              AppInput(
-                controller: _allowedTopicsController,
-                hint: 'Allowed topics (comma separated)',
-                icon: Icons.thumb_up_outlined,
-                maxLines: 2,
-              ),
-              const SizedBox(height: 12),
-              AppInput(
-                controller: _blockedTopicsController,
-                hint: 'Blocked topics (comma separated)',
-                icon: Icons.block_outlined,
-                maxLines: 2,
-              ),
-              const SizedBox(height: 12),
-              AppInput(
-                controller: _approvalController,
-                hint: 'Require approval for (comma separated)',
-                icon: Icons.lock_outline,
-                maxLines: 2,
-              ),
-              const SizedBox(height: 32),
+                  _sectionTitle('Personality'),
+                  const SizedBox(height: 12),
+                  _buildPersonalitySlider(),
+                  const SizedBox(height: 12),
+                  AppDropdown(
+                    label: 'Tone',
+                    value: _tone,
+                    options: _toneOptions,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _tone = value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  AppDropdown(
+                    label: 'Verbosity',
+                    value: _verbosity,
+                    options: _verbosityOptions,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _verbosity = value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  AppDropdown(
+                    label: 'Language complexity',
+                    value: _languageComplexity,
+                    options: _languageComplexityOptions,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _languageComplexity = value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  AppInput(
+                    controller: _companionNameController,
+                    hint: 'Companion name',
+                    icon: Icons.star_outline,
+                    validator: (value) =>
+                        value != null && value.trim().isNotEmpty
+                        ? null
+                        : 'Enter a name',
+                  ),
+                  const SizedBox(height: 24),
+                  _sectionTitle('Voice & language'),
+                  const SizedBox(height: 12),
+                  AppDropdown(
+                    label: 'Voice',
+                    value: _ttsVoice,
+                    options: _ttsVoiceOptions,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _ttsVoice = value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  AppDropdown(
+                    label: 'Language',
+                    value: _selectedLanguage,
+                    options: _defaultLanguageOptions,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _selectedLanguage = value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildAutoListenToggle(),
+                  const SizedBox(height: 24),
+                  _sectionTitle('Parental controls'),
+                  const SizedBox(height: 12),
+                  _buildParentalToggle(),
+                  const SizedBox(height: 12),
+                  AppDropdown(
+                    label: 'Filter level',
+                    value: _contentFilterLevel,
+                    options: _filterLevelOptions,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _contentFilterLevel = value);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSlider(),
+                  const SizedBox(height: 16),
+                  AppInput(
+                    controller: _allowedTopicsController,
+                    hint: 'Allowed topics (comma separated)',
+                    icon: Icons.thumb_up_outlined,
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 12),
+                  AppInput(
+                    controller: _blockedTopicsController,
+                    hint: 'Blocked topics (comma separated)',
+                    icon: Icons.block_outlined,
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 12),
+                  AppInput(
+                    controller: _approvalController,
+                    hint: 'Require approval for (comma separated)',
+                    icon: Icons.lock_outline,
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 32),
                 ],
               ),
             ),
@@ -734,5 +744,40 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
         .map((topic) => topic.trim())
         .where((topic) => topic.isNotEmpty)
         .toList();
+  }
+}
+
+class _CustomizationPageShimmer extends StatelessWidget {
+  const _CustomizationPageShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ShimmerLoadingPage(
+      child: SingleChildScrollView(
+        physics: NeverScrollableScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ShimmerText(width: 96, height: 16),
+            SizedBox(height: 12),
+            ShimmerBox(height: 96, radius: 24),
+            SizedBox(height: 12),
+            ShimmerInput(height: 56),
+            SizedBox(height: 12),
+            ShimmerInput(height: 56),
+            SizedBox(height: 12),
+            ShimmerText(width: 80, height: 16),
+            SizedBox(height: 12),
+            ShimmerInput(height: 56),
+            SizedBox(height: 12),
+            ShimmerInput(height: 56),
+            SizedBox(height: 12),
+            ShimmerBox(height: 96, radius: 24),
+            SizedBox(height: 12),
+            ShimmerButton(height: 56, radius: 16),
+          ],
+        ),
+      ),
+    );
   }
 }

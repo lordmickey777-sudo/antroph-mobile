@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
+import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
 import '../models/rive_element_model.dart';
@@ -12,9 +13,8 @@ import '../providers/story_creation_provider.dart';
 Future<void> showRiveElementPicker(BuildContext context) {
   return showAppBottomSheet(
     context: context,
-    builder: (context, scrollController) => _RiveElementPickerContent(
-      scrollController: scrollController,
-    ),
+    builder: (context, scrollController) =>
+        _RiveElementPickerContent(scrollController: scrollController),
   );
 }
 
@@ -44,8 +44,9 @@ class _RiveElementPickerContentState
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = context.primaryTextColor;
     final asyncElements = ref.watch(riveElementsProvider(_selectedCategory));
-    final currentSelection =
-        ref.watch(storyCreationProvider.select((s) => s.selectedRiveElement));
+    final currentSelection = ref.watch(
+      storyCreationProvider.select((s) => s.selectedRiveElement),
+    );
 
     return Column(
       children: [
@@ -70,11 +71,7 @@ class _RiveElementPickerContentState
                         : Colors.black.withValues(alpha: 0.08),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.close_rounded,
-                    color: textColor,
-                    size: 18,
-                  ),
+                  child: Icon(Icons.close_rounded, color: textColor, size: 18),
                 ),
               ),
             ],
@@ -93,13 +90,13 @@ class _RiveElementPickerContentState
                 final chipBg = isSelected
                     ? (isDark ? Colors.white : Colors.black)
                     : (isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.06));
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.06));
                 final chipFg = isSelected
                     ? (isDark ? Colors.black : Colors.white)
                     : (isDark
-                        ? Colors.white.withValues(alpha: 0.7)
-                        : Colors.black.withValues(alpha: 0.6));
+                          ? Colors.white.withValues(alpha: 0.7)
+                          : Colors.black.withValues(alpha: 0.6));
 
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
@@ -108,7 +105,9 @@ class _RiveElementPickerContentState
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: chipBg,
                         borderRadius: BorderRadius.circular(20),
@@ -118,8 +117,9 @@ class _RiveElementPickerContentState
                         style: TextStyle(
                           color: chipFg,
                           fontSize: 14,
-                          fontWeight:
-                              isSelected ? FontWeight.w600 : FontWeight.w400,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
                         ),
                       ),
                     ),
@@ -135,7 +135,7 @@ class _RiveElementPickerContentState
         // Grid
         Expanded(
           child: asyncElements.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const _RiveElementsGridShimmer(),
             error: (err, _) => Center(
               child: Text(
                 'Failed to load mascots',
@@ -186,6 +186,39 @@ class _RiveElementPickerContentState
   }
 }
 
+class _RiveElementsGridShimmer extends StatelessWidget {
+  const _RiveElementsGridShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 0.85,
+      ),
+      itemCount: 6,
+      itemBuilder: (_, __) => const ShimmerCard(
+        radius: 16,
+        padding: EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: ShimmerImage(width: double.infinity, radius: 12)),
+            SizedBox(height: 10),
+            ShimmerText(width: 100, height: 14),
+            SizedBox(height: 6),
+            ShimmerText(width: 60, height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ElementCard extends StatelessWidget {
   const _ElementCard({
     required this.element,
@@ -207,8 +240,8 @@ class _ElementCard extends StatelessWidget {
     final borderColor = isSelected
         ? (isDark ? Colors.white : Colors.black)
         : (isDark
-            ? Colors.white.withValues(alpha: 0.1)
-            : Colors.black.withValues(alpha: 0.06));
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.black.withValues(alpha: 0.06));
     final textColor = context.primaryTextColor;
     final subtitleColor = context.secondaryTextColor;
 
@@ -219,10 +252,7 @@ class _ElementCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: borderColor,
-            width: isSelected ? 2 : 1,
-          ),
+          border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -236,7 +266,8 @@ class _ElementCard extends StatelessWidget {
                       child: Image.network(
                         element.effectiveThumbnail,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _Placeholder(isDark: isDark),
+                        errorBuilder: (_, __, ___) =>
+                            _Placeholder(isDark: isDark),
                       ),
                     )
                   else

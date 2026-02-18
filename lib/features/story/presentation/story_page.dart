@@ -48,8 +48,9 @@ class StoryPage extends ConsumerWidget {
         data: (data) {
           final sections = data.sections;
           final featuredStories = data.featuredStories;
-          if (sections.isEmpty && featuredStories.isEmpty)
+          if (sections.isEmpty && featuredStories.isEmpty) {
             return const _EmptyView();
+          }
 
           return ScrollFadeGradient(
             child: CustomScrollView(
@@ -750,7 +751,8 @@ class _CommunityStoriesSliver extends ConsumerWidget {
     final asyncCommunity = ref.watch(communityBrowseProvider(null));
 
     return asyncCommunity.when(
-      loading: () => const SliverToBoxAdapter(child: SizedBox.shrink()),
+      loading: () =>
+          const SliverToBoxAdapter(child: _CommunityStoriesSliverShimmer()),
       error: (_, __) => const SliverToBoxAdapter(child: SizedBox.shrink()),
       data: (stories) {
         if (stories.isEmpty) {
@@ -881,7 +883,9 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                           .map(
                             (t) => Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 6),
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: isDark
                                     ? Colors.white.withValues(alpha: 0.08)
@@ -909,6 +913,40 @@ class _CommunityStoriesSliver extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CommunityStoriesSliverShimmer extends StatelessWidget {
+  const _CommunityStoriesSliverShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: ShimmerBox(width: 180, height: 20, radius: 6),
+        ),
+        SizedBox(
+          height: _CommunityStoriesSliver._cardHeight,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                StoryCardShimmer(width: _CommunityStoriesSliver._cardWidth),
+                SizedBox(width: 12),
+                StoryCardShimmer(width: _CommunityStoriesSliver._cardWidth),
+                SizedBox(width: 12),
+                StoryCardShimmer(width: _CommunityStoriesSliver._cardWidth),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

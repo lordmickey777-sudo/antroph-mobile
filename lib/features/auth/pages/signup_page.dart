@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
+import 'package:antroph_mobile/widgets/shimmer.dart';
 import '../../../widgets/typography_text.dart';
 import '../widgets/auth_input.dart';
 import '../../../core/auth/state/auth_state.dart';
@@ -113,118 +114,141 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: ContentWidth.form),
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(horizontalPadding, 96, horizontalPadding, 24),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                96,
+                horizontalPadding,
+                24,
+              ),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                const TypographyText(
-                  'Create your',
-                  variant: TypographyVariant.h2,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-                const SizedBox(height: 4),
-                const TypographyText(
-                  'Account',
-                  variant: TypographyVariant.h2,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-                const SizedBox(height: 36),
-                AuthInput(controller: _nameCtrl, hint: 'Full Name', icon: Icons.person_outline),
-                const SizedBox(height: 20),
-                AuthInput(
-                  controller: _emailCtrl,
-                  hint: 'Enter Your Email',
-                  icon: Icons.email_outlined,
-                  keyboardType: TextInputType.emailAddress,
-                  validator: _validateEmail,
-                ),
-                const SizedBox(height: 20),
-                AuthInput(
-                  controller: _passwordCtrl,
-                  hint: 'Password',
-                  icon: Icons.lock_outline,
-                  obscure: _obscure,
-                  onToggleObscure: () => setState(() => _obscure = !_obscure),
-                  validator: _validatePassword,
-                ),
-                const SizedBox(height: 12),
-                _PasswordPolicyChecklist(
-                  hasMinLength: _hasMinLength,
-                  hasUppercase: _hasUppercase,
-                  hasLowercase: _hasLowercase,
-                  hasDigit: _hasDigit,
-                ),
-                const SizedBox(height: 28),
-                AuthButton(label: 'Register', onTap: _submit, loading: loading),
-                const SizedBox(height: 20),
-                const OrDivider(),
-                const SizedBox(height: 20),
-                const SocialSignInButtons(),
-                const SizedBox(height: 28),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
                     const TypographyText(
-                      'Already Have An Account? ',
-                      variant: TypographyVariant.body2,
-                      color: Colors.white70,
+                      'Create your',
+                      variant: TypographyVariant.h2,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        if (widget.onSwitchLogin != null) {
-                          widget.onSwitchLogin!();
-                        } else {
-                          // Fallback to routing when not embedded in _AuthGated
-                          context.go('/auth/login');
-                        }
-                      },
-                      child: const TypographyText(
-                        'Sign In',
-                        variant: TypographyVariant.body2,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    const SizedBox(height: 4),
+                    const TypographyText(
+                      'Account',
+                      variant: TypographyVariant.h2,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    const SizedBox(height: 36),
+                    AuthInput(
+                      controller: _nameCtrl,
+                      hint: 'Full Name',
+                      icon: Icons.person_outline,
+                    ),
+                    const SizedBox(height: 20),
+                    AuthInput(
+                      controller: _emailCtrl,
+                      hint: 'Enter Your Email',
+                      icon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: _validateEmail,
+                    ),
+                    const SizedBox(height: 20),
+                    AuthInput(
+                      controller: _passwordCtrl,
+                      hint: 'Password',
+                      icon: Icons.lock_outline,
+                      obscure: _obscure,
+                      onToggleObscure: () =>
+                          setState(() => _obscure = !_obscure),
+                      validator: _validatePassword,
+                    ),
+                    const SizedBox(height: 12),
+                    _PasswordPolicyChecklist(
+                      hasMinLength: _hasMinLength,
+                      hasUppercase: _hasUppercase,
+                      hasLowercase: _hasLowercase,
+                      hasDigit: _hasDigit,
+                    ),
+                    const SizedBox(height: 28),
+                    AuthButton(
+                      label: 'Register',
+                      onTap: _submit,
+                      loading: loading,
+                    ),
+                    const SizedBox(height: 20),
+                    const OrDivider(),
+                    const SizedBox(height: 20),
+                    const SocialSignInButtons(),
+                    const SizedBox(height: 28),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const TypographyText(
+                          'Already Have An Account? ',
+                          variant: TypographyVariant.body2,
+                          color: Colors.white70,
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            if (widget.onSwitchLogin != null) {
+                              widget.onSwitchLogin!();
+                            } else {
+                              // Fallback to routing when not embedded in _AuthGated
+                              context.go('/auth/login');
+                            }
+                          },
+                          child: const TypographyText(
+                            'Sign In',
+                            variant: TypographyVariant.body2,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        GestureDetector(
+                          onTap: () => _openWebPage(
+                            context,
+                            'Privacy Policy',
+                            'https://www.antroph.com/privacy/',
+                          ),
+                          child: const TypographyText(
+                            'Privacy Policy',
+                            variant: TypographyVariant.body2,
+                            color: Colors.white54,
+                          ),
+                        ),
+                        const TypographyText(
+                          '  •  ',
+                          variant: TypographyVariant.body2,
+                          color: Colors.white38,
+                        ),
+                        GestureDetector(
+                          onTap: () => _openWebPage(
+                            context,
+                            'Terms of Service',
+                            'https://www.antroph.com/terms/',
+                          ),
+                          child: const TypographyText(
+                            'Terms of Service',
+                            variant: TypographyVariant.body2,
+                            color: Colors.white54,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    GestureDetector(
-                      onTap: () => _openWebPage(context, 'Privacy Policy', 'https://www.antroph.com/privacy/'),
-                      child: const TypographyText(
-                        'Privacy Policy',
-                        variant: TypographyVariant.body2,
-                        color: Colors.white54,
-                      ),
-                    ),
-                    const TypographyText(
-                      '  •  ',
-                      variant: TypographyVariant.body2,
-                      color: Colors.white38,
-                    ),
-                    GestureDetector(
-                      onTap: () => _openWebPage(context, 'Terms of Service', 'https://www.antroph.com/terms/'),
-                      child: const TypographyText(
-                        'Terms of Service',
-                        variant: TypographyVariant.body2,
-                        color: Colors.white54,
-                      ),
-                    ),
-                  ],
-                  ),
-                ],
               ),
             ),
           ),
         ),
       ),
-    ));
+    );
   }
 
   @override
@@ -267,7 +291,9 @@ class _PasswordPolicyChecklist extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  policy.value ? Icons.check_circle : Icons.radio_button_unchecked,
+                  policy.value
+                      ? Icons.check_circle
+                      : Icons.radio_button_unchecked,
                   size: 18,
                   color: policy.value ? Colors.greenAccent : Colors.white38,
                 ),
@@ -329,7 +355,11 @@ class _WebViewPageState extends State<_WebViewPage> {
         children: [
           WebViewWidget(controller: _controller),
           if (_isLoading)
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
+            const Positioned.fill(
+              child: ShimmerWebViewPlaceholder(
+                backgroundColor: Color(0xFF101214),
+              ),
+            ),
         ],
       ),
     );

@@ -181,9 +181,7 @@ class CollectionDetailPage extends ConsumerWidget {
         ),
       ),
       body: asyncDetail.when(
-        loading: () => const Center(
-          child: CupertinoActivityIndicator(color: Colors.white),
-        ),
+        loading: () => const CollectionDetailPageShimmer(),
         error: (err, st) => _PageError(
           message: 'Unable to load stories for this collection.',
           onRetry: () => ref.refresh(playlistDetailProvider(collection.id)),
@@ -633,6 +631,23 @@ class CollectionsPageShimmer extends StatelessWidget {
   }
 }
 
+class CollectionDetailPageShimmer extends StatelessWidget {
+  const CollectionDetailPageShimmer({super.key, this.cards = 3});
+
+  final int cards;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      itemCount: cards,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (_, __) => const _CollectionStoryCardShimmer(),
+    );
+  }
+}
+
 class _CollectionCardShimmer extends StatelessWidget {
   const _CollectionCardShimmer();
 
@@ -663,6 +678,51 @@ class _CollectionCardShimmer extends StatelessWidget {
                 ShimmerBox(width: 140, height: 12),
                 SizedBox(height: 12),
                 ShimmerBox(width: 120, height: 12),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CollectionStoryCardShimmer extends StatelessWidget {
+  const _CollectionStoryCardShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: context.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const ClipRRect(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            child: SizedBox(height: 160, child: ShimmerBox()),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                ShimmerBox(width: 180, height: 18),
+                SizedBox(height: 8),
+                ShimmerBox(width: 240, height: 12),
+                SizedBox(height: 4),
+                ShimmerBox(width: 190, height: 12),
+                SizedBox(height: 14),
+                Row(
+                  children: [
+                    ShimmerBox(width: 88, height: 34, radius: 999),
+                    SizedBox(width: 10),
+                    ShimmerBox(width: 88, height: 34, radius: 999),
+                  ],
+                ),
               ],
             ),
           ),

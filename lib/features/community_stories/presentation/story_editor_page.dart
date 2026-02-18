@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/app_input.dart';
 import 'package:antroph_mobile/widgets/app_dropdown.dart';
+import 'package:antroph_mobile/widgets/shimmer.dart';
 
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
@@ -104,13 +105,13 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final asyncStory =
-        ref.watch(communityStoryDetailProvider(widget.storyId));
+    final asyncStory = ref.watch(communityStoryDetailProvider(widget.storyId));
     final horizontalPadding = AppPadding.horizontal.of(context);
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF141718) : const Color(0xFFF5F5F7),
+      backgroundColor: isDark
+          ? const Color(0xFF141718)
+          : const Color(0xFFF5F5F7),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: TypographyText(
@@ -119,18 +120,19 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
           color: isDark ? Colors.white : Colors.black,
         ),
         leading: IconButton(
-          icon: Icon(CupertinoIcons.back,
-              color: isDark ? Colors.white : Colors.black),
+          icon: Icon(
+            CupertinoIcons.back,
+            color: isDark ? Colors.white : Colors.black,
+          ),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: asyncStory.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const _StoryEditorPageShimmer(),
         error: (err, _) => Center(
           child: Text(
             'Failed to load story',
-            style: TextStyle(
-                color: isDark ? Colors.white60 : Colors.black54),
+            style: TextStyle(color: isDark ? Colors.white60 : Colors.black54),
           ),
         ),
         data: (story) {
@@ -139,7 +141,9 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
             key: _formKey,
             child: ListView(
               padding: EdgeInsets.symmetric(
-                  horizontal: horizontalPadding, vertical: 16),
+                horizontal: horizontalPadding,
+                vertical: 16,
+              ),
               children: [
                 _label('Title', isDark),
                 const SizedBox(height: 6),
@@ -148,9 +152,8 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
                   hint: 'Story title',
                   icon: Icons.title_rounded,
                   trailing: VoiceFormInput(controller: _titleCtrl),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Required'
-                      : null,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Required' : null,
                 ),
                 const SizedBox(height: 20),
                 _label('Description', isDark),
@@ -171,9 +174,8 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
                   icon: Icons.landscape_rounded,
                   maxLines: 5,
                   trailing: VoiceFormInput(controller: _contextCtrl),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Required'
-                      : null,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Required' : null,
                 ),
                 const SizedBox(height: 20),
                 AppDropdown(
@@ -245,6 +247,38 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
       color: isDark
           ? Colors.white.withValues(alpha: 0.6)
           : Colors.black.withValues(alpha: 0.5),
+    );
+  }
+}
+
+class _StoryEditorPageShimmer extends StatelessWidget {
+  const _StoryEditorPageShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoadingPage(
+      child: ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        children: const [
+          ShimmerText(width: 120, height: 14),
+          SizedBox(height: 6),
+          ShimmerInput(height: 56),
+          SizedBox(height: 20),
+          ShimmerText(width: 140, height: 14),
+          SizedBox(height: 6),
+          ShimmerInput(height: 108),
+          SizedBox(height: 20),
+          ShimmerText(width: 120, height: 14),
+          SizedBox(height: 6),
+          ShimmerInput(height: 140),
+          SizedBox(height: 20),
+          ShimmerInput(height: 56),
+          SizedBox(height: 20),
+          ShimmerInput(height: 56),
+          SizedBox(height: 32),
+          ShimmerButton(height: 56, radius: 14),
+        ],
+      ),
     );
   }
 }
