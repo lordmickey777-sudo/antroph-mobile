@@ -257,8 +257,8 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
                           label: _isAdding
                               ? 'Adding...'
                               : (_isAdded ? 'Continue' : 'My List'),
-                          backgroundColor: context.actionButtonBackground,
-                          foregroundColor: context.actionButtonForeground,
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
                           padding: const EdgeInsets.symmetric(
                             vertical: 12,
                             horizontal: 24,
