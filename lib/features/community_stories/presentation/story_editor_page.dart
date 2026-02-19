@@ -242,15 +242,18 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
                   child: FilledButton(
                     onPressed: _saving ? null : _save,
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
+                      backgroundColor: isDark ? Colors.white : Colors.black,
+                      foregroundColor: isDark ? Colors.black : Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 18),
                     ),
                     child: _saving
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 22,
                             height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: isDark ? Colors.black : Colors.white,
+                            ),
                           )
                         : const Text('Save Changes'),
                   ),

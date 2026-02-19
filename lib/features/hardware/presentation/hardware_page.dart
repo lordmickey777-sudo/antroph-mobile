@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
+import 'package:antroph_mobile/features/hardware/presentation/waitlist_bottom_sheet.dart';
 
 class HardwarePage extends StatefulWidget {
   const HardwarePage({super.key});
@@ -96,6 +97,32 @@ class _HardwarePageState extends State<HardwarePage> {
             ),
           ),
           const Spacer(),
+          // Join Waitlist button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 48.0),
+            child: SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: () => showWaitlistSheet(context),
+                icon: const Icon(Icons.smart_toy_outlined, size: 20),
+                label: const Text(
+                  'Join Waitlist',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 90),
         ],
       ),
     );

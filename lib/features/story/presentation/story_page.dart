@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -115,7 +116,7 @@ class StoryPage extends ConsumerWidget {
         title: card.title,
         subtitle: card.subtitle,
         imageAsset: card.image,
-        mascotConfig: card.mascot,
+        mascotConfig: card.mascotConfig,
         users: card.users,
         views: card.views,
         isAdded: card.isAdded,
@@ -135,7 +136,7 @@ class StoryPage extends ConsumerWidget {
         title: story.title,
         subtitle: story.description,
         imageAsset: story.coverImageUrl,
-        mascotConfig: story.mascot,
+        mascotConfig: story.mascotConfig,
         users: 0,
         views: 0,
         isAdded: story.isAdded,
@@ -252,9 +253,9 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
                               : CupertinoIcons.add,
                           label: _isAdding
                               ? 'Adding...'
-                              : (_isAdded ? 'Play' : 'My List'),
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
+                              : (_isAdded ? 'Continue' : 'My List'),
+                          backgroundColor: context.actionButtonBackground,
+                          foregroundColor: context.actionButtonForeground,
                           padding: const EdgeInsets.symmetric(
                             vertical: 12,
                             horizontal: 24,
@@ -328,7 +329,7 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
               ? widget.story.title
               : 'Chat',
           storyId: widget.story.id,
-          mascotConfig: widget.story.mascot,
+          mascotConfig: widget.story.mascotConfig,
         ),
       ),
     );
@@ -606,8 +607,8 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
                         : CupertinoIcons.add,
                     size: 34,
                     iconSize: 18,
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
+                    backgroundColor: context.actionButtonBackground,
+                    foregroundColor: context.actionButtonForeground,
                   ),
                 ),
               ],
@@ -670,7 +671,7 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
         builder: (_) => ChatPage(
           storyTitle: widget.item.title.isNotEmpty ? widget.item.title : 'Chat',
           storyId: widget.item.storyId,
-          mascotConfig: widget.item.mascot,
+          mascotConfig: widget.item.mascotConfig,
         ),
       ),
     );
@@ -859,28 +860,29 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: story.coverImageUrl != null &&
-                              story.coverImageUrl!.isNotEmpty
-                          ? Image.network(
-                              story.coverImageUrl!,
-                              width: double.infinity,
-                              height: 200,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Image.asset(
-                                'assets/images/default.png',
-                                width: double.infinity,
-                                height: 200,
-                                fit: BoxFit.cover,
-                              ),
-                            )
-                          : Image.asset(
+                    borderRadius: BorderRadius.circular(16),
+                    child:
+                        story.coverImageUrl != null &&
+                            story.coverImageUrl!.isNotEmpty
+                        ? Image.network(
+                            story.coverImageUrl!,
+                            width: double.infinity,
+                            height: 200,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Image.asset(
                               'assets/images/default.png',
                               width: double.infinity,
                               height: 200,
                               fit: BoxFit.cover,
                             ),
-                    ),
+                          )
+                        : Image.asset(
+                            'assets/images/default.png',
+                            width: double.infinity,
+                            height: 200,
+                            fit: BoxFit.cover,
+                          ),
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     story.title,
@@ -948,14 +950,11 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                   Consumer(
                     builder: (ctx, ref, _) {
                       return AppPillButton(
-                        onPressed: () =>
-                            _playCommunityStory(ctx, ref, story),
+                        onPressed: () => _playCommunityStory(ctx, ref, story),
                         icon: CupertinoIcons.play_fill,
                         label: 'Continue',
-                        backgroundColor:
-                            isDark ? Colors.white : Colors.black,
-                        foregroundColor:
-                            isDark ? Colors.black : Colors.white,
+                        backgroundColor: isDark ? Colors.white : Colors.black,
+                        foregroundColor: isDark ? Colors.black : Colors.white,
                         padding: const EdgeInsets.symmetric(
                           vertical: 14,
                           horizontal: 28,
@@ -1134,8 +1133,8 @@ class _CommunityStoryCompactCard extends StatelessWidget {
                       icon: CupertinoIcons.play_fill,
                       size: 34,
                       iconSize: 18,
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
+                      backgroundColor: context.actionButtonBackground,
+                      foregroundColor: context.actionButtonForeground,
                     ),
                   ),
               ],

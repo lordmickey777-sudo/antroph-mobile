@@ -377,8 +377,8 @@ class _CollectionCard extends StatelessWidget {
                       onPressed: onStartChat,
                       icon: CupertinoIcons.play_fill,
                       label: 'Start story',
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
+                      backgroundColor: context.actionButtonBackground,
+                      foregroundColor: context.actionButtonForeground,
                       padding: const EdgeInsets.symmetric(
                         vertical: 10,
                         horizontal: 20,
@@ -483,9 +483,9 @@ class _CollectionStoryCard extends StatelessWidget {
                         AppPillButton(
                           onPressed: onPlay,
                           icon: CupertinoIcons.play_fill,
-                          label: 'Play',
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
+                          label: 'Continue',
+                          backgroundColor: context.actionButtonBackground,
+                          foregroundColor: context.actionButtonForeground,
                           padding: const EdgeInsets.symmetric(
                             vertical: 10,
                             horizontal: 20,
@@ -498,9 +498,11 @@ class _CollectionStoryCard extends StatelessWidget {
                           onPressed: onStartChat,
                           icon: CupertinoIcons.chat_bubble_2_fill,
                           label: 'Chat',
-                          backgroundColor: Colors.white.withValues(alpha: 0.15),
-                          foregroundColor: Colors.white,
-                          borderColor: Colors.white.withValues(alpha: 0.2),
+                          backgroundColor: context.actionButtonBackground
+                              .withValues(alpha: 0.15),
+                          foregroundColor: context.actionButtonBackground,
+                          borderColor: context.actionButtonBackground
+                              .withValues(alpha: 0.2),
                           padding: const EdgeInsets.symmetric(
                             vertical: 10,
                             horizontal: 20,

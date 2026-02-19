@@ -121,8 +121,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                           fontSize: 13,
                         ),
                       ),
-                      data: (detail) =>
-                          _StoryDetailContent(detail: detail),
+                      data: (detail) => _StoryDetailContent(detail: detail),
                     ),
                     SizedBox(height: bottom + 40),
                   ],
@@ -344,9 +343,9 @@ class _ActionButton extends StatelessWidget {
           : onAddPressed,
       isLoading: isLoading,
       icon: isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
-      label: isLoading ? 'Adding...' : (isAdded ? 'Play' : 'My List'),
-      backgroundColor: Colors.white,
-      foregroundColor: Colors.black,
+      label: isLoading ? 'Adding...' : (isAdded ? 'Continue' : 'My List'),
+      backgroundColor: context.actionButtonBackground,
+      foregroundColor: context.actionButtonForeground,
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
       variant: TypographyVariant.body1,
       fontWeight: FontWeight.w600,
@@ -413,52 +412,54 @@ class _InfoRow extends StatelessWidget {
     final items = <Widget>[];
 
     if (durationMinutes > 0) {
-      items.add(_InfoItem(
-        icon: CupertinoIcons.clock,
-        label: '$durationMinutes min',
-        color: color,
-      ));
+      items.add(
+        _InfoItem(
+          icon: CupertinoIcons.clock,
+          label: '$durationMinutes min',
+          color: color,
+        ),
+      );
     }
 
     if (difficulty.isNotEmpty) {
-      items.add(_InfoItem(
-        icon: CupertinoIcons.chart_bar,
-        label: difficulty,
-        color: color,
-      ));
+      items.add(
+        _InfoItem(
+          icon: CupertinoIcons.chart_bar,
+          label: difficulty,
+          color: color,
+        ),
+      );
     }
 
     if (ageRating > 0) {
-      items.add(_InfoItem(
-        icon: CupertinoIcons.person_2,
-        label: '$ageRating+',
-        color: color,
-      ));
+      items.add(
+        _InfoItem(
+          icon: CupertinoIcons.person_2,
+          label: '$ageRating+',
+          color: color,
+        ),
+      );
     }
 
     if (author.isNotEmpty) {
-      items.add(_InfoItem(
-        icon: CupertinoIcons.pencil,
-        label: author,
-        color: color,
-      ));
+      items.add(
+        _InfoItem(icon: CupertinoIcons.pencil, label: author, color: color),
+      );
     }
 
     if (isPremium) {
-      items.add(_InfoItem(
-        icon: CupertinoIcons.star_fill,
-        label: 'Premium',
-        color: Colors.amber.shade600,
-      ));
+      items.add(
+        _InfoItem(
+          icon: CupertinoIcons.star_fill,
+          label: 'Premium',
+          color: Colors.amber.shade600,
+        ),
+      );
     }
 
     if (items.isEmpty) return const SizedBox.shrink();
 
-    return Wrap(
-      spacing: 16,
-      runSpacing: 8,
-      children: items,
-    );
+    return Wrap(spacing: 16, runSpacing: 8, children: items);
   }
 }
 
@@ -480,10 +481,7 @@ class _InfoItem extends StatelessWidget {
       children: [
         Icon(icon, size: 14, color: color),
         const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(color: color, fontSize: 12),
-        ),
+        Text(label, style: TextStyle(color: color, fontSize: 12)),
       ],
     );
   }
@@ -505,18 +503,19 @@ class _TagChips extends StatelessWidget {
       spacing: 8,
       runSpacing: 6,
       children: tags
-          .map((tag) => Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: chipBg,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  tag,
-                  style: TextStyle(color: chipTextColor, fontSize: 13),
-                ),
-              ))
+          .map(
+            (tag) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: chipBg,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                tag,
+                style: TextStyle(color: chipTextColor, fontSize: 13),
+              ),
+            ),
+          )
           .toList(),
     );
   }

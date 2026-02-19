@@ -7,6 +7,10 @@ class MicrophoneEducationDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final actionBg = isDark ? Colors.white : Colors.black;
+    final actionFg = isDark ? Colors.black : Colors.white;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: const Color(0xFF1E2326),
@@ -18,19 +22,30 @@ class MicrophoneEducationDialog extends StatelessWidget {
             Container(
               width: 64,
               height: 64,
-              decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
               child: const Icon(Icons.mic, color: Colors.white, size: 32),
             ),
             const SizedBox(height: 20),
             const Text(
               'Allow microphone',
-              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             const Text(
               "To record you'll need to allow microphone access",
-              style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                height: 1.5,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -48,7 +63,11 @@ class MicrophoneEducationDialog extends StatelessWidget {
                     ),
                     child: const Text(
                       'Cancel',
-                      style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
@@ -57,13 +76,20 @@ class MicrophoneEducationDialog extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: () => Navigator.of(context).pop(true),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
+                      backgroundColor: actionBg,
+                      foregroundColor: actionFg,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Continue',
-                      style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: actionFg,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -90,6 +116,10 @@ class MicrophonePermissionModal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final actionBg = isDark ? Colors.white : Colors.black;
+    final actionFg = isDark ? Colors.black : Colors.white;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: const Color(0xFF1E2326),
@@ -101,19 +131,30 @@ class MicrophonePermissionModal extends StatelessWidget {
             Container(
               width: 64,
               height: 64,
-              decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
               child: const Icon(Icons.mic_off, color: Colors.red, size: 32),
             ),
             const SizedBox(height: 20),
             const Text(
               'Permissions Required',
-              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             const Text(
               'Please enable microphone permissions in your device settings to record',
-              style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                height: 1.5,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -131,7 +172,11 @@ class MicrophonePermissionModal extends StatelessWidget {
                     ),
                     child: const Text(
                       'Cancel',
-                      style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
@@ -145,13 +190,20 @@ class MicrophonePermissionModal extends StatelessWidget {
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
+                      backgroundColor: actionBg,
+                      foregroundColor: actionFg,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Open Settings',
-                      style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: actionFg,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),

@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
 import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -16,12 +16,15 @@ class CollectionsActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final actionBg = context.actionButtonBackground;
+    final actionFg = context.actionButtonForeground;
+
     final button = AppPillButton(
       onPressed: onPressed,
       icon: CupertinoIcons.collections,
       label: 'My collections',
-      backgroundColor: Colors.white,
-      foregroundColor: Colors.black,
+      backgroundColor: actionBg,
+      foregroundColor: actionFg,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       variant: TypographyVariant.body2,
     );
@@ -40,8 +43,8 @@ class CollectionsActionButton extends StatelessWidget {
           icon: CupertinoIcons.arrow_right,
           size: 34,
           iconSize: 18,
-          backgroundColor: Colors.white.withOpacity(0.2),
-          foregroundColor: Colors.white,
+          backgroundColor: actionBg.withValues(alpha: 0.2),
+          foregroundColor: actionBg,
         ),
       ],
     );

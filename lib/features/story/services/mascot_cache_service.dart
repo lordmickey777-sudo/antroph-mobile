@@ -8,6 +8,7 @@ import 'package:rive/rive.dart';
 
 import '../../../core/env/env.dart';
 import '../../../core/network/api_client.dart';
+import '../../community_stories/models/rive_element_model.dart';
 import '../models/mascot_model.dart';
 
 class MascotCacheException implements Exception {
@@ -165,12 +166,12 @@ class MascotCacheService {
   Future<MascotConfig?> _fetchMascotById(String mascotId) async {
     try {
       final res = await _dio.get(
-        '/mascots/$mascotId',
+        '/rive-elements/$mascotId',
         options: Options(extra: const {'skipAuth': true}),
       );
       final record = _extractMascotRecord(res.data);
       if (record == null) return null;
-      return MascotConfig.fromJson(record);
+      return RiveElementDto.fromJson(record).toMascotConfig();
     } catch (_) {
       return null;
     }
@@ -229,7 +230,7 @@ class MascotCacheService {
       candidates.add('$base/$relative');
     }
 
-    candidates.add('$base/mascots/$encoded');
+    candidates.add('$base/rive-elements/$encoded');
     candidates.add('$base/files/$encoded');
     candidates.add('$base/media/$encoded');
     candidates.add('$base/uploads/$relative');

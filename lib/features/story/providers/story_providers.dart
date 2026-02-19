@@ -81,35 +81,35 @@ void _preloadStoryMascots(
   MascotCacheService cache,
   StoriesHomeResponse response,
 ) {
-  final mascotIds = <String>{};
+  final elementIds = <String>{};
   final mascotConfigs = <MascotConfig>[];
 
   for (final section in response.sections) {
     for (final story in section.items) {
-      final mascot = story.mascot;
-      if (mascot != null) {
-        mascotConfigs.add(mascot);
+      final config = story.mascotConfig;
+      if (config != null) {
+        mascotConfigs.add(config);
         continue;
       }
-      final mascotId = story.mascotId?.trim() ?? '';
-      if (mascotId.isNotEmpty) mascotIds.add(mascotId);
+      final elementId = story.riveElementId?.trim() ?? '';
+      if (elementId.isNotEmpty) elementIds.add(elementId);
     }
   }
 
   for (final story in response.featuredStories) {
-    final mascot = story.mascot;
-    if (mascot != null) {
-      mascotConfigs.add(mascot);
+    final config = story.mascotConfig;
+    if (config != null) {
+      mascotConfigs.add(config);
       continue;
     }
-    final mascotId = story.mascotId?.trim() ?? '';
-    if (mascotId.isNotEmpty) mascotIds.add(mascotId);
+    final elementId = story.riveElementId?.trim() ?? '';
+    if (elementId.isNotEmpty) elementIds.add(elementId);
   }
 
   if (mascotConfigs.isNotEmpty) {
     unawaited(cache.preloadMascotConfigs(mascotConfigs));
   }
-  if (mascotIds.isNotEmpty) {
-    unawaited(cache.preloadMascots(mascotIds.toList()));
+  if (elementIds.isNotEmpty) {
+    unawaited(cache.preloadMascots(elementIds.toList()));
   }
 }

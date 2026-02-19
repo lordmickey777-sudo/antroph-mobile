@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
@@ -24,10 +25,11 @@ class SubscriptionPage extends StatelessWidget {
             height: 56,
             child: AppButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1F2223),
-                foregroundColor: Colors.white,
+                backgroundColor: context.actionButtonBackground,
+                foregroundColor: context.actionButtonForeground,
               ),
-              onPressed: () => showToast(context, 'Subscription flow coming soon'),
+              onPressed: () =>
+                  showToast(context, 'Subscription flow coming soon'),
               child: const Text('Subscribe'),
             ),
           ),
@@ -62,9 +64,17 @@ class SubscriptionPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const TypographyText('Monthly', variant: TypographyVariant.h2, color: Colors.white),
+          const TypographyText(
+            'Monthly',
+            variant: TypographyVariant.h2,
+            color: Colors.white,
+          ),
           const SizedBox(height: 8),
-          const TypographyText('68', variant: TypographyVariant.h2, color: Colors.white),
+          const TypographyText(
+            '68',
+            variant: TypographyVariant.h2,
+            color: Colors.white,
+          ),
           const SizedBox(height: 16),
           _feature('Unlimited conversations'),
           _feature('Backup your stories'),
@@ -88,7 +98,11 @@ class SubscriptionPage extends StatelessWidget {
           const Icon(Icons.check_circle, color: Color(0xFF23D18B)),
           const SizedBox(width: 12),
           Expanded(
-            child: TypographyText(text, variant: TypographyVariant.body1, color: Colors.white),
+            child: TypographyText(
+              text,
+              variant: TypographyVariant.body1,
+              color: Colors.white,
+            ),
           ),
         ],
       ),

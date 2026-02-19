@@ -157,14 +157,14 @@ class _StatusRow extends StatelessWidget {
           AppButton(
             onPressed: onRetry,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black,
+              backgroundColor: context.actionButtonBackground,
+              foregroundColor: context.actionButtonForeground,
               elevation: 0,
             ),
-            child: const TypographyText(
+            child: TypographyText(
               'Retry',
               variant: TypographyVariant.body2,
-              color: Colors.black,
+              color: context.actionButtonForeground,
             ),
           ),
       ],
@@ -368,8 +368,8 @@ class _ChoicesCard extends StatelessWidget {
             AppButton(
               onPressed: () => onSelect(choice.choiceId),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
+                backgroundColor: context.actionButtonBackground,
+                foregroundColor: context.actionButtonForeground,
                 elevation: 0,
               ),
               child: Row(
@@ -379,12 +379,15 @@ class _ChoicesCard extends StatelessWidget {
                     child: TypographyText(
                       choice.label,
                       variant: TypographyVariant.body2,
-                      color: Colors.black,
+                      color: context.actionButtonForeground,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Icon(Icons.chevron_right, color: Colors.black),
+                  Icon(
+                    Icons.chevron_right,
+                    color: context.actionButtonForeground,
+                  ),
                 ],
               ),
             ),
@@ -507,13 +510,8 @@ class _TextInput extends StatelessWidget {
     final hintColor = context.tertiaryTextColor;
     final borderColor = context.dividerColor;
     final backgroundColor = context.inputBackground;
-    final isDark = context.isDarkMode;
-    final sendBg = isDark
-        ? Colors.white
-        : Theme.of(context).colorScheme.primary;
-    final sendFg = isDark
-        ? Colors.black
-        : Theme.of(context).colorScheme.onPrimary;
+    final sendBg = context.actionButtonBackground;
+    final sendFg = context.actionButtonForeground;
 
     return Container(
       padding: const EdgeInsets.all(12),

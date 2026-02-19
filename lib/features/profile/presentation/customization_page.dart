@@ -233,8 +233,8 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
             ElevatedButton(
               onPressed: () => ref.refresh(customizationControllerProvider),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
+                backgroundColor: context.actionButtonBackground,
+                foregroundColor: context.actionButtonForeground,
               ),
               child: const Text('Retry'),
             ),
@@ -426,19 +426,19 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
                 width: double.infinity,
                 child: AppButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
+                    backgroundColor: context.actionButtonBackground,
+                    foregroundColor: context.actionButtonForeground,
                   ),
                   onPressed: controller.isSaving
                       ? null
                       : () => _handleSave(controller),
                   child: controller.isSaving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 22,
                           height: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.4,
-                            color: Colors.black,
+                            color: context.actionButtonForeground,
                           ),
                         )
                       : const Text('Save changes'),

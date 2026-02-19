@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
 import '../../../core/network/error_formatter.dart';
 import '../../../widgets/app_button.dart';
@@ -120,7 +121,9 @@ class _RobotPairingPageState extends ConsumerState<RobotPairingPage> {
                 const SizedBox(height: 12),
                 Text(
                   _error!,
-                  style: theme.textTheme.bodySmall?.copyWith(color: Colors.redAccent),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.redAccent,
+                  ),
                 ),
               ],
               const SizedBox(height: 24),
@@ -129,15 +132,18 @@ class _RobotPairingPageState extends ConsumerState<RobotPairingPage> {
                 child: AppButton(
                   onPressed: _submitting ? null : _submit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
+                    backgroundColor: context.actionButtonBackground,
+                    foregroundColor: context.actionButtonForeground,
                     padding: const EdgeInsets.symmetric(vertical: 18),
                   ),
                   child: _submitting
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 24,
                           height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: context.actionButtonForeground,
+                          ),
                         )
                       : const Text('Complete pairing'),
                 ),

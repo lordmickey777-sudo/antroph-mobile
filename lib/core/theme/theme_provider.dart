@@ -47,77 +47,122 @@ class AppTheme {
   static const darkSurface = Color(0xFF1B1D1F);
   static const lightBg = Color(0xFFF5F5F7);
   static const lightSurface = Color(0xFFFFFFFF);
-  static final _darkButtonScheme = ColorScheme.fromSeed(
-    seedColor: Colors.deepPurple,
-    brightness: Brightness.dark,
-  );
-  static final _darkElevatedStyle = ElevatedButton.styleFrom(
-    backgroundColor: _darkButtonScheme.primary,
-    foregroundColor: _darkButtonScheme.onPrimary,
-    disabledBackgroundColor: _darkButtonScheme.primary.withValues(alpha: 0.4),
-    disabledForegroundColor: _darkButtonScheme.onPrimary.withValues(alpha: 0.6),
-  );
-  static final _darkTextStyle = TextButton.styleFrom(
-    foregroundColor: _darkButtonScheme.primary,
-    disabledForegroundColor: _darkButtonScheme.primary.withValues(alpha: 0.4),
-  );
-  static final _darkOutlinedStyle = OutlinedButton.styleFrom(
-    foregroundColor: _darkButtonScheme.primary,
-    disabledForegroundColor: _darkButtonScheme.primary.withValues(alpha: 0.4),
-    side: BorderSide(color: _darkButtonScheme.primary),
-  );
+  static ColorScheme _buttonSchemeFor(Brightness brightness) {
+    return ColorScheme.fromSeed(
+      seedColor: Colors.deepPurple,
+      brightness: brightness,
+    );
+  }
+
+  static ButtonStyle _elevatedStyleFor(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    final background = isDark ? Colors.white : Colors.black;
+    final foreground = isDark ? Colors.black : Colors.white;
+
+    return ElevatedButton.styleFrom(
+      backgroundColor: background,
+      foregroundColor: foreground,
+      disabledBackgroundColor: background.withValues(alpha: 0.4),
+      disabledForegroundColor: foreground.withValues(alpha: 0.6),
+    );
+  }
+
+  static ButtonStyle _filledStyleFor(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    final background = isDark ? Colors.white : Colors.black;
+    final foreground = isDark ? Colors.black : Colors.white;
+
+    return FilledButton.styleFrom(
+      backgroundColor: background,
+      foregroundColor: foreground,
+      disabledBackgroundColor: background.withValues(alpha: 0.4),
+      disabledForegroundColor: foreground.withValues(alpha: 0.6),
+    );
+  }
+
+  static ButtonStyle _textStyleFor(Brightness brightness) {
+    final buttonScheme = _buttonSchemeFor(brightness);
+    return TextButton.styleFrom(
+      foregroundColor: buttonScheme.primary,
+      disabledForegroundColor: buttonScheme.primary.withValues(alpha: 0.4),
+    );
+  }
+
+  static ButtonStyle _outlinedStyleFor(Brightness brightness) {
+    final buttonScheme = _buttonSchemeFor(brightness);
+    return OutlinedButton.styleFrom(
+      foregroundColor: buttonScheme.primary,
+      disabledForegroundColor: buttonScheme.primary.withValues(alpha: 0.4),
+      side: BorderSide(color: buttonScheme.primary),
+    );
+  }
 
   static ThemeData get darkTheme => ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.dark,
-        ),
-        fontFamily: 'Aeonik',
-        scaffoldBackgroundColor: darkBg,
-        splashFactory: NoSplash.splashFactory,
-        highlightColor: Colors.transparent,
-        splashColor: Colors.transparent,
-        hoverColor: Colors.transparent,
-        appBarTheme: const AppBarTheme(
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-        ),
-        cardColor: darkSurface,
-        bottomSheetTheme: const BottomSheetThemeData(
-          backgroundColor: darkSurface,
-        ),
-      );
+    brightness: Brightness.dark,
+    useMaterial3: true,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: Colors.deepPurple,
+      brightness: Brightness.dark,
+    ),
+    fontFamily: 'Aeonik',
+    scaffoldBackgroundColor: darkBg,
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: _elevatedStyleFor(Brightness.dark),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: _filledStyleFor(Brightness.dark),
+    ),
+    textButtonTheme: TextButtonThemeData(style: _textStyleFor(Brightness.dark)),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: _outlinedStyleFor(Brightness.dark),
+    ),
+    splashFactory: NoSplash.splashFactory,
+    highlightColor: Colors.transparent,
+    splashColor: Colors.transparent,
+    hoverColor: Colors.transparent,
+    appBarTheme: const AppBarTheme(
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+    ),
+    cardColor: darkSurface,
+    bottomSheetTheme: const BottomSheetThemeData(backgroundColor: darkSurface),
+  );
 
   static ThemeData get lightTheme => ThemeData(
-        brightness: Brightness.light,
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.light,
-        ),
-        fontFamily: 'Aeonik',
-        scaffoldBackgroundColor: lightBg,
-        elevatedButtonTheme: ElevatedButtonThemeData(style: _darkElevatedStyle),
-        textButtonTheme: TextButtonThemeData(style: _darkTextStyle),
-        outlinedButtonTheme: OutlinedButtonThemeData(style: _darkOutlinedStyle),
-        splashFactory: NoSplash.splashFactory,
-        highlightColor: Colors.transparent,
-        splashColor: Colors.transparent,
-        hoverColor: Colors.transparent,
-        appBarTheme: const AppBarTheme(
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.black87,
-        ),
-        cardColor: lightSurface,
-        bottomSheetTheme: const BottomSheetThemeData(
-          backgroundColor: lightSurface,
-        ),
-      );
+    brightness: Brightness.light,
+    useMaterial3: true,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: Colors.deepPurple,
+      brightness: Brightness.light,
+    ),
+    fontFamily: 'Aeonik',
+    scaffoldBackgroundColor: lightBg,
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: _elevatedStyleFor(Brightness.light),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: _filledStyleFor(Brightness.light),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: _textStyleFor(Brightness.light),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: _outlinedStyleFor(Brightness.light),
+    ),
+    splashFactory: NoSplash.splashFactory,
+    highlightColor: Colors.transparent,
+    splashColor: Colors.transparent,
+    hoverColor: Colors.transparent,
+    appBarTheme: const AppBarTheme(
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      foregroundColor: Colors.black87,
+    ),
+    cardColor: lightSurface,
+    bottomSheetTheme: const BottomSheetThemeData(backgroundColor: lightSurface),
+  );
 }
 
 /// Extension for easy theme-aware colors
@@ -136,7 +181,10 @@ extension ThemeColors on BuildContext {
       isDarkMode ? const Color(0xFF1F2223) : Colors.white;
   Color get inputBackground =>
       isDarkMode ? const Color(0xFF1F2223) : const Color(0xFFEEEEF0);
+  Color get actionButtonBackground => isDarkMode ? Colors.white : Colors.black;
+  Color get actionButtonForeground => isDarkMode ? Colors.black : Colors.white;
 
-  Color get dividerColor =>
-      isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1);
+  Color get dividerColor => isDarkMode
+      ? Colors.white.withValues(alpha: 0.1)
+      : Colors.black.withValues(alpha: 0.1);
 }
