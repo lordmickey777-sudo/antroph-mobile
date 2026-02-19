@@ -24,16 +24,17 @@ class CollectionsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final collections = ref.watch(storyPlaylistsProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
-        title: const TypographyText(
+        title: TypographyText(
           'My collections',
           variant: TypographyVariant.h2,
-          color: Colors.white,
+          color: isDark ? Colors.white : Colors.black,
         ),
       ),
       body: collections.when(
@@ -169,15 +170,16 @@ class CollectionDetailPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncDetail = ref.watch(playlistDetailProvider(collection.id));
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: TypographyText(
           collection.name,
           variant: TypographyVariant.h2,
-          color: Colors.white,
+          color: isDark ? Colors.white : Colors.black,
         ),
       ),
       body: asyncDetail.when(
@@ -318,12 +320,18 @@ class _CollectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onStartChat,
       child: SmoothClipRRect(
         smoothness: 0.6,
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 1),
+        side: BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.black.withValues(alpha: 0.1),
+          width: 1,
+        ),
         child: AspectRatio(
           aspectRatio: 1.4,
           child: Stack(
@@ -412,12 +420,18 @@ class _CollectionStoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onPlay,
       child: SmoothClipRRect(
         smoothness: 0.6,
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 1),
+        side: BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.black.withValues(alpha: 0.1),
+          width: 1,
+        ),
         child: AspectRatio(
           aspectRatio: 1.4,
           child: Stack(

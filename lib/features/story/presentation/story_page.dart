@@ -50,7 +50,10 @@ class StoryPage extends ConsumerWidget {
           final sections = data.sections;
           final featuredStories = data.featuredStories;
           if (sections.isEmpty && featuredStories.isEmpty) {
-            return const _EmptyView();
+            return _EmptyView(
+              onRefresh: () =>
+                  ref.refresh(storiesHomeSectionsProvider.future),
+            );
           }
 
           return ScrollFadeGradient(
@@ -1147,14 +1150,26 @@ class _CommunityStoryCompactCard extends StatelessWidget {
 }
 
 class _EmptyView extends StatelessWidget {
-  const _EmptyView();
+  const _EmptyView({required this.onRefresh});
+
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    return const EmptyState(
-      title: 'No stories available yet',
-      description: 'Check back later so you don\'t miss new releases.',
-      assetPath: 'assets/images/antroph_happy.png',
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      slivers: [
+        CupertinoSliverRefreshControl(onRefresh: onRefresh),
+        const SliverFillRemaining(
+          child: EmptyState(
+            title: 'No stories available yet',
+            description: 'Check back later so you don\'t miss new releases.',
+            assetPath: 'assets/images/antroph_happy.png',
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1167,12 +1182,22 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return EmptyState(
-      title: message,
-      description: 'Tap below to try again.',
-      assetPath: 'assets/images/antroph_surprised.png',
-      actionLabel: 'Retry',
-      onAction: () => onRetry(),
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      slivers: [
+        CupertinoSliverRefreshControl(onRefresh: onRetry),
+        SliverFillRemaining(
+          child: EmptyState(
+            title: message,
+            description: 'Tap below to try again.',
+            assetPath: 'assets/images/antroph_surprised.png',
+            actionLabel: 'Retry',
+            onAction: () => onRetry(),
+          ),
+        ),
+      ],
     );
   }
 }
