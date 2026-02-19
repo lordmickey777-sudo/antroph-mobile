@@ -23,6 +23,8 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Padding(
       padding: margin,
       child: Column(
@@ -34,7 +36,7 @@ class EmptyState extends StatelessWidget {
           TypographyText(
             title,
             variant: TypographyVariant.h3,
-            color: Colors.white,
+            color: isDark ? Colors.white : Colors.black87,
             textAlign: TextAlign.center,
           ),
           if (description != null) ...[
@@ -42,7 +44,7 @@ class EmptyState extends StatelessWidget {
             TypographyText(
               description!,
               variant: TypographyVariant.body2,
-              color: Colors.white70,
+              color: isDark ? Colors.white70 : Colors.black54,
               textAlign: TextAlign.center,
             ),
           ],

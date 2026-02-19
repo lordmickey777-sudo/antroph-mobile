@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
+import 'package:antroph_mobile/features/hardware/presentation/waitlist_bottom_sheet.dart';
 
 class HardwarePage extends StatefulWidget {
   const HardwarePage({super.key});
@@ -42,61 +44,102 @@ class _HardwarePageState extends State<HardwarePage> {
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
 
+    final screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
-      body: Column(
-        children: [
-          SizedBox(height: MediaQuery.of(context).padding.top + 40),
-          // 3D Carousel
-          SizedBox(
-            height: MediaQuery.of(context).size.height * 0.50,
-            child: PageView.builder(
-              controller: _pageController,
-              itemCount: _kMiddlePage * 2, // virtually infinite
-              clipBehavior: Clip.none,
-              itemBuilder: (context, index) {
-                final realIndex = index % _items.length;
-                final delta = index - _currentPage;
-                return _buildCarouselCard(delta, _items[realIndex], isDark);
-              },
-            ),
-          ),
-          const SizedBox(height: 24),
-          // Title & subtitle with fade transition
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: Text(
-              _items[_currentPage.round() % _items.length].label,
-              key: ValueKey(_currentPage.round() % _items.length),
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: context.primaryTextColor,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 500),
-            child: Padding(
-              key: ValueKey(_currentPage.round() % _items.length),
-              padding: const EdgeInsets.symmetric(horizontal: 48.0),
-              child: Text(
-                'Our Robots are coming to your location soon',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w500,
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.5)
-                      : Colors.black.withValues(alpha: 0.45),
-                  height: 1.4,
+      body: SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: screenHeight),
+          child: Column(
+            children: [
+              SizedBox(height: MediaQuery.of(context).padding.top + 40),
+              // 3D Carousel
+              SizedBox(
+                height: screenHeight * 0.50,
+                child: PageView.builder(
+                  controller: _pageController,
+                  itemCount: _kMiddlePage * 2, // virtually infinite
+                  clipBehavior: Clip.none,
+                  itemBuilder: (context, index) {
+                    final realIndex = index % _items.length;
+                    final delta = index - _currentPage;
+                    return _buildCarouselCard(delta, _items[realIndex], isDark);
+                  },
                 ),
               ),
-            ),
+              const SizedBox(height: 24),
+              // Title & subtitle with fade transition
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: Text(
+                  _items[_currentPage.round() % _items.length].label,
+                  key: ValueKey(_currentPage.round() % _items.length),
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    color: context.primaryTextColor,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                child: Padding(
+                  key: ValueKey(_currentPage.round() % _items.length),
+                  padding: const EdgeInsets.symmetric(horizontal: 48.0),
+                  child: Text(
+                    'Our Robots are coming to your location soon',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w500,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.5)
+                          : Colors.black.withValues(alpha: 0.45),
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+              // Join Waitlist button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 48.0),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: () => showWaitlistSheet(context),
+                    icon: SvgPicture.asset(
+                      'assets/icons/hardware.svg',
+                      width: 20,
+                      height: 20,
+                      colorFilter: ColorFilter.mode(
+                        isDark ? Colors.black : Colors.white,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                    label: const Text(
+                      'Join Waitlist',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(9999),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: MediaQuery.of(context).padding.bottom + 80),
+            ],
           ),
-          const Spacer(),
-        ],
+        ),
       ),
     );
   }

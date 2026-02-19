@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -48,8 +49,12 @@ class StoryPage extends ConsumerWidget {
         data: (data) {
           final sections = data.sections;
           final featuredStories = data.featuredStories;
-          if (sections.isEmpty && featuredStories.isEmpty)
-            return const _EmptyView();
+          if (sections.isEmpty && featuredStories.isEmpty) {
+            return _EmptyView(
+              onRefresh: () =>
+                  ref.refresh(storiesHomeSectionsProvider.future),
+            );
+          }
 
           return ScrollFadeGradient(
             child: CustomScrollView(
@@ -114,7 +119,7 @@ class StoryPage extends ConsumerWidget {
         title: card.title,
         subtitle: card.subtitle,
         imageAsset: card.image,
-        mascotConfig: card.mascot,
+        mascotConfig: card.mascotConfig,
         users: card.users,
         views: card.views,
         isAdded: card.isAdded,
@@ -134,7 +139,7 @@ class StoryPage extends ConsumerWidget {
         title: story.title,
         subtitle: story.description,
         imageAsset: story.coverImageUrl,
-        mascotConfig: story.mascot,
+        mascotConfig: story.mascotConfig,
         users: 0,
         views: 0,
         isAdded: story.isAdded,
@@ -251,7 +256,7 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
                               : CupertinoIcons.add,
                           label: _isAdding
                               ? 'Adding...'
-                              : (_isAdded ? 'Play' : 'My List'),
+                              : (_isAdded ? 'Continue' : 'My List'),
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.black,
                           padding: const EdgeInsets.symmetric(
@@ -327,7 +332,7 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
               ? widget.story.title
               : 'Chat',
           storyId: widget.story.id,
-          mascotConfig: widget.story.mascot,
+          mascotConfig: widget.story.mascotConfig,
         ),
       ),
     );
@@ -605,8 +610,8 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
                         : CupertinoIcons.add,
                     size: 34,
                     iconSize: 18,
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
+                    backgroundColor: context.actionButtonBackground,
+                    foregroundColor: context.actionButtonForeground,
                   ),
                 ),
               ],
@@ -669,7 +674,7 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
         builder: (_) => ChatPage(
           storyTitle: widget.item.title.isNotEmpty ? widget.item.title : 'Chat',
           storyId: widget.item.storyId,
-          mascotConfig: widget.item.mascot,
+          mascotConfig: widget.item.mascotConfig,
         ),
       ),
     );
@@ -750,7 +755,8 @@ class _CommunityStoriesSliver extends ConsumerWidget {
     final asyncCommunity = ref.watch(communityBrowseProvider(null));
 
     return asyncCommunity.when(
-      loading: () => const SliverToBoxAdapter(child: SizedBox.shrink()),
+      loading: () =>
+          const SliverToBoxAdapter(child: _CommunityStoriesSliverShimmer()),
       error: (_, __) => const SliverToBoxAdapter(child: SizedBox.shrink()),
       data: (stories) {
         if (stories.isEmpty) {
@@ -805,6 +811,7 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                       width: _cardWidth,
                       isDark: isDark,
                       onTap: () => _openCommunityStory(context, story),
+                      onPlay: () => _playCommunityStory(context, ref, story),
                     );
                   },
                 ),
@@ -813,6 +820,31 @@ class _CommunityStoriesSliver extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _playCommunityStory(
+    BuildContext context,
+    WidgetRef ref,
+    CommunityStoryDto story,
+  ) async {
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+    if (!context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          storyTitle: story.title.isNotEmpty ? story.title : 'Chat',
+          storyId: story.id,
+        ),
+      ),
     );
   }
 
@@ -830,17 +862,30 @@ class _CommunityStoriesSliver extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (story.coverImageUrl != null &&
-                      story.coverImageUrl!.isNotEmpty)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        story.coverImageUrl!,
-                        width: double.infinity,
-                        height: 200,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child:
+                        story.coverImageUrl != null &&
+                            story.coverImageUrl!.isNotEmpty
+                        ? Image.network(
+                            story.coverImageUrl!,
+                            width: double.infinity,
+                            height: 200,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Image.asset(
+                              'assets/images/default.png',
+                              width: double.infinity,
+                              height: 200,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : Image.asset(
+                            'assets/images/default.png',
+                            width: double.infinity,
+                            height: 200,
+                            fit: BoxFit.cover,
+                          ),
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     story.title,
@@ -881,7 +926,9 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                           .map(
                             (t) => Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 6),
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: isDark
                                     ? Colors.white.withValues(alpha: 0.08)
@@ -902,6 +949,24 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                           .toList(),
                     ),
                   ],
+                  const SizedBox(height: 24),
+                  Consumer(
+                    builder: (ctx, ref, _) {
+                      return AppPillButton(
+                        onPressed: () => _playCommunityStory(ctx, ref, story),
+                        icon: CupertinoIcons.play_fill,
+                        label: 'Continue',
+                        backgroundColor: isDark ? Colors.white : Colors.black,
+                        foregroundColor: isDark ? Colors.black : Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 14,
+                          horizontal: 28,
+                        ),
+                        variant: TypographyVariant.body1,
+                        fontWeight: FontWeight.w600,
+                      );
+                    },
+                  ),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -913,18 +978,54 @@ class _CommunityStoriesSliver extends ConsumerWidget {
   }
 }
 
+class _CommunityStoriesSliverShimmer extends StatelessWidget {
+  const _CommunityStoriesSliverShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: ShimmerBox(width: 180, height: 20, radius: 6),
+        ),
+        SizedBox(
+          height: _CommunityStoriesSliver._cardHeight,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                StoryCardShimmer(width: _CommunityStoriesSliver._cardWidth),
+                SizedBox(width: 12),
+                StoryCardShimmer(width: _CommunityStoriesSliver._cardWidth),
+                SizedBox(width: 12),
+                StoryCardShimmer(width: _CommunityStoriesSliver._cardWidth),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _CommunityStoryCompactCard extends StatelessWidget {
   const _CommunityStoryCompactCard({
     required this.story,
     required this.width,
     required this.isDark,
     required this.onTap,
+    this.onPlay,
   });
 
   final CommunityStoryDto story;
   final double width;
   final bool isDark;
   final VoidCallback onTap;
+  final VoidCallback? onPlay;
 
   Widget _buildCoverImage() {
     final coverUrl = story.coverImageUrl;
@@ -1025,6 +1126,20 @@ class _CommunityStoryCompactCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                // Play button
+                if (onPlay != null)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: AppCircleIconButton(
+                      onPressed: onPlay,
+                      icon: CupertinoIcons.play_fill,
+                      size: 34,
+                      iconSize: 18,
+                      backgroundColor: context.actionButtonBackground,
+                      foregroundColor: context.actionButtonForeground,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1035,14 +1150,26 @@ class _CommunityStoryCompactCard extends StatelessWidget {
 }
 
 class _EmptyView extends StatelessWidget {
-  const _EmptyView();
+  const _EmptyView({required this.onRefresh});
+
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    return const EmptyState(
-      title: 'No stories available yet',
-      description: 'Check back later so you don\'t miss new releases.',
-      assetPath: 'assets/images/antroph_happy.png',
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      slivers: [
+        CupertinoSliverRefreshControl(onRefresh: onRefresh),
+        const SliverFillRemaining(
+          child: EmptyState(
+            title: 'No stories available yet',
+            description: 'Check back later so you don\'t miss new releases.',
+            assetPath: 'assets/images/antroph_happy.png',
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1055,12 +1182,22 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return EmptyState(
-      title: message,
-      description: 'Tap below to try again.',
-      assetPath: 'assets/images/antroph_surprised.png',
-      actionLabel: 'Retry',
-      onAction: () => onRetry(),
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      slivers: [
+        CupertinoSliverRefreshControl(onRefresh: onRetry),
+        SliverFillRemaining(
+          child: EmptyState(
+            title: message,
+            description: 'Tap below to try again.',
+            assetPath: 'assets/images/antroph_surprised.png',
+            actionLabel: 'Retry',
+            onAction: () => onRetry(),
+          ),
+        ),
+      ],
     );
   }
 }

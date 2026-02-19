@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
@@ -59,7 +60,10 @@ class _ScanPageState extends State<ScanPage> {
     if (!mounted) return;
     context.pushNamed(
       'robot-pairing',
-      extra: RobotPairingPageArgs(pairingToken: pairingData.token, serial: pairingData.serial),
+      extra: RobotPairingPageArgs(
+        pairingToken: pairingData.token,
+        serial: pairingData.serial,
+      ),
     );
   }
 
@@ -88,7 +92,8 @@ class _ScanPageState extends State<ScanPage> {
                       MobileScanner(
                         controller: _controller,
                         onDetect: _onDetect,
-                        overlayBuilder: (context, constraints) => _ScannerOverlay(),
+                        overlayBuilder: (context, constraints) =>
+                            _ScannerOverlay(),
                       )
                     else
                       Container(
@@ -135,9 +140,11 @@ class _ScanPageState extends State<ScanPage> {
               width: double.infinity,
               child: AppButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2A2D2F),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(60)),
+                  backgroundColor: context.actionButtonBackground,
+                  foregroundColor: context.actionButtonForeground,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(60),
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                 ),
                 onPressed: () async {
@@ -216,7 +223,10 @@ class _ScannerOverlay extends StatelessWidget {
                   gradient: RadialGradient(
                     center: Alignment.center,
                     radius: 0.95,
-                    colors: [Colors.transparent, Colors.black.withValues(alpha: 0.55)],
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.55),
+                    ],
                     stops: const [0.60, 1.0],
                   ),
                 ),
@@ -261,8 +271,16 @@ class _CornersPainter extends CustomPainter {
     canvas.drawLine(Offset(0, size.height), Offset(corner, size.height), p);
     canvas.drawLine(Offset(0, size.height), Offset(0, size.height - corner), p);
     // Bottom-right
-    canvas.drawLine(Offset(size.width, size.height), Offset(size.width - corner, size.height), p);
-    canvas.drawLine(Offset(size.width, size.height), Offset(size.width, size.height - corner), p);
+    canvas.drawLine(
+      Offset(size.width, size.height),
+      Offset(size.width - corner, size.height),
+      p,
+    );
+    canvas.drawLine(
+      Offset(size.width, size.height),
+      Offset(size.width, size.height - corner),
+      p,
+    );
   }
 
   @override
@@ -270,7 +288,11 @@ class _CornersPainter extends CustomPainter {
 }
 
 class _ControlChip extends StatelessWidget {
-  const _ControlChip({required this.icon, required this.label, required this.onTap});
+  const _ControlChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
   final IconData icon;
   final String label;
   final VoidCallback onTap;
@@ -290,7 +312,11 @@ class _ControlChip extends StatelessWidget {
           children: [
             Icon(icon, color: Colors.white),
             const SizedBox(width: 6),
-            TypographyText(label, variant: TypographyVariant.body2, color: Colors.white),
+            TypographyText(
+              label,
+              variant: TypographyVariant.body2,
+              color: Colors.white,
+            ),
           ],
         ),
       ),

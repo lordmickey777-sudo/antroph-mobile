@@ -17,10 +17,11 @@ void main() {
               "image": "assets/images/default.png",
               "users": 123,
               "views": 456,
-              "mascot_id": "space_robot",
-              "mascot": {
+              "rive_element_id": "space_robot",
+              "rive_element": {
                 "id": "space_robot",
                 "name": "Cosmo",
+                "category": "character",
                 "rive_asset_url": "https://cdn.example.com/mascots/cosmo.riv",
                 "state_machine": "FaceSm"
               }
@@ -42,8 +43,8 @@ void main() {
     expect(parsed.sections.first.title, 'Recommended');
     expect(parsed.sections.first.items.first.title, 'AI Story');
     expect(parsed.sections.first.items.first.users, 123);
-    expect(parsed.sections.first.items.first.mascotId, 'space_robot');
-    expect(parsed.sections.first.items.first.mascot?.name, 'Cosmo');
+    expect(parsed.sections.first.items.first.riveElementId, 'space_robot');
+    expect(parsed.sections.first.items.first.riveElement?.name, 'Cosmo');
     expect(parsed.sections.last.items.first.views, 90);
   });
 }

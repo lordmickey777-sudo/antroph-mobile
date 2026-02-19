@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
 /// Platform-aware social sign-in buttons.
@@ -87,10 +88,13 @@ class _SocialButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final buttonBackground = context.actionButtonBackground;
+    final buttonForeground = context.actionButtonForeground;
+
     return SizedBox(
       height: 56,
       child: Material(
-        color: const Color(0xFF1F2223),
+        color: buttonBackground,
         borderRadius: BorderRadius.circular(40),
         child: InkWell(
           onTap: onTap == null
@@ -110,7 +114,7 @@ class _SocialButton extends StatelessWidget {
                 TypographyText(
                   label,
                   variant: TypographyVariant.body1,
-                  color: Colors.white,
+                  color: buttonForeground,
                   fontWeight: FontWeight.w500,
                 ),
               ],

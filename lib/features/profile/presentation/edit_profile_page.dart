@@ -74,9 +74,12 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                 children: [
                   CircleAvatar(
                     radius: 58,
-                    backgroundImage: profile?.avatarUrl != null && profile!.avatarUrl!.isNotEmpty
+                    backgroundImage:
+                        profile?.avatarUrl != null &&
+                            profile!.avatarUrl!.isNotEmpty
                         ? NetworkImage(profile.avatarUrl!)
-                        : const AssetImage('assets/images/avatar.png') as ImageProvider,
+                        : const AssetImage('assets/images/avatar.png')
+                              as ImageProvider,
                   ),
                   Positioned(
                     right: 0,
@@ -87,8 +90,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                         foregroundColor: Colors.white,
                       ),
                       onPressed: () async {
-                        await controller.pickAndUploadAvatar(source: ImageSource.gallery);
-                        if (mounted) showToast(context, 'Avatar updated', success: true);
+                        await controller.pickAndUploadAvatar(
+                          source: ImageSource.gallery,
+                        );
+                        if (mounted)
+                          showToast(context, 'Avatar updated', success: true);
                       },
                       icon: const Icon(Icons.camera_alt_outlined),
                     ),
@@ -109,9 +115,11 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                         controller: _usernameCtrl,
                         hint: 'Username',
                         icon: Icons.alternate_email,
-                        validator: (v) =>
-                            v == null || v.trim().isEmpty ? 'Username is required' : null,
-                        onChanged: (v) => controller.checkUsernameImmediate(v.trim()),
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Username is required'
+                            : null,
+                        onChanged: (v) =>
+                            controller.checkUsernameImmediate(v.trim()),
                         trailing: _usernameStatusInline(ref),
                       ),
                     ],
@@ -122,8 +130,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                     controller: _displayNameCtrl,
                     hint: 'Display name',
                     icon: Icons.person_outline,
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Display name is required' : null,
+                    validator: (v) => v == null || v.trim().isEmpty
+                        ? 'Display name is required'
+                        : null,
                   ),
                   const SizedBox(height: 16),
                   // Bio (multiline)
@@ -137,7 +146,8 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                   const SizedBox(height: 16),
                   _LanguageDropdown(
                     value: _selectedLanguage,
-                    onChanged: (value) => setState(() => _selectedLanguage = value),
+                    onChanged: (value) =>
+                        setState(() => _selectedLanguage = value),
                   ),
                   const SizedBox(height: 24),
                   SizedBox(
@@ -150,27 +160,38 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                               await controller.updateProfile(
                                 username: _usernameCtrl.text.trim(),
                                 displayName: _displayNameCtrl.text.trim(),
-                                bio: _bioCtrl.text.trim().isEmpty ? null : _bioCtrl.text.trim(),
+                                bio: _bioCtrl.text.trim().isEmpty
+                                    ? null
+                                    : _bioCtrl.text.trim(),
                                 dateOfBirth: _dob,
                                 language: _selectedLanguage,
                               );
-                              final err = ref.read(profileControllerProvider).error;
+                              final err = ref
+                                  .read(profileControllerProvider)
+                                  .error;
                               if (err == null && mounted) {
-                                showToast(context, 'Profile updated', success: true);
+                                showToast(
+                                  context,
+                                  'Profile updated',
+                                  success: true,
+                                );
                               } else if (mounted) {
                                 showToast(context, err.toString());
                               }
                             },
                       style: FilledButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
+                        backgroundColor: context.actionButtonBackground,
+                        foregroundColor: context.actionButtonForeground,
                         padding: const EdgeInsets.symmetric(vertical: 18),
                       ),
                       child: profileAsync.isLoading
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 22,
                               height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: context.actionButtonForeground,
+                              ),
                             )
                           : const Text('Save Changes'),
                     ),
@@ -258,7 +279,9 @@ class _LanguageDropdown extends StatelessWidget {
                   ),
               ],
               onChanged: onChanged,
-              validator: (value) => value == null || value.isEmpty ? 'Please select a language' : null,
+              validator: (value) => value == null || value.isEmpty
+                  ? 'Please select a language'
+                  : null,
             ),
           ),
         ],

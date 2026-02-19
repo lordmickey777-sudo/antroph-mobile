@@ -15,6 +15,9 @@ class AppEnv {
 
   static String get apiBaseUrl => _string('API_BASE_URL', '');
   static String get sentryDsn => _string('SENTRY_DSN', '');
+  static String get posthogApiKey => _string('POSTHOG_API_KEY', '');
+  static String get posthogHost =>
+      _string('POSTHOG_HOST', 'https://us.i.posthog.com');
   static String get robotSerial => _string('ROBOT_SERIAL', '');
   static String get chatWsUrl {
     final direct = _string('CHAT_WS_URL', '');
@@ -43,11 +46,16 @@ class AppEnv {
 
   static String get storyWsUrl {
     final direct = _string('STORY_WS_URL', '');
-    if (direct.isNotEmpty) return direct;
+    if (direct.isNotEmpty) {
+      return direct;
+    }
     final api = apiBaseUrl;
-    if (api.startsWith('https://'))
+    if (api.startsWith('https://')) {
       return api.replaceFirst('https://', 'wss://');
-    if (api.startsWith('http://')) return api.replaceFirst('http://', 'ws://');
+    }
+    if (api.startsWith('http://')) {
+      return api.replaceFirst('http://', 'ws://');
+    }
     return '';
   }
 

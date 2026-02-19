@@ -12,6 +12,7 @@ import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/features/profile/providers/profile_controller.dart';
 import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
+import 'package:antroph_mobile/widgets/shimmer.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -21,13 +22,17 @@ class ProfilePage extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF141718) : const Color(0xFFF5F5F7),
+      backgroundColor: isDark
+          ? const Color(0xFF141718)
+          : const Color(0xFFF5F5F7),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: ContentWidth.content),
           child: ScrollFadeGradient(
             child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
               slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
@@ -36,7 +41,11 @@ class ProfilePage extends StatelessWidget {
                       bottom: false,
                       child: Row(
                         children: [
-                          Image.asset('assets/images/app_logo.png', width: 38, height: 38),
+                          Image.asset(
+                            'assets/images/app_logo.png',
+                            width: 38,
+                            height: 38,
+                          ),
                           const SizedBox(width: 2),
                           TypographyText(
                             'Profile',
@@ -85,7 +94,9 @@ class _ProfileHeader extends ConsumerWidget {
     final email = auth?.email ?? '';
     final displayName = isGuest
         ? 'Guest'
-        : (profile?.displayName ?? auth?.displayName ?? email.trim().split('@').first);
+        : (profile?.displayName ??
+              auth.displayName ??
+              email.trim().split('@').first);
     final avatarUrl = isGuest ? null : profile?.avatarUrl;
     final avatarSize = AppSizing.avatarLarge.of(context);
     return Column(
@@ -101,14 +112,20 @@ class _ProfileHeader extends ConsumerWidget {
                         ref,
                         actionDescription: 'Access your profile',
                       );
-                      if (result == AuthGuardResult.loginSuccessful && context.mounted) {
+                      if (result == AuthGuardResult.loginSuccessful &&
+                          context.mounted) {
                         context.pushNamed('edit-profile');
                       }
                     }
                   : () => context.pushNamed('edit-profile'),
               child: ClipOval(
                 child: avatarUrl != null && avatarUrl.isNotEmpty
-                    ? Image.network(avatarUrl, width: avatarSize, height: avatarSize, fit: BoxFit.cover)
+                    ? Image.network(
+                        avatarUrl,
+                        width: avatarSize,
+                        height: avatarSize,
+                        fit: BoxFit.cover,
+                      )
                     : Image.asset(
                         'assets/images/avatar.png',
                         width: avatarSize,
@@ -124,7 +141,10 @@ class _ProfileHeader extends ConsumerWidget {
                 child: Container(
                   width: 14,
                   height: 14,
-                  decoration: const BoxDecoration(color: Color(0xFF23D18B), shape: BoxShape.circle),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF23D18B),
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
           ],
@@ -180,11 +200,20 @@ class _ProfileMenu extends ConsumerWidget {
       (Icons.privacy_tip_outlined, 'Privacy Policy', true),
       (Icons.description_outlined, 'Terms of Service', true),
       if (!isGuest) (Icons.delete_outline, 'Delete account', false),
-      (isGuest ? Icons.login : Icons.logout, isGuest ? 'Login' : 'Logout', false),
+      (
+        isGuest ? Icons.login : Icons.logout,
+        isGuest ? 'Login' : 'Logout',
+        false,
+      ),
     ];
 
     // Actions that require authentication
-    const authRequiredActions = {'Profile', 'Customization', 'Scan', 'Security'};
+    const authRequiredActions = {
+      'Profile',
+      'Customization',
+      'Scan',
+      'Security',
+    };
 
     final isDarkMode = ref.watch(themeModeProvider) == ThemeMode.dark;
 
@@ -251,11 +280,15 @@ class _ProfileMenu extends ConsumerWidget {
                   );
                   break;
                 case 'Delete account':
-                  final confirmed = await showDialog<bool>(
+                  final confirmed =
+                      await showDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
                           backgroundColor: const Color(0xFF1B1D1F),
-                          title: const Text('Delete account', style: TextStyle(color: Colors.white)),
+                          title: const Text(
+                            'Delete account',
+                            style: TextStyle(color: Colors.white),
+                          ),
                           content: const Text(
                             'This will deactivate your account and schedule deletion. Continue?',
                             style: TextStyle(color: Colors.white70),
@@ -267,7 +300,10 @@ class _ProfileMenu extends ConsumerWidget {
                             ),
                             TextButton(
                               onPressed: () => Navigator.of(ctx).pop(true),
-                              child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                              child: const Text(
+                                'Delete',
+                                style: TextStyle(color: Colors.redAccent),
+                              ),
                             ),
                           ],
                         ),
@@ -275,9 +311,15 @@ class _ProfileMenu extends ConsumerWidget {
                       false;
                   if (!confirmed) return;
                   try {
-                    final msg = await ref.read(profileControllerProvider.notifier).deleteAccount();
+                    final msg = await ref
+                        .read(profileControllerProvider.notifier)
+                        .deleteAccount();
                     if (context.mounted) {
-                      showToast(context, msg.isNotEmpty ? msg : 'Account deleted', success: true);
+                      showToast(
+                        context,
+                        msg.isNotEmpty ? msg : 'Account deleted',
+                        success: true,
+                      );
                       context.go('/home');
                     }
                   } catch (e) {
@@ -317,7 +359,11 @@ class _ProfileMenu extends ConsumerWidget {
 }
 
 class _ProfileMenuItem extends StatelessWidget {
-  const _ProfileMenuItem({required this.icon, required this.title, this.showChevron = true});
+  const _ProfileMenuItem({
+    required this.icon,
+    required this.title,
+    this.showChevron = true,
+  });
 
   final IconData icon;
   final String title;
@@ -337,7 +383,11 @@ class _ProfileMenuItem extends StatelessWidget {
           Icon(icon, color: iconColor, size: 26),
           const SizedBox(width: 18),
           Expanded(
-            child: TypographyText(title, variant: TypographyVariant.body1, color: textColor),
+            child: TypographyText(
+              title,
+              variant: TypographyVariant.body1,
+              color: textColor,
+            ),
           ),
           if (showChevron) Icon(Icons.chevron_right, color: chevronColor),
         ],
@@ -396,13 +446,15 @@ class _ProfileNudge extends ConsumerWidget {
 
     final profileAsync = ref.watch(profileControllerProvider);
     return profileAsync.when(
-      loading: () => const SizedBox.shrink(),
+      loading: () => const _ProfileNudgeShimmer(),
       error: (_, __) => const SizedBox.shrink(),
       data: (profile) {
         if (profile == null) return const SizedBox.shrink();
         // Defensive: treat null/false the same to avoid runtime errors on hot reload.
         if (profile.isCompleted == true) return const SizedBox.shrink();
-        final missing = ref.read(profileControllerProvider.notifier).missingFields(profile);
+        final missing = ref
+            .read(profileControllerProvider.notifier)
+            .missingFields(profile);
         if (missing.isEmpty) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -438,13 +490,43 @@ class _ProfileNudge extends ConsumerWidget {
   }
 }
 
+class _ProfileNudgeShimmer extends StatelessWidget {
+  const _ProfileNudgeShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.4)),
+        ),
+        child: const Row(
+          children: [
+            ShimmerCircle(size: 18),
+            SizedBox(width: 10),
+            Expanded(child: ShimmerText(height: 13)),
+            SizedBox(width: 10),
+            ShimmerCircle(size: 14),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _BuildNumber extends StatelessWidget {
   const _BuildNumber();
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final versionColor = isDark ? Colors.white.withValues(alpha: 0.4) : Colors.black.withValues(alpha: 0.4);
+    final versionColor = isDark
+        ? Colors.white.withValues(alpha: 0.4)
+        : Colors.black.withValues(alpha: 0.4);
 
     return FutureBuilder<PackageInfo>(
       future: PackageInfo.fromPlatform(),
@@ -505,7 +587,11 @@ class _WebViewPageState extends State<_WebViewPage> {
         children: [
           WebViewWidget(controller: _controller),
           if (_isLoading)
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
+            const Positioned.fill(
+              child: ShimmerWebViewPlaceholder(
+                backgroundColor: Color(0xFF101214),
+              ),
+            ),
         ],
       ),
     );

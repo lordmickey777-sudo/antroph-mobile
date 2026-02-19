@@ -82,7 +82,9 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
     });
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF141718) : const Color(0xFFF5F5F7),
+      backgroundColor: isDark
+          ? const Color(0xFF141718)
+          : const Color(0xFFF5F5F7),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: TypographyText(
@@ -91,7 +93,10 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
           color: isDark ? Colors.white : Colors.black,
         ),
         leading: IconButton(
-          icon: Icon(CupertinoIcons.back, color: isDark ? Colors.white : Colors.black),
+          icon: Icon(
+            CupertinoIcons.back,
+            color: isDark ? Colors.white : Colors.black,
+          ),
           onPressed: () {
             notifier.reset();
             Navigator.of(context).pop();
@@ -101,7 +106,10 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 16),
+          padding: EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: 16,
+          ),
           children: [
             // Title
             _SectionLabel('Title', isDark: isDark),
@@ -150,8 +158,9 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
                 controller: _contextCtrl,
                 onResult: (text) => notifier.updateContext(text),
               ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Context is required' : null,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Context is required'
+                  : null,
               onChanged: (v) => notifier.updateContext(v),
             ),
 
@@ -202,8 +211,9 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
               controller: _themeInputCtrl,
               chips: creation.themes,
               onAdd: (v) => notifier.updateThemes([...creation.themes, v]),
-              onRemove: (v) =>
-                  notifier.updateThemes(creation.themes.where((t) => t != v).toList()),
+              onRemove: (v) => notifier.updateThemes(
+                creation.themes.where((t) => t != v).toList(),
+              ),
               isDark: isDark,
             ),
 
@@ -214,9 +224,11 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
               label: 'Characters',
               controller: _charInputCtrl,
               chips: creation.characters,
-              onAdd: (v) => notifier.updateCharacters([...creation.characters, v]),
-              onRemove: (v) =>
-                  notifier.updateCharacters(creation.characters.where((c) => c != v).toList()),
+              onAdd: (v) =>
+                  notifier.updateCharacters([...creation.characters, v]),
+              onRemove: (v) => notifier.updateCharacters(
+                creation.characters.where((c) => c != v).toList(),
+              ),
               isDark: isDark,
             ),
 
@@ -228,8 +240,9 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
               controller: _tagInputCtrl,
               chips: creation.tags,
               onAdd: (v) => notifier.updateTags([...creation.tags, v]),
-              onRemove: (v) =>
-                  notifier.updateTags(creation.tags.where((t) => t != v).toList()),
+              onRemove: (v) => notifier.updateTags(
+                creation.tags.where((t) => t != v).toList(),
+              ),
               isDark: isDark,
             ),
 
@@ -240,7 +253,8 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
             const SizedBox(height: 6),
             _MascotSelector(
               selectedName: creation.selectedRiveElement?.name,
-              selectedThumbnail: creation.selectedRiveElement?.effectiveThumbnail,
+              selectedThumbnail:
+                  creation.selectedRiveElement?.effectiveThumbnail,
               isDark: isDark,
               onTap: () => showRiveElementPicker(context),
             ),
@@ -280,15 +294,18 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
                         }
                       },
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
+                  backgroundColor: isDark ? Colors.white : Colors.black,
+                  foregroundColor: isDark ? Colors.black : Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 18),
                 ),
                 child: creation.isSubmitting
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 22,
                         height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: isDark ? Colors.black : Colors.white,
+                        ),
                       )
                     : const Text('Create Story'),
               ),
@@ -313,7 +330,9 @@ class _SectionLabel extends StatelessWidget {
     return TypographyText(
       text,
       variant: TypographyVariant.body2,
-      color: isDark ? Colors.white.withValues(alpha: 0.6) : Colors.black.withValues(alpha: 0.5),
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.6)
+          : Colors.black.withValues(alpha: 0.5),
     );
   }
 }
@@ -380,7 +399,10 @@ class _ChipInputSection extends StatelessWidget {
             children: chips
                 .map(
                   (chip) => Chip(
-                    label: Text(chip, style: TextStyle(color: chipTextColor, fontSize: 13)),
+                    label: Text(
+                      chip,
+                      style: TextStyle(color: chipTextColor, fontSize: 13),
+                    ),
                     backgroundColor: chipBg,
                     deleteIconColor: chipTextColor.withValues(alpha: 0.6),
                     onDeleted: () => onRemove(chip),
@@ -452,7 +474,11 @@ class _MascotSelector extends StatelessWidget {
                           : Colors.black.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(Icons.smart_toy_rounded, color: hintColor, size: 24),
+                    child: Icon(
+                      Icons.smart_toy_rounded,
+                      color: hintColor,
+                      size: 24,
+                    ),
                   ),
                 ),
               )
@@ -466,7 +492,11 @@ class _MascotSelector extends StatelessWidget {
                       : Colors.black.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.smart_toy_rounded, color: hintColor, size: 24),
+                child: Icon(
+                  Icons.smart_toy_rounded,
+                  color: hintColor,
+                  size: 24,
+                ),
               ),
             const SizedBox(width: 12),
             Expanded(
@@ -552,7 +582,11 @@ class _CoverImagePicker extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add_photo_alternate_outlined, color: hintColor, size: 32),
+              Icon(
+                Icons.add_photo_alternate_outlined,
+                color: hintColor,
+                size: 32,
+              ),
               const SizedBox(height: 8),
               Text(
                 'Add cover image',

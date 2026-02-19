@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
 class SupportPage extends StatefulWidget {
@@ -29,7 +30,9 @@ class _SupportPageState extends State<SupportPage> {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
-        NavigationDelegate(onPageFinished: (_) => setState(() => _isLoading = false)),
+        NavigationDelegate(
+          onPageFinished: (_) => setState(() => _isLoading = false),
+        ),
       )
       ..loadRequest(Uri.parse('https://www.antroph.com/support/'));
   }
@@ -55,11 +58,9 @@ class _SupportPageState extends State<SupportPage> {
             else
               const _DisabledPlaceholder(),
             if (_isLoading && widget.enableWebView)
-              const Align(
-                alignment: Alignment.topCenter,
-                child: Padding(
-                  padding: EdgeInsets.only(top: 6.0),
-                  child: CupertinoActivityIndicator(),
+              const Positioned.fill(
+                child: ShimmerWebViewPlaceholder(
+                  backgroundColor: Color(0xFF1E1F22),
                 ),
               ),
           ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:flutter/services.dart';
 import 'package:antroph_mobile/widgets/app_input.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
 /// Deprecated: Use [AppInput] from `lib/widgets/app_input.dart` instead.
 /// Kept temporarily for backwards compatibility; will be removed after migration.
@@ -43,16 +44,24 @@ class AuthInput extends StatelessWidget {
 }
 
 class AuthButton extends StatelessWidget {
-  const AuthButton({super.key, required this.label, required this.onTap, this.loading = false});
+  const AuthButton({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.loading = false,
+  });
   final String label;
   final VoidCallback onTap;
   final bool loading;
   @override
   Widget build(BuildContext context) {
+    final buttonBackground = context.actionButtonBackground;
+    final buttonForeground = context.actionButtonForeground;
+
     return SizedBox(
       height: 64,
       child: Material(
-        color: const Color(0xFF1F2223),
+        color: buttonBackground,
         borderRadius: BorderRadius.circular(40),
         child: InkWell(
           onTap: loading
@@ -64,18 +73,18 @@ class AuthButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(40),
           child: Center(
             child: loading
-                ? const SizedBox(
+                ? SizedBox(
                     height: 24,
                     width: 24,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                      valueColor: AlwaysStoppedAnimation(buttonForeground),
                     ),
                   )
                 : TypographyText(
                     label,
                     variant: TypographyVariant.body1,
-                    color: Colors.white,
+                    color: buttonForeground,
                     fontWeight: FontWeight.w600,
                   ),
           ),

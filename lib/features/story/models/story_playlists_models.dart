@@ -1,4 +1,5 @@
 import 'mascot_model.dart';
+import '../../community_stories/models/rive_element_model.dart';
 
 class PlaylistDto {
   PlaylistDto({
@@ -12,8 +13,8 @@ class PlaylistDto {
     required this.coverImageUrl,
     required this.createdAt,
     required this.updatedAt,
-    this.mascotId,
-    this.mascot,
+    this.riveElementId,
+    this.riveElement,
   });
 
   final String id;
@@ -26,8 +27,10 @@ class PlaylistDto {
   final bool isPublic;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final String? mascotId;
-  final MascotConfig? mascot;
+  final String? riveElementId;
+  final RiveElementDto? riveElement;
+
+  MascotConfig? get mascot => riveElement?.toMascotConfig();
 
   factory PlaylistDto.fromJson(Map<String, dynamic> json) {
     final createdAt = DateTime.tryParse((json['created_at'] as String?) ?? '');
@@ -67,8 +70,8 @@ class PlaylistDto {
       isPublic: (json['is_public'] as bool?) ?? false,
       createdAt: createdAt ?? DateTime.now(),
       updatedAt: updatedAt ?? DateTime.now(),
-      mascotId: (json['mascot_id'] as String?)?.trim(),
-      mascot: MascotConfig.maybeFromJson(json['mascot']),
+      riveElementId: (json['rive_element_id'] as String?)?.trim(),
+      riveElement: _parseRiveElement(json['rive_element']),
     );
   }
 }
@@ -95,8 +98,8 @@ class PlaylistStoryDto {
     required this.imageUrl,
     required this.users,
     required this.views,
-    this.mascotId,
-    this.mascot,
+    this.riveElementId,
+    this.riveElement,
   });
 
   final String id;
@@ -106,8 +109,10 @@ class PlaylistStoryDto {
   final String imageUrl;
   final int users;
   final int views;
-  final String? mascotId;
-  final MascotConfig? mascot;
+  final String? riveElementId;
+  final RiveElementDto? riveElement;
+
+  MascotConfig? get mascot => riveElement?.toMascotConfig();
 
   factory PlaylistStoryDto.fromJson(Map<String, dynamic> json) {
     final rawImage =
@@ -127,8 +132,14 @@ class PlaylistStoryDto {
       imageUrl: rawImage.trim(),
       users: (json['users'] as num?)?.toInt() ?? 0,
       views: (json['views'] as num?)?.toInt() ?? 0,
-      mascotId: (json['mascot_id'] as String?)?.trim(),
-      mascot: MascotConfig.maybeFromJson(json['mascot']),
+      riveElementId: (json['rive_element_id'] as String?)?.trim(),
+      riveElement: _parseRiveElement(json['rive_element']),
     );
   }
+}
+
+RiveElementDto? _parseRiveElement(dynamic value) {
+  if (value is Map<String, dynamic>) return RiveElementDto.fromJson(value);
+  if (value is Map) return RiveElementDto.fromJson(value.cast<String, dynamic>());
+  return null;
 }

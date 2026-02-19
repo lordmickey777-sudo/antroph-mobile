@@ -7,6 +7,7 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 
 import '../providers/community_stories_providers.dart';
 import '../widgets/community_story_card.dart';
+import '../widgets/community_story_list_shimmer.dart';
 import 'story_editor_page.dart';
 import 'story_preview_page.dart';
 
@@ -20,8 +21,9 @@ class MyStoriesPage extends ConsumerWidget {
     final horizontalPadding = AppPadding.horizontal.of(context);
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF141718) : const Color(0xFFF5F5F7),
+      backgroundColor: isDark
+          ? const Color(0xFF141718)
+          : const Color(0xFFF5F5F7),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: TypographyText(
@@ -30,13 +32,15 @@ class MyStoriesPage extends ConsumerWidget {
           color: isDark ? Colors.white : Colors.black,
         ),
         leading: IconButton(
-          icon: Icon(CupertinoIcons.back,
-              color: isDark ? Colors.white : Colors.black),
+          icon: Icon(
+            CupertinoIcons.back,
+            color: isDark ? Colors.white : Colors.black,
+          ),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: asyncStories.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const CommunityStoryListShimmer(showStatus: true, compact: true),
         error: (err, _) => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -85,7 +89,9 @@ class MyStoriesPage extends ConsumerWidget {
             onRefresh: () => ref.refresh(myStoriesProvider.future),
             child: ListView.separated(
               padding: EdgeInsets.symmetric(
-                  horizontal: horizontalPadding, vertical: 16),
+                horizontal: horizontalPadding,
+                vertical: 16,
+              ),
               itemCount: stories.length,
               separatorBuilder: (_, __) => const SizedBox(height: 14),
               itemBuilder: (context, index) {
@@ -93,13 +99,15 @@ class MyStoriesPage extends ConsumerWidget {
                 return CommunityStoryCard(
                   story: story,
                   showStatus: true,
+                  compact: true,
                   onTap: () {
                     final status = story.moderationStatus;
-                    if (status == 'pending' || status == 'rejected' || status == 'pending_update') {
+                    if (status == 'pending' ||
+                        status == 'rejected' ||
+                        status == 'pending_update') {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) =>
-                              StoryEditorPage(storyId: story.id),
+                          builder: (_) => StoryEditorPage(storyId: story.id),
                         ),
                       );
                     } else {

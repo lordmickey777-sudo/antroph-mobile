@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
 import 'typography_text.dart';
 
@@ -51,11 +52,13 @@ class AppPillButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isEnabled = onPressed != null && !isLoading;
     final shouldDim = onPressed == null && !isLoading;
-    final fg = foregroundColor ?? Theme.of(context).colorScheme.onSurface;
-    final bg = backgroundColor ?? Theme.of(context).colorScheme.surface;
+    final fg = foregroundColor ?? context.actionButtonForeground;
+    final bg = backgroundColor ?? context.actionButtonBackground;
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(radius),
-      side: borderColor == null ? BorderSide.none : BorderSide(color: borderColor!),
+      side: borderColor == null
+          ? BorderSide.none
+          : BorderSide(color: borderColor!),
     );
 
     final rippleColor = fg.withValues(alpha: 0.18);
@@ -141,13 +144,15 @@ class AppCircleIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isEnabled = onPressed != null && !isLoading;
     final shouldDim = onPressed == null && !isLoading;
-    final fg = foregroundColor ?? Theme.of(context).colorScheme.onSurface;
-    final bg = backgroundColor ?? Theme.of(context).colorScheme.surface;
+    final fg = foregroundColor ?? context.actionButtonForeground;
+    final bg = backgroundColor ?? context.actionButtonBackground;
     final rippleColor = fg.withValues(alpha: 0.18);
     final highlightColor = fg.withValues(alpha: 0.08);
 
     final shape = CircleBorder(
-      side: borderColor == null ? BorderSide.none : BorderSide(color: borderColor!),
+      side: borderColor == null
+          ? BorderSide.none
+          : BorderSide(color: borderColor!),
     );
 
     final button = Material(

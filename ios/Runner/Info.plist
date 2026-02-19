@@ -17,6 +17,8 @@
 	</array>
 	<key>GIDClientID</key>
 	<string>760875540633-lamivlfo0r2f8p7r41aii7eo20ve50ic.apps.googleusercontent.com</string>
+	<key>com.posthog.posthog.AUTO_INIT</key>
+	<false/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

@@ -11,7 +11,11 @@ class ShimmerColors {
     return hsl.withLightness(nextLightness).toColor();
   }
 
-  static Color _tone(BuildContext context, double darkDelta, double lightDelta) {
+  static Color _tone(
+    BuildContext context,
+    double darkDelta,
+    double lightDelta,
+  ) {
     final base = context.surfaceColor;
     return _shiftLightness(base, context.isDarkMode ? darkDelta : lightDelta);
   }
@@ -99,10 +103,7 @@ class ShimmerBox extends StatelessWidget {
 
 /// Circular shimmer placeholder - great for avatars
 class ShimmerCircle extends StatelessWidget {
-  const ShimmerCircle({
-    super.key,
-    required this.size,
-  });
+  const ShimmerCircle({super.key, required this.size});
 
   final double size;
 
@@ -123,12 +124,7 @@ class ShimmerCircle extends StatelessWidget {
 
 /// Text line placeholder with shimmer
 class ShimmerText extends StatelessWidget {
-  const ShimmerText({
-    super.key,
-    this.width,
-    this.height = 14,
-    this.radius = 4,
-  });
+  const ShimmerText({super.key, this.width, this.height = 14, this.radius = 4});
 
   final double? width;
   final double height;
@@ -209,9 +205,7 @@ class ShimmerCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: context.cardBackground,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(
-          color: ShimmerColors.borderColor(context),
-        ),
+        border: Border.all(color: ShimmerColors.borderColor(context)),
       ),
       child: child,
     );
@@ -298,10 +292,7 @@ class ShimmerImage extends StatelessWidget {
     );
 
     if (aspectRatio != null) {
-      return AspectRatio(
-        aspectRatio: aspectRatio!,
-        child: shimmerContent,
-      );
+      return AspectRatio(aspectRatio: aspectRatio!, child: shimmerContent);
     }
 
     return shimmerContent;
@@ -323,11 +314,7 @@ class ShimmerButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ShimmerBox(
-      width: width,
-      height: height,
-      radius: radius,
-    );
+    return ShimmerBox(width: width, height: height, radius: radius);
   }
 }
 
@@ -353,9 +340,7 @@ class ShimmerInput extends StatelessWidget {
         decoration: BoxDecoration(
           color: context.inputBackground,
           borderRadius: BorderRadius.circular(radius),
-          border: Border.all(
-            color: ShimmerColors.borderColor(context),
-          ),
+          border: Border.all(color: ShimmerColors.borderColor(context)),
         ),
       ),
     );
@@ -398,11 +383,7 @@ class ShimmerGrid extends StatelessWidget {
 
 /// Story card shimmer - matches the app's story card layout
 class ShimmerStoryCard extends StatelessWidget {
-  const ShimmerStoryCard({
-    super.key,
-    this.width,
-    this.height = 200,
-  });
+  const ShimmerStoryCard({super.key, this.width, this.height = 200});
 
   final double? width;
   final double height;
@@ -416,12 +397,7 @@ class ShimmerStoryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: ShimmerImage(
-              radius: 12,
-              width: double.infinity,
-            ),
-          ),
+          Expanded(child: ShimmerImage(radius: 12, width: double.infinity)),
           const SizedBox(height: 12),
           const FractionallySizedBox(
             widthFactor: 0.7,
@@ -440,10 +416,7 @@ class ShimmerStoryCard extends StatelessWidget {
 
 /// Profile header shimmer - matches profile layout
 class ShimmerProfileHeader extends StatelessWidget {
-  const ShimmerProfileHeader({
-    super.key,
-    this.avatarSize = 80,
-  });
+  const ShimmerProfileHeader({super.key, this.avatarSize = 80});
 
   final double avatarSize;
 
@@ -463,11 +436,7 @@ class ShimmerProfileHeader extends StatelessWidget {
 
 /// Chat message shimmer - matches chat bubble style
 class ShimmerChatMessage extends StatelessWidget {
-  const ShimmerChatMessage({
-    super.key,
-    this.isUser = false,
-    this.lines = 2,
-  });
+  const ShimmerChatMessage({super.key, this.isUser = false, this.lines = 2});
 
   final bool isUser;
   final int lines;
@@ -489,11 +458,7 @@ class ShimmerChatMessage extends StatelessWidget {
               : (isDark ? const Color(0xFF0F1720) : const Color(0xFFE9E9EB)),
           borderRadius: BorderRadius.circular(16),
         ),
-        child: ShimmerParagraph(
-          lines: lines,
-          lineHeight: 12,
-          lineSpacing: 8,
-        ),
+        child: ShimmerParagraph(lines: lines, lineHeight: 12, lineSpacing: 8),
       ),
     );
   }
@@ -501,10 +466,7 @@ class ShimmerChatMessage extends StatelessWidget {
 
 /// Collection card shimmer - matches collections layout
 class ShimmerCollectionCard extends StatelessWidget {
-  const ShimmerCollectionCard({
-    super.key,
-    this.height = 120,
-  });
+  const ShimmerCollectionCard({super.key, this.height = 120});
 
   final double height;
 
@@ -514,11 +476,7 @@ class ShimmerCollectionCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: Stack(
         children: [
-          ShimmerImage(
-            width: double.infinity,
-            height: height,
-            radius: 0,
-          ),
+          ShimmerImage(width: double.infinity, height: height, radius: 0),
           Positioned(
             left: 16,
             bottom: 16,
@@ -554,22 +512,54 @@ class ShimmerNavItem extends StatelessWidget {
   }
 }
 
+/// Full-screen shimmer placeholder for embedded web content pages.
+class ShimmerWebViewPlaceholder extends StatelessWidget {
+  const ShimmerWebViewPlaceholder({
+    super.key,
+    this.backgroundColor,
+    this.padding = const EdgeInsets.all(16),
+  });
+
+  final Color? backgroundColor;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: backgroundColor ?? context.surfaceColor,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: padding,
+          child: Column(
+            children: const [
+              Row(
+                children: [
+                  ShimmerBox(width: 80, height: 12, radius: 6),
+                  Spacer(),
+                  ShimmerCircle(size: 28),
+                ],
+              ),
+              SizedBox(height: 14),
+              Expanded(child: ShimmerBox(radius: 14)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Full page loading shimmer wrapper
 class ShimmerLoadingPage extends StatelessWidget {
-  const ShimmerLoadingPage({
-    super.key,
-    required this.child,
-  });
+  const ShimmerLoadingPage({super.key, required this.child});
 
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: child,
-      ),
+      child: Padding(padding: const EdgeInsets.all(16), child: child),
     );
   }
 }
