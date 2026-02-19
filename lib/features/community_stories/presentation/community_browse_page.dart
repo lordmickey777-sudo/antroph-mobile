@@ -2,9 +2,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
+import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
+import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
+import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 
 import '../providers/community_stories_providers.dart';
 import '../models/community_story_model.dart';
@@ -271,6 +274,50 @@ class _CommunityStoryDetail extends StatelessWidget {
                       ),
                     ],
                   ],
+                ),
+
+                const SizedBox(height: 24),
+
+                // Play button
+                Consumer(
+                  builder: (ctx, ref, _) {
+                    return AppPillButton(
+                      onPressed: () async {
+                        final authResult = await showAuthGuardSheet(
+                          ctx,
+                          ref,
+                          actionDescription: 'Start a story session',
+                        );
+                        if (authResult != AuthGuardResult.authenticated &&
+                            authResult != AuthGuardResult.loginSuccessful) {
+                          return;
+                        }
+                        if (!ctx.mounted) return;
+                        Navigator.of(ctx).push(
+                          MaterialPageRoute(
+                            builder: (_) => ChatPage(
+                              storyTitle: story.title.isNotEmpty
+                                  ? story.title
+                                  : 'Chat',
+                              storyId: story.id,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: CupertinoIcons.play_fill,
+                      label: 'Continue',
+                      backgroundColor:
+                          isDark ? Colors.white : Colors.black,
+                      foregroundColor:
+                          isDark ? Colors.black : Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 28,
+                      ),
+                      variant: TypographyVariant.body1,
+                      fontWeight: FontWeight.w600,
+                    );
+                  },
                 ),
 
                 const SizedBox(height: 40),

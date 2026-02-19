@@ -1,10 +1,11 @@
 import 'mascot_model.dart';
+import '../../community_stories/models/rive_element_model.dart';
 
 class StoryDetailDto {
   StoryDetailDto({
     required this.id,
     required this.categoryId,
-    required this.mascotId,
+    this.riveElementId,
     required this.title,
     required this.description,
     required this.author,
@@ -21,13 +22,13 @@ class StoryDetailDto {
     required this.updatedAt,
     required this.tree,
     required this.previewNodeIds,
-    this.mascot,
+    this.riveElement,
   });
 
   final String id;
   final String categoryId;
-  final String mascotId;
-  final MascotConfig? mascot;
+  final String? riveElementId;
+  final RiveElementDto? riveElement;
   final String title;
   final String description;
   final String author;
@@ -48,8 +49,8 @@ class StoryDetailDto {
   factory StoryDetailDto.fromJson(Map<String, dynamic> json) => StoryDetailDto(
     id: (json['id'] as String?)?.trim() ?? '',
     categoryId: (json['category_id'] as String?)?.trim() ?? '',
-    mascotId: (json['mascot_id'] as String?)?.trim() ?? '',
-    mascot: MascotConfig.maybeFromJson(json['mascot']),
+    riveElementId: (json['rive_element_id'] as String?)?.trim(),
+    riveElement: _parseRiveElement(json['rive_element']),
     title: (json['title'] as String?)?.trim() ?? '',
     description: (json['description'] as String?)?.trim() ?? '',
     author: (json['author'] as String?)?.trim() ?? '',
@@ -71,6 +72,12 @@ class StoryDetailDto {
         .toList(),
   );
 
+  static RiveElementDto? _parseRiveElement(dynamic value) {
+    if (value is Map<String, dynamic>) return RiveElementDto.fromJson(value);
+    if (value is Map) return RiveElementDto.fromJson(value.cast<String, dynamic>());
+    return null;
+  }
+
   static DateTime? _parseDate(dynamic v) {
     if (v == null) return null;
     if (v is String && v.isNotEmpty) {
@@ -86,8 +93,8 @@ class StoryDetailDto {
   Map<String, dynamic> toJson() => {
     'id': id,
     'category_id': categoryId,
-    'mascot_id': mascotId,
-    if (mascot != null) 'mascot': mascot!.toJson(),
+    if (riveElementId != null) 'rive_element_id': riveElementId,
+    if (riveElement != null) 'rive_element': riveElement!.toJson(),
     'title': title,
     'description': description,
     'author': author,
@@ -106,5 +113,6 @@ class StoryDetailDto {
     'preview_node_ids': previewNodeIds,
   };
 
-  MascotConfig get effectiveMascot => mascot ?? MascotConfig.defaultAnthroph();
+  MascotConfig get effectiveMascot =>
+      riveElement?.toMascotConfig() ?? MascotConfig.defaultAnthroph();
 }

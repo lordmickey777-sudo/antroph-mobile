@@ -6,7 +6,9 @@ import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
+import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
+import 'package:antroph_mobile/features/story/models/story_detail.dart';
 import 'package:antroph_mobile/features/story/providers/story_session_provider.dart';
 import 'package:antroph_mobile/features/story/data/stories_cache.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
@@ -68,6 +70,8 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
     final sessionState = ref.watch(storySessionProvider);
     final textColor = context.primaryTextColor;
     final secondaryTextColor = context.secondaryTextColor;
+    final tertiaryColor = context.tertiaryTextColor;
+    final detailAsync = ref.watch(storyDetailProvider(widget.storyId));
 
     return Stack(
       children: [
@@ -106,12 +110,19 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                       height: 1.35,
                     ),
                     const SizedBox(height: 16),
-                    TypographyText(
-                      "Great interaction experience and you learn easily cause we'll have lots of conversations. I can tune it to how you like it too.",
-                      variant: TypographyVariant.body1,
-                      color: secondaryTextColor,
-                      fontSize: 14,
-                      height: 1.35,
+                    detailAsync.when(
+                      loading: () => const _StoryDetailShimmer(),
+                      error: (err, _) => Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: TypographyText(
+                          'Could not load details.',
+                          variant: TypographyVariant.body2,
+                          color: tertiaryColor,
+                          fontSize: 13,
+                        ),
+                      ),
+                      data: (detail) =>
+                          _StoryDetailContent(detail: detail),
                     ),
                     SizedBox(height: bottom + 40),
                   ],
@@ -339,6 +350,213 @@ class _ActionButton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
       variant: TypographyVariant.body1,
       fontWeight: FontWeight.w600,
+    );
+  }
+}
+
+/// Renders the info row, description, and tag chips from story detail data.
+class _StoryDetailContent extends StatelessWidget {
+  const _StoryDetailContent({required this.detail});
+  final StoryDetailDto detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondaryTextColor = context.secondaryTextColor;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _InfoRow(
+          author: detail.author,
+          durationMinutes: detail.durationMinutes,
+          difficulty: detail.difficulty,
+          ageRating: detail.ageRating,
+          isPremium: detail.isPremium,
+        ),
+        if (detail.description.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          TypographyText(
+            detail.description,
+            variant: TypographyVariant.body1,
+            color: secondaryTextColor,
+            fontSize: 14,
+            height: 1.35,
+          ),
+        ],
+        if (detail.tags.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _TagChips(tags: detail.tags),
+        ],
+      ],
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.author,
+    required this.durationMinutes,
+    required this.difficulty,
+    required this.ageRating,
+    required this.isPremium,
+  });
+
+  final String author;
+  final int durationMinutes;
+  final String difficulty;
+  final int ageRating;
+  final bool isPremium;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = context.tertiaryTextColor;
+    final items = <Widget>[];
+
+    if (durationMinutes > 0) {
+      items.add(_InfoItem(
+        icon: CupertinoIcons.clock,
+        label: '$durationMinutes min',
+        color: color,
+      ));
+    }
+
+    if (difficulty.isNotEmpty) {
+      items.add(_InfoItem(
+        icon: CupertinoIcons.chart_bar,
+        label: difficulty,
+        color: color,
+      ));
+    }
+
+    if (ageRating > 0) {
+      items.add(_InfoItem(
+        icon: CupertinoIcons.person_2,
+        label: '$ageRating+',
+        color: color,
+      ));
+    }
+
+    if (author.isNotEmpty) {
+      items.add(_InfoItem(
+        icon: CupertinoIcons.pencil,
+        label: author,
+        color: color,
+      ));
+    }
+
+    if (isPremium) {
+      items.add(_InfoItem(
+        icon: CupertinoIcons.star_fill,
+        label: 'Premium',
+        color: Colors.amber.shade600,
+      ));
+    }
+
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    return Wrap(
+      spacing: 16,
+      runSpacing: 8,
+      children: items,
+    );
+  }
+}
+
+class _InfoItem extends StatelessWidget {
+  const _InfoItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(color: color, fontSize: 12),
+        ),
+      ],
+    );
+  }
+}
+
+class _TagChips extends StatelessWidget {
+  const _TagChips({required this.tags});
+  final List<String> tags;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final chipBg = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    final chipTextColor = isDark ? Colors.white70 : Colors.black54;
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: tags
+          .map((tag) => Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: chipBg,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  tag,
+                  style: TextStyle(color: chipTextColor, fontSize: 13),
+                ),
+              ))
+          .toList(),
+    );
+  }
+}
+
+class _StoryDetailShimmer extends StatelessWidget {
+  const _StoryDetailShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: const [
+            ShimmerBox(width: 70, height: 14, radius: 4),
+            SizedBox(width: 16),
+            ShimmerBox(width: 60, height: 14, radius: 4),
+            SizedBox(width: 16),
+            ShimmerBox(width: 50, height: 14, radius: 4),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const ShimmerParagraph(
+          lines: 3,
+          lineHeight: 14,
+          lineSpacing: 10,
+          lastLineWidth: 0.7,
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: const [
+            ShimmerBox(width: 60, height: 28, radius: 20),
+            ShimmerBox(width: 80, height: 28, radius: 20),
+            ShimmerBox(width: 55, height: 28, radius: 20),
+          ],
+        ),
+      ],
     );
   }
 }

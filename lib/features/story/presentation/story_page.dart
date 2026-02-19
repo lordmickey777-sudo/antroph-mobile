@@ -807,6 +807,7 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                       width: _cardWidth,
                       isDark: isDark,
                       onTap: () => _openCommunityStory(context, story),
+                      onPlay: () => _playCommunityStory(context, ref, story),
                     );
                   },
                 ),
@@ -815,6 +816,31 @@ class _CommunityStoriesSliver extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _playCommunityStory(
+    BuildContext context,
+    WidgetRef ref,
+    CommunityStoryDto story,
+  ) async {
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+    if (!context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          storyTitle: story.title.isNotEmpty ? story.title : 'Chat',
+          storyId: story.id,
+        ),
+      ),
     );
   }
 
@@ -918,6 +944,27 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                           .toList(),
                     ),
                   ],
+                  const SizedBox(height: 24),
+                  Consumer(
+                    builder: (ctx, ref, _) {
+                      return AppPillButton(
+                        onPressed: () =>
+                            _playCommunityStory(ctx, ref, story),
+                        icon: CupertinoIcons.play_fill,
+                        label: 'Continue',
+                        backgroundColor:
+                            isDark ? Colors.white : Colors.black,
+                        foregroundColor:
+                            isDark ? Colors.black : Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 14,
+                          horizontal: 28,
+                        ),
+                        variant: TypographyVariant.body1,
+                        fontWeight: FontWeight.w600,
+                      );
+                    },
+                  ),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -969,12 +1016,14 @@ class _CommunityStoryCompactCard extends StatelessWidget {
     required this.width,
     required this.isDark,
     required this.onTap,
+    this.onPlay,
   });
 
   final CommunityStoryDto story;
   final double width;
   final bool isDark;
   final VoidCallback onTap;
+  final VoidCallback? onPlay;
 
   Widget _buildCoverImage() {
     final coverUrl = story.coverImageUrl;
@@ -1075,6 +1124,20 @@ class _CommunityStoryCompactCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                // Play button
+                if (onPlay != null)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: AppCircleIconButton(
+                      onPressed: onPlay,
+                      icon: CupertinoIcons.play_fill,
+                      size: 34,
+                      iconSize: 18,
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                    ),
+                  ),
               ],
             ),
           ),
