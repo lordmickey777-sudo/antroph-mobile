@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:video_player/video_player.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/features/hardware/presentation/waitlist_bottom_sheet.dart';
 
@@ -17,10 +18,12 @@ class _HardwarePageState extends State<HardwarePage> {
   double _currentPage = _kMiddlePage + 1.0;
 
   static const _items = [
-    _CarouselItem('assets/images/hw1.png', 'Brio Penguin'),
-    _CarouselItem('assets/images/hw2.png', 'Aura Table top'),
-    _CarouselItem('assets/images/hw3.png', 'Brio Guinea pig'),
+    _CarouselItem('assets/videos/h1.mp4', 'Brio Penguin'),
+    _CarouselItem('assets/videos/h2.mp4', 'Aura Table top'),
+    _CarouselItem('assets/videos/h3.mp4', 'Brio Guinea pig'),
   ];
+
+  late final List<VideoPlayerController> _videoControllers;
 
   @override
   void initState() {
@@ -32,11 +35,27 @@ class _HardwarePageState extends State<HardwarePage> {
     _pageController.addListener(() {
       setState(() => _currentPage = _pageController.page ?? (_kMiddlePage + 1.0));
     });
+
+    _videoControllers = _items.map((item) {
+      final controller = VideoPlayerController.asset(item.video);
+      controller.initialize().then((_) {
+        controller.setLooping(true);
+        controller.setVolume(0);
+        controller.play();
+        if (mounted) setState(() {});
+      }).catchError((e) {
+        debugPrint('Video init error for ${item.video}: $e');
+      });
+      return controller;
+    }).toList();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    for (final controller in _videoControllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -63,7 +82,7 @@ class _HardwarePageState extends State<HardwarePage> {
                   itemBuilder: (context, index) {
                     final realIndex = index % _items.length;
                     final delta = index - _currentPage;
-                    return _buildCarouselCard(delta, _items[realIndex], isDark);
+                    return _buildCarouselCard(delta, realIndex, isDark);
                   },
                 ),
               ),
@@ -144,7 +163,7 @@ class _HardwarePageState extends State<HardwarePage> {
     );
   }
 
-  Widget _buildCarouselCard(double delta, _CarouselItem item, bool isDark) {
+  Widget _buildCarouselCard(double delta, int realIndex, bool isDark) {
     // Clamp delta so the max rotation is bounded
     final clampedDelta = delta.clamp(-1.5, 1.5);
 
@@ -165,6 +184,8 @@ class _HardwarePageState extends State<HardwarePage> {
       ..translate(translateX, 0.0, 0.0)
       ..rotateY(-rotationY)
       ..scale(scale);
+
+    final controller = _videoControllers[realIndex];
 
     return Transform(
       transform: transform,
@@ -187,7 +208,19 @@ class _HardwarePageState extends State<HardwarePage> {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(24),
-            child: Image.asset(item.image, fit: BoxFit.cover),
+            child: controller.value.isInitialized
+                ? FittedBox(
+                    fit: BoxFit.cover,
+                    clipBehavior: Clip.hardEdge,
+                    child: SizedBox(
+                      width: controller.value.size.width,
+                      height: controller.value.size.height,
+                      child: VideoPlayer(controller),
+                    ),
+                  )
+                : const Center(
+                    child: CircularProgressIndicator.adaptive(),
+                  ),
           ),
         ),
       ),
@@ -196,7 +229,7 @@ class _HardwarePageState extends State<HardwarePage> {
 }
 
 class _CarouselItem {
-  const _CarouselItem(this.image, this.label);
-  final String image;
+  const _CarouselItem(this.video, this.label);
+  final String video;
   final String label;
 }
