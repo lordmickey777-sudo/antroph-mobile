@@ -30,6 +30,9 @@ enum RealtimeServerMessageType {
   sessionCreated('session.created'),
   sessionUpdated('session.updated'),
 
+  // Conversation history
+  conversationHistoryFull('conversation.history.full'),
+
   // OpenAI Realtime conversation messages
   conversationItemCreate('conversation.item.create'),
   inputAudioTranscriptionCompleted('conversation.item.input_audio_transcription.completed'),

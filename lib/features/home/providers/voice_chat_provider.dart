@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -89,6 +90,8 @@ class VoiceChatState {
     int? faceTimestampMs,
     bool clearFace = false,
     bool clearAiAudio = false,
+    bool clearUserTranscription = false,
+    bool clearAiResponse = false,
     RealtimeVoicePhase? phase,
     StorySessionInfo? storySession,
     RoomState? roomState,
@@ -103,20 +106,25 @@ class VoiceChatState {
       isPlaying: isPlaying ?? this.isPlaying,
       isConnecting: isConnecting ?? this.isConnecting,
       isProcessing: isProcessing ?? this.isProcessing,
-      userTranscription: userTranscription ?? this.userTranscription,
-      aiResponse: aiResponse ?? this.aiResponse,
+      userTranscription: clearUserTranscription
+          ? null
+          : (userTranscription ?? this.userTranscription),
+      aiResponse: clearAiResponse ? null : (aiResponse ?? this.aiResponse),
       aiAudioBytes: clearAiAudio ? null : (aiAudioBytes ?? this.aiAudioBytes),
       errorMessage: errorMessage,
       playbackProgress: playbackProgress ?? this.playbackProgress,
       permissionDialog: permissionDialog ?? this.permissionDialog,
       audioFormats: audioFormats ?? this.audioFormats,
-      currentFaceBitmap:
-          clearFace ? null : (currentFaceBitmap ?? this.currentFaceBitmap),
-      faceTimestampMs:
-          clearFace ? null : (faceTimestampMs ?? this.faceTimestampMs),
+      currentFaceBitmap: clearFace
+          ? null
+          : (currentFaceBitmap ?? this.currentFaceBitmap),
+      faceTimestampMs: clearFace
+          ? null
+          : (faceTimestampMs ?? this.faceTimestampMs),
       phase: phase ?? this.phase,
-      storySession:
-          clearStorySession ? null : (storySession ?? this.storySession),
+      storySession: clearStorySession
+          ? null
+          : (storySession ?? this.storySession),
       roomState: roomState ?? this.roomState,
       isStoryMode: isStoryMode ?? this.isStoryMode,
       conversationHistory: conversationHistory ?? this.conversationHistory,
@@ -156,11 +164,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Timer? _maxRecordingTimer;
   Timer? _playbackIdleTimer;
   DateTime? _playbackExpectedEndAt;
+  DateTime? _lastAiAudioAt;
   DateTime? _lastSpeechAt;
   DateTime? _lastMicLogAt;
   bool _hasSpeech = false;
   double _noiseFloor = 0.0;
-  final List<double> _pendingAiRmsValues = [];
+  bool _responseDoneForCurrentTurn = false;
+  bool _receivedAiAudioForCurrentTurn = false;
+  final Queue<_TimedRmsSample> _pendingAiRmsSamples = Queue<_TimedRmsSample>();
   final StringBuffer _aiTextBuffer = StringBuffer();
   BytesBuilder _audioBuffer = BytesBuilder(copy: false);
   Completer<bool>? _permissionDialogCompleter;
@@ -185,9 +196,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     RealtimeVoiceClient? client,
     AudioChunkPlayer? player,
     Uri? voiceUriOverride,
-  })  : _client = client ?? RealtimeVoiceClient(),
-        _player = player ?? createAudioChunkPlayer(),
-        _voiceUriOverride = voiceUriOverride;
+  }) : _client = client ?? RealtimeVoiceClient(),
+       _player = player ?? createAudioChunkPlayer(),
+       _voiceUriOverride = voiceUriOverride;
 
   Stream<double> get micLevelStream =>
       _micLevelController?.stream ?? Stream<double>.empty();
@@ -238,7 +249,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       if (mode == _VoiceAudioSessionMode.recording) {
         config = AudioSessionConfiguration(
           avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-          avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker |
+          avAudioSessionCategoryOptions:
+              AVAudioSessionCategoryOptions.defaultToSpeaker |
               AVAudioSessionCategoryOptions.allowBluetooth,
           avAudioSessionMode: AVAudioSessionMode.voiceChat,
           avAudioSessionRouteSharingPolicy:
@@ -254,7 +266,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       } else {
         config = AudioSessionConfiguration(
           avAudioSessionCategory: AVAudioSessionCategory.playback,
-          avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker,
+          avAudioSessionCategoryOptions:
+              AVAudioSessionCategoryOptions.defaultToSpeaker,
           avAudioSessionMode: AVAudioSessionMode.defaultMode,
           avAudioSessionRouteSharingPolicy:
               AVAudioSessionRouteSharingPolicy.defaultPolicy,
@@ -301,8 +314,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isPlaying: false,
         isStoryMode: true,
         phase: RealtimeVoicePhase.connecting,
-        aiResponse: null,
-        userTranscription: null,
+        clearAiResponse: true,
+        clearUserTranscription: true,
         clearAiAudio: true,
         errorMessage: null,
         clearFace: true,
@@ -360,8 +373,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isPlaying: false,
         isStoryMode: true,
         phase: RealtimeVoicePhase.connecting,
-        aiResponse: null,
-        userTranscription: null,
+        clearAiResponse: true,
+        clearUserTranscription: true,
         clearAiAudio: true,
         errorMessage: null,
         clearFace: true,
@@ -488,8 +501,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isConnecting: !state.isStoryMode,
         isProcessing: false,
         isPlaying: false,
-        aiResponse: null,
-        userTranscription: null,
+        clearAiResponse: true,
+        clearUserTranscription: true,
         clearAiAudio: true,
         errorMessage: null,
         clearFace: true,
@@ -548,9 +561,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _socketOpen = true;
     _socketSub = _client.messages.listen(
       _handleIncomingMessage,
-      onError: (err, st) => unawaited(
-        _handleSocketError(err, st is StackTrace ? st : null),
-      ),
+      onError: (err, st) =>
+          unawaited(_handleSocketError(err, st is StackTrace ? st : null)),
       onDone: _handleSocketClosed,
       cancelOnError: true,
     );
@@ -587,9 +599,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _micStreamController = StreamController<Uint8List>();
       _micStreamSubscription = _micStreamController!.stream.listen(
         _handleMicChunk,
-        onError: (err, st) => unawaited(
-          _handleSocketError(err, st is StackTrace ? st : null),
-        ),
+        onError: (err, st) =>
+            unawaited(_handleSocketError(err, st is StackTrace ? st : null)),
       );
 
       await _recorder!.startRecorder(
@@ -654,16 +665,16 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       }
     }
 
-    final dynamicThreshold =
-        math.max(_speechThreshold, _noiseFloor + _noiseFloorMargin);
+    final dynamicThreshold = math.max(
+      _speechThreshold,
+      _noiseFloor + _noiseFloorMargin,
+    );
 
     if (rms >= dynamicThreshold) {
       _hasSpeech = true;
       _lastSpeechAt = DateTime.now();
       _cancelSilenceTimer();
-      _log.i(
-        'Speech detected: rms=$rms threshold=$dynamicThreshold',
-      );
+      _log.i('Speech detected: rms=$rms threshold=$dynamicThreshold');
     } else {
       _startSilenceTimer();
     }
@@ -677,10 +688,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _client.sendAudioAppend(encoded, sampleRate: _sampleRate);
     } else {
       final encoded = base64Encode(bytes);
-      _client.send({
-        'type': 'input_audio_buffer.append',
-        'audio': encoded,
-      });
+      _client.send({'type': 'input_audio_buffer.append', 'audio': encoded});
     }
   }
 
@@ -695,12 +703,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
             : DateTime.now().difference(lastSpeechAt);
         if (silenceFor >= _silenceDuration) {
           _log.i(
-              'Silence detected for $_silenceDuration, auto-stopping recording');
+            'Silence detected for $_silenceDuration, auto-stopping recording',
+          );
           stopRecordingAndSend();
         } else {
-          _log.i(
-            'Silence timer tick: silenceFor=$silenceFor',
-          );
+          _log.i('Silence timer tick: silenceFor=$silenceFor');
           _startSilenceTimer();
         }
       }
@@ -801,13 +808,21 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   void _queueAiAudioLevel(Uint8List bytes) {
     if (bytes.isEmpty) return;
 
-    const segmentBytes = 2400;
+    // 20ms chunks at 24kHz mono pcm16 keep facial updates responsive while
+    // matching actual audio duration.
+    const segmentBytes = 960;
+    final bytesPerSecond = _sampleRate * 2; // pcm16 mono
 
     for (var offset = 0; offset < bytes.length; offset += segmentBytes) {
       final end = (offset + segmentBytes).clamp(0, bytes.length);
       final segment = Uint8List.sublistView(bytes, offset, end);
       final rms = _computeRms(segment);
-      _pendingAiRmsValues.add(rms);
+      final segmentDurationMs = ((segment.length / bytesPerSecond) * 1000.0)
+          .round()
+          .clamp(1, 250);
+      _pendingAiRmsSamples.add(
+        _TimedRmsSample(rms: rms, durationMs: segmentDurationMs),
+      );
     }
 
     _startAiAudioLevelTimer();
@@ -815,23 +830,28 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _startAiAudioLevelTimer() {
     if (_aiAudioLevelTimer != null && _aiAudioLevelTimer!.isActive) return;
+    _emitNextAiAudioLevelSample();
+  }
 
-    _aiAudioLevelTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-      if (_pendingAiRmsValues.isEmpty) {
-        _stopAiAudioLevelTimer();
-        _emitAiAudioLevelValue(0.0);
-        return;
-      }
+  void _emitNextAiAudioLevelSample() {
+    if (_pendingAiRmsSamples.isEmpty) {
+      _stopAiAudioLevelTimer();
+      _emitAiAudioLevelValue(0.0);
+      return;
+    }
 
-      final rms = _pendingAiRmsValues.removeAt(0);
-      _emitAiAudioLevelValue(rms);
-    });
+    final sample = _pendingAiRmsSamples.removeFirst();
+    _emitAiAudioLevelValue(sample.rms);
+    _aiAudioLevelTimer = Timer(
+      Duration(milliseconds: sample.durationMs),
+      _emitNextAiAudioLevelSample,
+    );
   }
 
   void _stopAiAudioLevelTimer() {
     _aiAudioLevelTimer?.cancel();
     _aiAudioLevelTimer = null;
-    _pendingAiRmsValues.clear();
+    _pendingAiRmsSamples.clear();
   }
 
   void _emitAiAudioLevelValue(double value) {
@@ -849,10 +869,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     final Int16List samples;
     if (buffer.offsetInBytes % 2 == 0) {
       // Buffer is aligned, use directly
-      samples = buffer.buffer.asInt16List(
-        buffer.offsetInBytes,
-        sampleCount,
-      );
+      samples = buffer.buffer.asInt16List(buffer.offsetInBytes, sampleCount);
     } else {
       // Buffer is not aligned, copy to aligned buffer
       final alignedBuffer = Uint8List(buffer.length);
@@ -876,7 +893,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     const minAudioBytes = 4800;
     final bufferLength = _audioBuffer.length;
     if (bufferLength < minAudioBytes) {
-      _log.w('[CommitInput] Audio buffer too small: $bufferLength bytes (min: $minAudioBytes). Skipping commit.');
+      _log.w(
+        '[CommitInput] Audio buffer too small: $bufferLength bytes (min: $minAudioBytes). Skipping commit.',
+      );
       return;
     }
 
@@ -909,10 +928,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
               'type': 'message',
               'role': 'user',
               'content': [
-                {
-                  'type': 'input_audio',
-                  'audio': encoded,
-                },
+                {'type': 'input_audio', 'audio': encoded},
               ],
             },
           ],
@@ -972,10 +988,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         _log.i('[IncomingMessage] session.created received');
         break;
       case RealtimeServerMessageType.sessionUpdated:
-        _log.i('[IncomingMessage] session.updated received - transitioning to ready');
+        _log.i(
+          '[IncomingMessage] session.updated received - transitioning to ready',
+        );
         // If we're waiting for ready and receive session.updated, treat it as ready
         // This is a fallback in case story_session_ready is not sent by the backend
-        if (state.isStoryMode && state.phase == RealtimeVoicePhase.waitingForReady) {
+        if (state.isStoryMode &&
+            state.phase == RealtimeVoicePhase.waitingForReady) {
           _log.i('[IncomingMessage] Using session.updated as ready signal');
           state = state.copyWith(
             phase: RealtimeVoicePhase.ready,
@@ -987,6 +1006,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         }
         break;
 
+      case RealtimeServerMessageType.conversationHistoryFull:
+        _handleConversationHistoryFull(payload);
+        break;
       case RealtimeServerMessageType.conversationItemCreate:
         _handleConversationItem(payload);
         break;
@@ -996,6 +1018,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       // Audio/transcript messages
       case RealtimeServerMessageType.responseCreated:
+        _responseDoneForCurrentTurn = false;
+        _receivedAiAudioForCurrentTurn = false;
+        _lastAiAudioAt = null;
         state = state.copyWith(isProcessing: true, isConnecting: false);
         break;
       case RealtimeServerMessageType.responseAudio:
@@ -1012,6 +1037,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         }
         final extras = _extractAudioStrings(payload);
         for (final extra in extras) {
+          if (extra == audio) continue;
           unawaited(_handleAudioDelta(extra));
         }
         break;
@@ -1045,15 +1071,18 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         state = state.copyWith(isProcessing: false, isConnecting: false);
         break;
       case RealtimeServerMessageType.responseDone:
+        // Save completed turn into conversation history for display
+        _saveCompletedTurn();
+        _responseDoneForCurrentTurn = true;
         state = state.copyWith(
           isProcessing: false,
           isConnecting: false,
           phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
         );
         _commitSent = false;
-        // If no audio is playing, trigger auto-listen now
-        // (otherwise _handlePlaybackComplete will trigger it when audio ends)
-        if (!state.isPlaying) {
+        // Temporarily disable interruption: when a turn includes audio, only
+        // transition back to listening after playback completion.
+        if (!state.isPlaying && !_receivedAiAudioForCurrentTurn) {
           _scheduleAutoListen();
         }
         break;
@@ -1142,8 +1171,137 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   void _handleConversationItem(Map<String, dynamic> payload) {
     _log.i('Conversation item: $payload');
     final item = ConversationItem.fromJson(payload);
+    if (item.content.isEmpty) return;
     final history = [...state.conversationHistory, item];
     state = state.copyWith(conversationHistory: history);
+  }
+
+  /// Handle conversation.history.full from server.
+  ///
+  /// The backend sends a bounded window (currently up to 50 turns). We merge it
+  /// with local history so the UI does not appear to "replace" older turns when
+  /// sync updates arrive.
+  void _handleConversationHistoryFull(Map<String, dynamic> payload) {
+    final historyList = payload['history'] as List<dynamic>? ?? [];
+    _log.i('Received full conversation history: ${historyList.length} turns');
+    final items = <ConversationItem>[];
+    for (final entry in historyList) {
+      if (entry is! Map<String, dynamic>) continue;
+      final speaker = entry['speaker'] as String? ?? '';
+      final message = entry['message'] as String? ?? '';
+      if (message.isEmpty) continue;
+      // Backend uses "ai" for assistant role
+      final role = speaker == 'ai' ? 'assistant' : speaker;
+      items.add(ConversationItem(role: role, content: message));
+    }
+    final merged = _mergeConversationHistory(state.conversationHistory, items);
+    state = state.copyWith(conversationHistory: merged);
+  }
+
+  List<ConversationItem> _mergeConversationHistory(
+    List<ConversationItem> local,
+    List<ConversationItem> incoming,
+  ) {
+    if (incoming.isEmpty) return local;
+    if (local.isEmpty) return incoming;
+
+    // If local already ends with incoming, incoming is a strict window/snapshot.
+    if (_endsWithSequence(local, incoming)) {
+      return local;
+    }
+
+    // Append only new tail items when incoming overlaps local suffix.
+    final overlap = _maxSuffixPrefixOverlap(local, incoming);
+    if (overlap > 0) {
+      return [...local, ...incoming.sublist(overlap)];
+    }
+
+    // Never shrink on sync updates; shrinking looks like conversation reset.
+    if (incoming.length < local.length) {
+      return local;
+    }
+
+    // If incoming extends local, trust it.
+    if (_endsWithSequence(incoming, local)) {
+      return incoming;
+    }
+
+    // Fallback to incoming snapshot when histories diverge.
+    return incoming;
+  }
+
+  int _maxSuffixPrefixOverlap(
+    List<ConversationItem> local,
+    List<ConversationItem> incoming,
+  ) {
+    final max = math.min(local.length, incoming.length);
+    for (var size = max; size > 0; size--) {
+      var matches = true;
+      for (var i = 0; i < size; i++) {
+        if (!_sameConversationItem(
+          local[local.length - size + i],
+          incoming[i],
+        )) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) return size;
+    }
+    return 0;
+  }
+
+  bool _endsWithSequence(
+    List<ConversationItem> items,
+    List<ConversationItem> suffix,
+  ) {
+    if (suffix.length > items.length) return false;
+    final offset = items.length - suffix.length;
+    for (var i = 0; i < suffix.length; i++) {
+      if (!_sameConversationItem(items[offset + i], suffix[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _sameConversationItem(ConversationItem a, ConversationItem b) {
+    return a.role == b.role && a.content == b.content;
+  }
+
+  /// Save the current turn's userTranscription and aiResponse into
+  /// conversationHistory so the full chat history is visible in the UI.
+  void _saveCompletedTurn() {
+    final userText = state.userTranscription;
+    final aiText = state.aiResponse;
+    if (userText == null && aiText == null) return;
+    if ((userText?.isEmpty ?? true) && (aiText?.isEmpty ?? true)) return;
+
+    final history = [...state.conversationHistory];
+    if (userText != null && userText.isNotEmpty) {
+      // Avoid duplicate if server already sent this via conversation.item.create
+      final alreadyHasUser =
+          history.isNotEmpty &&
+          history.last.isUser &&
+          history.last.content == userText;
+      if (!alreadyHasUser) {
+        history.add(ConversationItem(role: 'user', content: userText));
+      }
+    }
+    if (aiText != null && aiText.isNotEmpty) {
+      final alreadyHasAi =
+          history.isNotEmpty &&
+          history.last.isAssistant &&
+          history.last.content == aiText;
+      if (!alreadyHasAi) {
+        history.add(ConversationItem(role: 'assistant', content: aiText));
+      }
+    }
+    state = state.copyWith(
+      conversationHistory: history,
+      clearUserTranscription: true,
+      clearAiResponse: true,
+    );
   }
 
   void _handleUserTranscription(Map<String, dynamic> payload) {
@@ -1194,6 +1352,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       final bytes = base64Decode(normalized);
       if (bytes.isEmpty) return;
       _log.t('Decoded audio delta ${bytes.length} bytes');
+      _receivedAiAudioForCurrentTurn = true;
+      _lastAiAudioAt = DateTime.now();
       _schedulePlaybackIdleStop(bytes.length);
 
       _queueAiAudioLevel(bytes);
@@ -1204,6 +1364,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         sampleRate: _sampleRate,
         onFinished: _handlePlaybackComplete,
       );
+      if (!ref.mounted) return;
       state = state.copyWith(
         isPlaying: true,
         isProcessing: false,
@@ -1215,6 +1376,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _log.e('Playback error', error: e, stackTrace: st);
       _stopAiAudioLevelTimer();
       _emitAiAudioLevelValue(0.0);
+      if (!ref.mounted) return;
       state = state.copyWith(
         isPlaying: false,
         isProcessing: false,
@@ -1233,6 +1395,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     try {
       if (bytes.isEmpty) return;
       _log.t('Received binary audio ${bytes.length} bytes');
+      _receivedAiAudioForCurrentTurn = true;
+      _lastAiAudioAt = DateTime.now();
       _schedulePlaybackIdleStop(bytes.length);
 
       _queueAiAudioLevel(bytes);
@@ -1243,6 +1407,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         sampleRate: _sampleRate,
         onFinished: _handlePlaybackComplete,
       );
+      if (!ref.mounted) return;
       state = state.copyWith(
         isPlaying: true,
         isProcessing: false,
@@ -1254,6 +1419,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _log.e('Playback error', error: e, stackTrace: st);
       _stopAiAudioLevelTimer();
       _emitAiAudioLevelValue(0.0);
+      if (!ref.mounted) return;
       state = state.copyWith(
         isPlaying: false,
         isProcessing: false,
@@ -1269,6 +1435,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     unawaited(_player.stop());
     _cancelPlaybackIdleTimer();
     if (!ref.mounted) return;
+    _responseDoneForCurrentTurn = false;
+    _receivedAiAudioForCurrentTurn = false;
+    _lastAiAudioAt = null;
     _disableAudio();
     _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
@@ -1333,17 +1502,37 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     final chunkMs = (byteLength / bytesPerSecond) * 1000.0;
     final now = DateTime.now();
     final expected = _playbackExpectedEndAt;
-    final baseTime = (expected == null || expected.isBefore(now)) ? now : expected;
+    final baseTime = (expected == null || expected.isBefore(now))
+        ? now
+        : expected;
     final newExpected = baseTime.add(Duration(milliseconds: chunkMs.round()));
     _cancelPlaybackIdleTimer(keepExpected: true);
     _playbackExpectedEndAt = newExpected;
     final cushionMs = state.isStoryMode ? 200 : 300;
-    final delay = newExpected.difference(now) + Duration(milliseconds: cushionMs);
+    final delay =
+        newExpected.difference(now) + Duration(milliseconds: cushionMs);
     if (delay.isNegative) {
-      _handlePlaybackComplete();
+      _handlePlaybackIdleTimeout();
       return;
     }
-    _playbackIdleTimer = Timer(delay, _handlePlaybackComplete);
+    _playbackIdleTimer = Timer(delay, _handlePlaybackIdleTimeout);
+  }
+
+  void _handlePlaybackIdleTimeout() {
+    // Temporary interruption guard: while a turn is still streaming (no
+    // response.done yet), don't cut playback due to transport gaps.
+    if (!_responseDoneForCurrentTurn) {
+      final lastAudioAt = _lastAiAudioAt;
+      if (lastAudioAt != null &&
+          DateTime.now().difference(lastAudioAt) < const Duration(seconds: 6)) {
+        _playbackIdleTimer = Timer(
+          const Duration(milliseconds: 350),
+          _handlePlaybackIdleTimeout,
+        );
+        return;
+      }
+    }
+    _handlePlaybackComplete();
   }
 
   void _cancelPlaybackIdleTimer({bool keepExpected = false}) {
@@ -1412,7 +1601,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isConnecting: false,
         isRecording: false,
         isPlaying: false,
-        aiResponse: null,
+        clearAiResponse: true,
         errorMessage: null,
         clearFace: true,
         phase: state.isStoryMode ? RealtimeVoicePhase.processing : state.phase,
@@ -1429,12 +1618,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
               'type': 'message',
               'role': 'user',
               'content': [
-                {
-                  'type': 'input_text',
-                  'text': trimmed,
-                }
+                {'type': 'input_text', 'text': trimmed},
               ],
-            }
+            },
           ],
         },
       });
@@ -1510,8 +1696,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isProcessing: false,
       isConnecting: false,
       isPlaying: false,
-      aiResponse: null,
-      userTranscription: null,
+      clearAiResponse: true,
+      clearUserTranscription: true,
       clearAiAudio: true,
       clearFace: true,
       errorMessage: null,
@@ -1573,7 +1759,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     } else {
       // Unmuting: start listening if ready
       state = state.copyWith(isMuted: false);
-      if (!state.isPlaying && !state.isProcessing &&
+      if (!state.isPlaying &&
+          !state.isProcessing &&
           (state.isSessionReady || !state.isStoryMode)) {
         startRecording();
       }
@@ -1726,9 +1913,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 }
 
-enum _VoiceAudioSessionMode {
-  recording,
-  playback,
+enum _VoiceAudioSessionMode { recording, playback }
+
+class _TimedRmsSample {
+  const _TimedRmsSample({required this.rms, required this.durationMs});
+
+  final double rms;
+  final int durationMs;
 }
 
 class VoiceChatException implements Exception {
@@ -1743,5 +1934,5 @@ class VoiceChatException implements Exception {
 /// Provider for voice chat controller
 final voiceChatControllerProvider =
     NotifierProvider.autoDispose<VoiceChatController, VoiceChatState>(
-  VoiceChatController.new,
-);
+      VoiceChatController.new,
+    );

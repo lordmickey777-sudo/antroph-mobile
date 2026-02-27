@@ -325,6 +325,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  /// Build chat messages from voice conversation history + live current turn.
+  List<ChatMessageModel> _buildVoiceMessages(VoiceChatState voiceState) {
+    final messages = <ChatMessageModel>[];
+    // Add completed conversation history
+    for (var i = 0; i < voiceState.conversationHistory.length; i++) {
+      final item = voiceState.conversationHistory[i];
+      if (item.content.isEmpty) continue;
+      messages.add(ChatMessageModel(
+        id: 'voice_$i',
+        role: item.isUser ? ChatRole.user : ChatRole.assistant,
+        message: item.content,
+        ts: DateTime.now(),
+      ));
+    }
+    // Add live current turn (not yet saved to history)
+    if (voiceState.userTranscription?.isNotEmpty ?? false) {
+      messages.add(ChatMessageModel(
+        id: 'voice_live_user',
+        role: ChatRole.user,
+        message: voiceState.userTranscription!,
+        ts: DateTime.now(),
+      ));
+    }
+    if (voiceState.aiResponse?.isNotEmpty ?? false) {
+      messages.add(ChatMessageModel(
+        id: 'voice_live_ai',
+        role: ChatRole.assistant,
+        message: voiceState.aiResponse!,
+        ts: DateTime.now(),
+        streaming: voiceState.isProcessing || voiceState.isPlaying,
+      ));
+    }
+    return messages;
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<VoiceChatState>(voiceChatControllerProvider, (
@@ -403,7 +438,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                 child: ChatList(
-                  messages: chatState?.messages ?? const [],
+                  messages: widget.isStoryMode
+                      ? _buildVoiceMessages(voiceState)
+                      : chatState?.messages ?? const [],
                   onRetry: chatController?.retrySend,
                   bubbleMaxWidth: bubbleMaxWidth,
                   bottomPadding: bottomPadding,

@@ -138,8 +138,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
             right: 16,
             child: _ErrorBanner(
               message: sessionState.error!,
-              onDismiss: () =>
-                  ref.read(storySessionProvider.notifier).clearError(),
+              onDismiss: () => ref.read(storySessionProvider.notifier).clearError(),
             ),
           ),
       ],
@@ -163,9 +162,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
 
     setState(() => _isAddingToPlaylist = true);
     try {
-      await ref
-          .read(storiesRepositoryProvider)
-          .addStoriesToPlaylist(storyIds: [widget.storyId]);
+      await ref.read(storiesRepositoryProvider).addStoriesToPlaylist(storyIds: [widget.storyId]);
       if (!mounted) return;
       setState(() => _isAdded = true);
       showToast(context, 'Story added to playlist', success: true);
@@ -382,10 +379,7 @@ class _StoryDetailContent extends StatelessWidget {
             height: 1.35,
           ),
         ],
-        if (detail.tags.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          _TagChips(tags: detail.tags),
-        ],
+        if (detail.tags.isNotEmpty) ...[const SizedBox(height: 16), _TagChips(tags: detail.tags)],
       ],
     );
   }
@@ -412,48 +406,24 @@ class _InfoRow extends StatelessWidget {
     final items = <Widget>[];
 
     if (durationMinutes > 0) {
-      items.add(
-        _InfoItem(
-          icon: CupertinoIcons.clock,
-          label: '$durationMinutes min',
-          color: color,
-        ),
-      );
+      items.add(_InfoItem(icon: CupertinoIcons.clock, label: '$durationMinutes min', color: color));
     }
 
     if (difficulty.isNotEmpty) {
-      items.add(
-        _InfoItem(
-          icon: CupertinoIcons.chart_bar,
-          label: difficulty,
-          color: color,
-        ),
-      );
+      items.add(_InfoItem(icon: CupertinoIcons.chart_bar, label: difficulty, color: color));
     }
 
     if (ageRating > 0) {
-      items.add(
-        _InfoItem(
-          icon: CupertinoIcons.person_2,
-          label: '$ageRating+',
-          color: color,
-        ),
-      );
+      items.add(_InfoItem(icon: CupertinoIcons.person_2, label: '$ageRating+', color: color));
     }
 
     if (author.isNotEmpty) {
-      items.add(
-        _InfoItem(icon: CupertinoIcons.pencil, label: author, color: color),
-      );
+      items.add(_InfoItem(icon: CupertinoIcons.pencil, label: author, color: color));
     }
 
     if (isPremium) {
       items.add(
-        _InfoItem(
-          icon: CupertinoIcons.star_fill,
-          label: 'Premium',
-          color: Colors.amber.shade600,
-        ),
+        _InfoItem(icon: CupertinoIcons.star_fill, label: 'Premium', color: Colors.amber.shade600),
       );
     }
 
@@ -464,11 +434,7 @@ class _InfoRow extends StatelessWidget {
 }
 
 class _InfoItem extends StatelessWidget {
-  const _InfoItem({
-    required this.icon,
-    required this.label,
-    required this.color,
-  });
+  const _InfoItem({required this.icon, required this.label, required this.color});
 
   final IconData icon;
   final String label;
@@ -506,14 +472,8 @@ class _TagChips extends StatelessWidget {
           .map(
             (tag) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: chipBg,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                tag,
-                style: TextStyle(color: chipTextColor, fontSize: 13),
-              ),
+              decoration: BoxDecoration(color: chipBg, borderRadius: BorderRadius.circular(20)),
+              child: Text(tag, style: TextStyle(color: chipTextColor, fontSize: 13)),
             ),
           )
           .toList(),
@@ -539,12 +499,7 @@ class _StoryDetailShimmer extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        const ShimmerParagraph(
-          lines: 3,
-          lineHeight: 14,
-          lineSpacing: 10,
-          lastLineWidth: 0.7,
-        ),
+        const ShimmerParagraph(lines: 3, lineHeight: 14, lineSpacing: 10, lastLineWidth: 0.7),
         const SizedBox(height: 16),
         Wrap(
           spacing: 8,
@@ -584,27 +539,15 @@ class _ErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(
-            CupertinoIcons.exclamationmark_circle_fill,
-            color: Colors.white,
-            size: 20,
-          ),
+          const Icon(CupertinoIcons.exclamationmark_circle_fill, color: Colors.white, size: 20),
           const SizedBox(width: 12),
           Expanded(
-            child: TypographyText(
-              message,
-              variant: TypographyVariant.body2,
-              color: Colors.white,
-            ),
+            child: TypographyText(message, variant: TypographyVariant.body2, color: Colors.white),
           ),
           const SizedBox(width: 8),
           GestureDetector(
             onTap: onDismiss,
-            child: const Icon(
-              CupertinoIcons.xmark,
-              color: Colors.white,
-              size: 18,
-            ),
+            child: const Icon(CupertinoIcons.xmark, color: Colors.white, size: 18),
           ),
         ],
       ),
