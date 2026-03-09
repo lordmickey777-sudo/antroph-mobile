@@ -29,8 +29,9 @@ void main() {
             () => VoiceChatController(
               client: fakeClient,
               player: fakePlayer,
-              voiceUriOverride:
-                  Uri.parse('wss://example.com/ws/realtime/voice'),
+              voiceUriOverride: Uri.parse(
+                'wss://example.com/ws/realtime/voice',
+              ),
             ),
           ),
         ],
@@ -75,14 +76,19 @@ void main() {
       });
       fakeClient.emitJson({'type': 'response.done'});
 
-      await Future<void>.delayed(Duration.zero);
+      await _waitFor(() => fakePlayer.addedChunks.isNotEmpty);
 
       expect(
         fakePlayer.addedChunks.single,
         equals(Uint8List.fromList(const [1, 2, 3, 4])),
       );
       final state = container.read(voiceChatControllerProvider);
-      expect(state.aiResponse, 'hello');
+      expect(
+        state.conversationHistory.any(
+          (item) => item.isAssistant && item.content == 'hello',
+        ),
+        isTrue,
+      );
       expect(state.isProcessing, isFalse);
     });
 
@@ -90,11 +96,24 @@ void main() {
       await controller.sendTextPrompt('binary');
       fakeClient.emitBinary(Uint8List.fromList(const [9, 8]));
 
-      await Future<void>.delayed(Duration.zero);
+      await _waitFor(() => fakePlayer.addedChunks.isNotEmpty);
 
       expect(fakePlayer.addedChunks.last, Uint8List.fromList(const [9, 8]));
     });
   });
+}
+
+Future<void> _waitFor(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 1),
+}) async {
+  final sw = Stopwatch()..start();
+  while (!condition()) {
+    if (sw.elapsed >= timeout) {
+      throw StateError('Condition not met within $timeout');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
 }
 
 class FakeRealtimeVoiceClient extends RealtimeVoiceClient {
