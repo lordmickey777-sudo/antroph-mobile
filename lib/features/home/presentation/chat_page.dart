@@ -332,30 +332,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     for (var i = 0; i < voiceState.conversationHistory.length; i++) {
       final item = voiceState.conversationHistory[i];
       if (item.content.isEmpty) continue;
-      messages.add(ChatMessageModel(
-        id: 'voice_$i',
-        role: item.isUser ? ChatRole.user : ChatRole.assistant,
-        message: item.content,
-        ts: DateTime.now(),
-      ));
+      messages.add(
+        ChatMessageModel(
+          id: 'voice_$i',
+          role: item.isUser ? ChatRole.user : ChatRole.assistant,
+          message: item.content,
+          ts: DateTime.now(),
+        ),
+      );
     }
     // Add live current turn (not yet saved to history)
     if (voiceState.userTranscription?.isNotEmpty ?? false) {
-      messages.add(ChatMessageModel(
-        id: 'voice_live_user',
-        role: ChatRole.user,
-        message: voiceState.userTranscription!,
-        ts: DateTime.now(),
-      ));
+      messages.add(
+        ChatMessageModel(
+          id: 'voice_live_user',
+          role: ChatRole.user,
+          message: voiceState.userTranscription!,
+          ts: DateTime.now(),
+        ),
+      );
     }
     if (voiceState.aiResponse?.isNotEmpty ?? false) {
-      messages.add(ChatMessageModel(
-        id: 'voice_live_ai',
-        role: ChatRole.assistant,
-        message: voiceState.aiResponse!,
-        ts: DateTime.now(),
-        streaming: voiceState.isProcessing || voiceState.isPlaying,
-      ));
+      messages.add(
+        ChatMessageModel(
+          id: 'voice_live_ai',
+          role: ChatRole.assistant,
+          message: voiceState.aiResponse!,
+          ts: DateTime.now(),
+          streaming: voiceState.isProcessing || voiceState.isPlaying,
+        ),
+      );
     }
     return messages;
   }
@@ -430,8 +436,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 onReconnect: chatController?.forceReconnect,
                 onStartVoice: voiceController.startRecording,
                 onStopVoice: voiceController.stopRecordingAndSend,
-                onStopVoicePlayback: voiceController.stopPlayback,
+                onStopVoicePlayback: () {
+                  voiceController.stopPlayback(restartListening: true);
+                },
                 faceSize: faceSize,
+                hasConversation:
+                    voiceState.conversationHistory.isNotEmpty ||
+                    (voiceState.userTranscription?.isNotEmpty ?? false) ||
+                    (voiceState.aiResponse?.isNotEmpty ?? false),
               ),
             ),
             Expanded(
@@ -509,6 +521,7 @@ class _Header extends StatelessWidget {
     required this.onStopVoice,
     required this.onStopVoicePlayback,
     required this.faceSize,
+    this.hasConversation = false,
   });
 
   final VoiceChatState voiceState;
@@ -519,6 +532,7 @@ class _Header extends StatelessWidget {
   final VoidCallback onStopVoice;
   final VoidCallback onStopVoicePlayback;
   final double faceSize;
+  final bool hasConversation;
 
   @override
   Widget build(BuildContext context) {
@@ -563,6 +577,12 @@ class _Header extends StatelessWidget {
                 _StatusPill(label: status.label, icon: status.icon),
               ],
             ),
+            if (!hasConversation &&
+                !voiceState.isPlaying &&
+                !voiceState.isProcessing) ...[
+              const SizedBox(height: 16),
+              _ReadyPrompt(isListening: voiceState.isRecording),
+            ],
           ],
         ),
       ),
@@ -719,6 +739,61 @@ class _StatusPill extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ReadyPrompt extends StatefulWidget {
+  const _ReadyPrompt({this.isListening = false});
+
+  final bool isListening;
+
+  @override
+  State<_ReadyPrompt> createState() => _ReadyPromptState();
+}
+
+class _ReadyPromptState extends State<_ReadyPrompt>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _opacity = Tween<double>(
+      begin: 0.4,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final textColor = isDark ? Colors.white70 : Colors.black54;
+    final text = widget.isListening
+        ? 'Say something when you\'re ready'
+        : 'Tap the mic to start talking';
+    return FadeTransition(
+      opacity: _opacity,
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }

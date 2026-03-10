@@ -149,11 +149,11 @@ PODS:
     - FlutterMacOS
   - permission_handler_apple (9.3.0):
     - Flutter
-  - PostHog (3.41.1)
+  - PostHog (3.45.2)
   - posthog_flutter (0.0.1):
     - Flutter
     - FlutterMacOS
-    - PostHog (< 4.0.0, >= 3.40.0)
+    - PostHog (< 4.0.0, >= 3.44.0)
   - PromisesObjC (2.4.0)
   - RecaptchaInterop (101.0.0)
   - rive_common (0.0.1):
@@ -352,8 +352,8 @@ SPEC CHECKSUMS:
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
-  PostHog: f73d82f70ac404567a49d3c62c9e15d2fd6c1aa9
-  posthog_flutter: 074371576a1f82dc8d3c7ca6b0b6c3c930e03ba5
+  PostHog: 9aa2b9c18708027234c040bb2ef4238c468d2b6b
+  posthog_flutter: a677be3d8d9f0ec2af5dd61dd8657be4ec6396d8
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   RecaptchaInterop: 11e0b637842dfb48308d242afc3f448062325aba
   rive_common: dd421daaf9ae69f0125aa761dd96abd278399952
