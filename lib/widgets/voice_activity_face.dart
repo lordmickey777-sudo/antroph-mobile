@@ -51,7 +51,8 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
   Timer? _silenceTimer;
   Timer? _idleAnimationTimer;
   Timer? _smoothingTimer;
-  Future<_ResolvedRiveSource>? _sourceFuture;
+  _ResolvedRiveSource? _resolvedSource;
+  int _sourceResolutionId = 0;
 
   // Rive inputs - Try to find these in your state machine
   SMINumber? _mouthOpenInput; // 0-100: mouth openness
@@ -65,6 +66,8 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
   bool _isSpeaking = false;
   double _currentMouthValue = 0.0;
   double _targetMouthValue = 0.0;
+  double _currentHeadBobValue = 0.0;
+  double _targetHeadBobValue = 0.0;
   int _blinkCounter = 0;
 
   final _random = math.Random();
@@ -75,7 +78,8 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
   @override
   void initState() {
     super.initState();
-    _sourceFuture = _resolveRiveSource();
+    _resolvedSource = _buildSourceFallback();
+    unawaited(_resolveAndStoreRiveSource());
     _subscribeToLevelStream(_effectiveLevelStream);
     _startIdleAnimations();
     _startSmoothingLoop();
@@ -95,14 +99,14 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
       _subscribeToLevelStream(_effectiveLevelStream);
     }
 
-    if (oldWidget.mascotConfig != widget.mascotConfig ||
-        oldWidget.fallbackAsset != widget.fallbackAsset ||
-        oldWidget.stateMachineName != widget.stateMachineName) {
-      _resetRiveInputs();
-      _sourceFuture = _resolveRiveSource();
-      if (mounted) {
-        setState(() {});
+    if (_didSourceConfigurationChange(oldWidget)) {
+      final fallbackSource = _buildSourceFallback();
+      if (_resolvedSource == null) {
+        setState(() {
+          _resolvedSource = fallbackSource;
+        });
       }
+      unawaited(_resolveAndStoreRiveSource());
     }
   }
 
@@ -142,14 +146,13 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
         _setEyeExpression(0); // Neutral/speaking expression
       }
 
-      // Map RMS to mouth openness (0-100)
-      // Add some randomness for natural variation
-      final baseOpenness = (rms / widget.threshold).clamp(0.3, 1.0) * 100;
-      final variation = _random.nextDouble() * 15 - 7.5; // +/-7.5
-      _targetMouthValue = (baseOpenness + variation).clamp(20.0, 100.0);
-
-      // Subtle head bob when speaking
-      _setHeadBob(5.0 + _random.nextDouble() * 3);
+      final normalizedLevel =
+          ((rms - widget.threshold) / (widget.threshold * 5)).clamp(0.0, 1.0);
+      final easedLevel = Curves.easeOutCubic.transform(normalizedLevel);
+      final baseOpenness = 18.0 + (easedLevel * 82.0);
+      final variation = _random.nextDouble() * 6 - 3; // +/-3
+      _targetMouthValue = (baseOpenness + variation).clamp(18.0, 100.0);
+      _targetHeadBobValue = (1.2 + easedLevel * 3.8).clamp(0.0, 6.0);
     } else {
       _scheduleStopSpeaking();
     }
@@ -165,14 +168,15 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
   void _stopSpeaking() {
     _isSpeaking = false;
     _targetMouthValue = 0.0;
-    _setHeadBob(0.0);
+    _targetHeadBobValue = 0.0;
     _setEyeExpression(1); // Cute/happy expression when listening
   }
 
   /// Smooth interpolation loop for natural movement
   void _startSmoothingLoop() {
     const fps = 60;
-    const easingSpeed = 0.25; // Higher = snappier, lower = smoother
+    const mouthEasingSpeed = 0.2;
+    const headBobEasingSpeed = 0.16;
 
     _smoothingTimer = Timer.periodic(Duration(milliseconds: 1000 ~/ fps), (
       timer,
@@ -181,11 +185,18 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
 
       // Smooth mouth movement
       _currentMouthValue +=
-          (_targetMouthValue - _currentMouthValue) * easingSpeed;
+          (_targetMouthValue - _currentMouthValue) * mouthEasingSpeed;
       if ((_currentMouthValue - _targetMouthValue).abs() < 0.5) {
         _currentMouthValue = _targetMouthValue;
       }
       _setMouthOpen(_currentMouthValue);
+
+      _currentHeadBobValue +=
+          (_targetHeadBobValue - _currentHeadBobValue) * headBobEasingSpeed;
+      if ((_currentHeadBobValue - _targetHeadBobValue).abs() < 0.1) {
+        _currentHeadBobValue = _targetHeadBobValue;
+      }
+      _setHeadBob(_currentHeadBobValue);
     });
   }
 
@@ -230,30 +241,125 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
 
   void _setEyeOpen(double value) {
     final input = _eyeOpenInput;
-    if (input != null) {
-      input.value = value.clamp(0.0, 100.0);
+    final clamped = value.clamp(0.0, 100.0);
+    if (input != null && (input.value - clamped).abs() > 0.1) {
+      input.value = clamped;
     }
   }
 
   void _setEyeExpression(int expression) {
     final input = _eyeExpressionInput;
-    if (input != null) {
-      input.value = expression.toDouble().clamp(0.0, 3.0);
+    final clamped = expression.toDouble().clamp(0.0, 3.0);
+    if (input != null && (input.value - clamped).abs() > 0.01) {
+      input.value = clamped;
     }
   }
 
   void _setHeadTilt(double degrees) {
     final input = _headTiltInput;
-    if (input != null) {
-      input.value = degrees.clamp(-30.0, 30.0);
+    final clamped = degrees.clamp(-30.0, 30.0);
+    if (input != null && (input.value - clamped).abs() > 0.1) {
+      input.value = clamped;
     }
   }
 
   void _setHeadBob(double amount) {
     final input = _headBobInput;
-    if (input != null) {
-      input.value = amount.clamp(0.0, 10.0);
+    final clamped = amount.clamp(0.0, 10.0);
+    if (input != null && (input.value - clamped).abs() > 0.1) {
+      input.value = clamped;
     }
+  }
+
+  bool _didSourceConfigurationChange(VoiceActivityFace oldWidget) {
+    return oldWidget.fallbackAsset.trim() != widget.fallbackAsset.trim() ||
+        oldWidget.stateMachineName.trim() != widget.stateMachineName.trim() ||
+        !_sameMascotConfig(oldWidget.mascotConfig, widget.mascotConfig);
+  }
+
+  bool _sameMascotConfig(MascotConfig? a, MascotConfig? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return a == b;
+
+    return a.id == b.id &&
+        a.name == b.name &&
+        a.riveAssetUrl == b.riveAssetUrl &&
+        a.stateMachine == b.stateMachine &&
+        a.artboard == b.artboard &&
+        a.fallbackAsset == b.fallbackAsset &&
+        a.localAssetPath == b.localAssetPath;
+  }
+
+  Future<void> _resolveAndStoreRiveSource() async {
+    final requestId = ++_sourceResolutionId;
+    final source = await _resolveRiveSource();
+    if (!mounted || requestId != _sourceResolutionId) return;
+    if (_resolvedSource == source) return;
+
+    setState(() {
+      _resetRiveInputs();
+      _resolvedSource = source;
+    });
+  }
+
+  _ResolvedRiveSource _buildSourceFallback() {
+    final mascot = widget.mascotConfig;
+    final fallback = widget.fallbackAsset.trim().isEmpty
+        ? MascotConfig.defaultFallbackAsset
+        : widget.fallbackAsset.trim();
+    final stateMachine =
+        mascot?.effectiveStateMachine ?? widget.stateMachineName;
+    final artboard = mascot?.artboard?.trim().isNotEmpty == true
+        ? mascot!.artboard!.trim()
+        : null;
+
+    if (mascot == null) {
+      return _ResolvedRiveSource.asset(
+        fallback,
+        stateMachine: stateMachine,
+        artboard: artboard,
+      );
+    }
+
+    final localAssetPath = mascot.localAssetPath?.trim() ?? '';
+    if (localAssetPath.isNotEmpty) {
+      final localFile = File(localAssetPath);
+      if (localFile.existsSync()) {
+        return _ResolvedRiveSource.file(
+          localFile.path,
+          stateMachine: stateMachine,
+          artboard: artboard,
+        );
+      }
+    }
+
+    final assetRef = mascot.riveAssetUrl.trim();
+    if (assetRef.startsWith('assets/')) {
+      return _ResolvedRiveSource.asset(
+        assetRef,
+        stateMachine: stateMachine,
+        artboard: artboard,
+      );
+    }
+
+    if (_looksLikeLocalFilePath(assetRef)) {
+      final file = assetRef.startsWith('file://')
+          ? File(Uri.parse(assetRef).toFilePath())
+          : File(assetRef);
+      if (file.existsSync()) {
+        return _ResolvedRiveSource.file(
+          file.path,
+          stateMachine: stateMachine,
+          artboard: artboard,
+        );
+      }
+    }
+
+    return _ResolvedRiveSource.asset(
+      mascot.effectiveFallbackAsset,
+      stateMachine: stateMachine,
+      artboard: artboard,
+    );
   }
 
   Future<_ResolvedRiveSource> _resolveRiveSource() async {
@@ -404,28 +510,6 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
     _setEyeExpression(1); // Cute expression
   }
 
-  Widget _buildLoadingFace(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? Colors.white10 : Colors.black12;
-    final border = isDark ? Colors.white24 : Colors.black12;
-    final spinnerColor = isDark ? Colors.white70 : Colors.black54;
-
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: bg,
-        border: Border.all(color: border),
-      ),
-      child: Center(
-        child: SizedBox(
-          width: 22,
-          height: 22,
-          child: CircularProgressIndicator(strokeWidth: 2, color: spinnerColor),
-        ),
-      ),
-    );
-  }
-
   Widget _buildRiveWidget(_ResolvedRiveSource source) {
     final key = ValueKey(
       '${source.type.name}:${source.path}:${source.stateMachine}:${source.artboard ?? ''}',
@@ -457,22 +541,7 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
         // Debug: Trigger a blink on tap
         _triggerBlink();
       },
-      child: FutureBuilder<_ResolvedRiveSource>(
-        future: _sourceFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return _buildLoadingFace(context);
-          }
-
-          final source =
-              snapshot.data ??
-              _ResolvedRiveSource.asset(
-                widget.fallbackAsset,
-                stateMachine: widget.stateMachineName,
-              );
-          return _buildRiveWidget(source);
-        },
-      ),
+      child: _buildRiveWidget(_resolvedSource ?? _buildSourceFallback()),
     );
   }
 }
@@ -496,4 +565,17 @@ class _ResolvedRiveSource {
   final String path;
   final String stateMachine;
   final String? artboard;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is _ResolvedRiveSource &&
+        other.type == type &&
+        other.path == path &&
+        other.stateMachine == stateMachine &&
+        other.artboard == artboard;
+  }
+
+  @override
+  int get hashCode => Object.hash(type, path, stateMachine, artboard);
 }

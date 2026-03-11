@@ -7,6 +7,7 @@ import 'features/auth/pages/forgot_password_page.dart';
 import 'features/auth/pages/login_page.dart';
 import 'features/auth/pages/signup_page.dart';
 import 'features/home/presentation/home_page.dart';
+import 'features/consent/presentation/ai_consent_page.dart';
 import 'features/onboarding/presentation/onboarding_page.dart';
 import 'features/profile/presentation/customization_page.dart';
 import 'features/profile/presentation/edit_profile_page.dart';
@@ -28,6 +29,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/onboarding',
         name: 'onboarding',
         builder: (context, state) => const OnboardingPage(),
+      ),
+      GoRoute(
+        path: '/ai-consent',
+        name: 'ai-consent',
+        builder: (context, state) => const AiConsentPage(),
       ),
       GoRoute(
         path: '/home',

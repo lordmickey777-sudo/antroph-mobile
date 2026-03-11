@@ -555,6 +555,7 @@ class _Header extends StatelessWidget {
                   child: VoiceActivityFace(
                     levelStream: aiAudioLevelStream,
                     threshold: 0.008,
+                    silenceDelay: const Duration(milliseconds: 450),
                     mascotConfig: mascotConfig,
                   ),
                 ),
