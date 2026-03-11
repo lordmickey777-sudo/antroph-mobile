@@ -1590,7 +1590,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   /// Send a text prompt over the realtime socket using response.create.
-  Future<void> sendTextPrompt(String prompt) async {
+  Future<void> sendTextPrompt(String prompt, {bool textOnly = false}) async {
     final trimmed = prompt.trim();
     if (trimmed.isEmpty) return;
 
@@ -1599,7 +1599,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         await _connectSocket();
       }
 
-      _enableAudio();
+      if (!textOnly) _enableAudio();
       _aiTextBuffer.clear();
       state = state.copyWith(
         isProcessing: true,
@@ -1612,23 +1612,36 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         phase: state.isStoryMode ? RealtimeVoicePhase.processing : state.phase,
       );
 
+      final modalities = textOnly ? ['text'] : ['text', 'audio'];
+      final response = <String, dynamic>{
+        'modalities': modalities,
+        'input': [
+          {
+            'type': 'message',
+            'role': 'user',
+            'content': [
+              {'type': 'input_text', 'text': trimmed},
+            ],
+          },
+        ],
+      };
+      if (!textOnly) {
+        response['output_audio_format'] = _outputAudioFormat;
+        response['voice'] = _outputVoice;
+      }
+
       _client.send({
         'type': 'response.create',
-        'response': {
-          'modalities': ['text', 'audio'],
-          'output_audio_format': _outputAudioFormat,
-          'voice': _outputVoice,
-          'input': [
-            {
-              'type': 'message',
-              'role': 'user',
-              'content': [
-                {'type': 'input_text', 'text': trimmed},
-              ],
-            },
-          ],
-        },
+        'response': response,
       });
+
+      // For text-only sends, push user message to history immediately
+      // since _saveCompletedTurn relies on userTranscription (voice only).
+      if (textOnly) {
+        final history = [...state.conversationHistory];
+        history.add(ConversationItem(role: 'user', content: trimmed));
+        state = state.copyWith(conversationHistory: history);
+      }
     } catch (e, st) {
       _log.e('Failed to send text prompt', error: e, stackTrace: st);
       state = state.copyWith(
