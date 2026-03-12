@@ -1,17 +1,21 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smooth_corner/smooth_corner.dart';
+import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
+import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 
 import '../models/community_story_model.dart';
 import '../providers/community_stories_providers.dart';
-import '../widgets/community_story_card.dart';
-import '../widgets/community_story_list_shimmer.dart';
+import '../widgets/community_story_grid_card.dart';
 import 'story_editor_page.dart';
+import 'story_form_page.dart';
 import 'story_preview_page.dart';
 
 class MyStoriesPage extends ConsumerStatefulWidget {
@@ -22,28 +26,16 @@ class MyStoriesPage extends ConsumerStatefulWidget {
 }
 
 class _MyStoriesPageState extends ConsumerState<MyStoriesPage> {
-  final _listKey = GlobalKey<AnimatedListState>();
-  List<CommunityStoryDto>? _stories;
   bool _deleting = false;
-
-  void _syncStories(List<CommunityStoryDto> fresh) {
-    if (_stories == null) {
-      _stories = List.of(fresh);
-      return;
-    }
-    // Only reset if the upstream list changed (e.g. pull-to-refresh).
-    if (_stories!.length != fresh.length ||
-        !_stories!.every((s) => fresh.any((f) => f.id == s.id))) {
-      _stories = List.of(fresh);
-    }
-  }
 
   bool _canDelete(CommunityStoryDto story) {
     final status = story.moderationStatus;
-    return status == 'pending' || status == 'rejected' || status == 'pending_update';
+    return status == 'pending' ||
+        status == 'rejected' ||
+        status == 'pending_update';
   }
 
-  Future<void> _confirmDelete(CommunityStoryDto story, int index) async {
+  Future<void> _confirmDelete(CommunityStoryDto story) async {
     await showAppActionSheet(
       context: context,
       title: 'Delete Story',
@@ -52,28 +44,19 @@ class _MyStoriesPageState extends ConsumerState<MyStoriesPage> {
           label: 'Delete "${story.title}"',
           icon: CupertinoIcons.trash,
           isDestructive: true,
-          onTap: () => _executeDelete(story, index),
+          onTap: () => _executeDelete(story),
         ),
       ],
     );
   }
 
-  Future<void> _executeDelete(CommunityStoryDto story, int index) async {
+  Future<void> _executeDelete(CommunityStoryDto story) async {
     if (_deleting) return;
     setState(() => _deleting = true);
 
     try {
       final repo = ref.read(communityStoriesRepositoryProvider);
       await repo.deleteStory(story.id);
-
-      // Animate removal from list.
-      final removed = _stories!.removeAt(index);
-      _listKey.currentState?.removeItem(
-        index,
-        (context, animation) => _buildRemovedCard(removed, animation),
-        duration: const Duration(milliseconds: 350),
-      );
-
       ref.invalidate(myStoriesProvider);
       if (mounted) {
         showToast(context, 'Story deleted', success: true);
@@ -87,50 +70,76 @@ class _MyStoriesPageState extends ConsumerState<MyStoriesPage> {
     }
   }
 
-  Widget _buildRemovedCard(CommunityStoryDto story, Animation<double> animation) {
-    return SizeTransition(
-      sizeFactor: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
-      child: FadeTransition(
-        opacity: animation,
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: CommunityStoryCard(
-            story: story,
-            showStatus: true,
-            compact: true,
+  void _navigateToStory(CommunityStoryDto story) {
+    final status = story.moderationStatus;
+    if (status == 'pending' ||
+        status == 'rejected' ||
+        status == 'pending_update') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => StoryEditorPage(storyId: story.id),
+        ),
+      );
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => StoryPreviewPage(
+            storyId: story.id,
+            storyTitle: story.title,
+            riveElement: story.riveElement,
           ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final asyncStories = ref.watch(myStoriesProvider);
     final horizontalPadding = AppPadding.horizontal.of(context);
 
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF141718)
-          : const Color(0xFFF5F5F7),
+      backgroundColor: context.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: TypographyText(
           'My Stories',
           variant: TypographyVariant.h4,
-          color: isDark ? Colors.white : Colors.black,
+          color: context.primaryTextColor,
         ),
         leading: IconButton(
           icon: Icon(
             CupertinoIcons.back,
-            color: isDark ? Colors.white : Colors.black,
+            color: context.primaryTextColor,
           ),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(
+              Icons.add_rounded,
+              color: context.primaryTextColor,
+            ),
+            onPressed: () async {
+              HapticFeedback.lightImpact();
+              final result = await showAuthGuardSheet(
+                context,
+                ref,
+                actionDescription: 'Create a new story',
+              );
+              if (!context.mounted) return;
+              if (result == AuthGuardResult.authenticated ||
+                  result == AuthGuardResult.loginSuccessful) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const StoryFormPage()),
+                );
+              }
+            },
+          ),
+        ],
       ),
       body: asyncStories.when(
-        loading: () => const CommunityStoryListShimmer(showStatus: true, compact: true),
+        loading: () => _buildGridShimmer(context, horizontalPadding),
         error: (err, _) => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -141,10 +150,7 @@ class _MyStoriesPageState extends ConsumerState<MyStoriesPage> {
               ),
               const SizedBox(height: 12),
               TextButton(
-                onPressed: () {
-                  _stories = null;
-                  ref.invalidate(myStoriesProvider);
-                },
+                onPressed: () => ref.invalidate(myStoriesProvider),
                 child: const Text('Retry'),
               ),
             ],
@@ -178,44 +184,27 @@ class _MyStoriesPageState extends ConsumerState<MyStoriesPage> {
             );
           }
 
-          _syncStories(stories);
-
           return RefreshIndicator(
-            onRefresh: () async {
-              _stories = null;
-              return ref.refresh(myStoriesProvider.future);
-            },
-            child: AnimatedList(
-              key: _listKey,
+            onRefresh: () => ref.refresh(myStoriesProvider.future),
+            child: GridView.builder(
               padding: EdgeInsets.symmetric(
                 horizontal: horizontalPadding,
                 vertical: 16,
               ),
-              initialItemCount: _stories!.length,
-              itemBuilder: (context, index, animation) {
-                if (index >= _stories!.length) return const SizedBox.shrink();
-                final story = _stories![index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: CommunityStoryCard(
-                    story: story,
-                    showStatus: true,
-                    compact: true,
-                    onTap: () => _navigateToStory(story),
-                    onLongPress: _canDelete(story)
-                        ? () => _confirmDelete(story, index)
-                        : null,
-                    trailing: _canDelete(story)
-                        ? IconButton(
-                            icon: Icon(
-                              CupertinoIcons.ellipsis_vertical,
-                              color: context.tertiaryTextColor,
-                              size: 18,
-                            ),
-                            onPressed: () => _confirmDelete(story, index),
-                          )
-                        : null,
-                  ),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.65,
+              ),
+              itemCount: stories.length,
+              itemBuilder: (context, index) {
+                final story = stories[index];
+                return CommunityStoryGridCard(
+                  story: story,
+                  onTap: () => _navigateToStory(story),
+                  onLongPress:
+                      _canDelete(story) ? () => _confirmDelete(story) : null,
                 );
               },
             ),
@@ -225,26 +214,57 @@ class _MyStoriesPageState extends ConsumerState<MyStoriesPage> {
     );
   }
 
-  void _navigateToStory(CommunityStoryDto story) {
-    final status = story.moderationStatus;
-    if (status == 'pending' ||
-        status == 'rejected' ||
-        status == 'pending_update') {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => StoryEditorPage(storyId: story.id),
+  Widget _buildGridShimmer(BuildContext context, double horizontalPadding) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.08);
+
+    return ShimmerLoadingPage(
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: 16,
         ),
-      );
-    } else {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => StoryPreviewPage(
-            storyId: story.id,
-            storyTitle: story.title,
-            riveElement: story.riveElement,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.65,
+        ),
+        itemCount: 6,
+        itemBuilder: (_, __) => SmoothClipRRect(
+          smoothness: 0.6,
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: borderColor, width: 0.5),
+          child: Container(
+            color: context.cardBackground,
+            child: Column(
+              children: [
+                const Expanded(
+                  child: ShimmerBox(
+                    radius: 0,
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      ShimmerText(height: 14),
+                      SizedBox(height: 4),
+                      ShimmerBox(width: 60, height: 11, radius: 4),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      );
-    }
+      ),
+    );
   }
 }
