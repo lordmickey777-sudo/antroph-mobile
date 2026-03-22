@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../analytics/posthog_service.dart';
 import '../../network/error_formatter.dart';
 import '../../network/api_client.dart';
+import '../../notifications/push_notification_service.dart';
 
 class AuthTokens {
   final String accessToken;
@@ -382,6 +383,9 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   Future<void> logout() async {
     final refresh = _tokens?.refreshToken;
     try {
+      await ref
+          .read(pushNotificationServiceProvider)
+          .unregisterCurrentDeviceToken();
       if (refresh != null && refresh.isNotEmpty) {
         await _repo.logout(refreshToken: refresh);
       }

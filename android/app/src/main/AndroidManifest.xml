@@ -5,6 +5,7 @@
 
     <!-- Camera for QR/barcode scanning -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Microphone for voice chat -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
