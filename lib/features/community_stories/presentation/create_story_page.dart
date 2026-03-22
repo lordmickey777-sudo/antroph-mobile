@@ -242,16 +242,15 @@ class _CreateHeaderBanner extends StatelessWidget {
                     const SizedBox(height: 10),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 280),
-                            child: TypographyText(
-                              'Learn the clean structure before you start writing.',
-                              variant: TypographyVariant.body2,
-                              color: context.primaryTextColor,
-                              height: 1.35,
-                            ),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 220),
+                          child: TypographyText(
+                            'Learn the clean structure before you start writing.',
+                            variant: TypographyVariant.body2,
+                            color: context.primaryTextColor,
+                            height: 1.35,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -348,9 +347,7 @@ class _GlassActionCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      Positioned.fill(
-                        child: Image.asset(imageAsset, fit: BoxFit.cover),
-                      ),
+                      Positioned.fill(child: Image.asset(imageAsset, fit: BoxFit.cover)),
                     ],
                   ),
                 ),
