@@ -18,12 +18,6 @@ import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_bottom_sheet.dart';
 
-// Dark mode colors
-const _chatBgDark = Color(0xFF0B1118);
-
-// Light mode colors
-const _chatBgLight = Color(0xFFF5F5F7);
-
 const _accent = Color(0xFF9CC6FF);
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -122,9 +116,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     showAppBottomSheet(
       context: context,
-      builder: (ctx, scrollController) => ChatBottomSheet(
-        scrollController: scrollController,
-      ),
+      backgroundColor: context.backgroundColor,
+      builder: (ctx, scrollController) =>
+          ChatBottomSheet(scrollController: scrollController),
     ).then((_) {
       // Restore mute state when sheet closes
       if (!wasMuted && mounted) {
@@ -256,7 +250,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlayStyle,
       child: Scaffold(
-        backgroundColor: isDark ? _chatBgDark : _chatBgLight,
+        backgroundColor: context.backgroundColor,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -278,12 +272,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
             const SizedBox(width: 8),
           ],
         ),
-        body: Container(
-          child: SafeArea(
-            child: ChatScreen(
-              isStoryMode: widget.isStoryMode,
-              mascotConfig: mascotConfig,
-            ),
+        body: SafeArea(
+          child: ChatScreen(
+            isStoryMode: widget.isStoryMode,
+            mascotConfig: mascotConfig,
           ),
         ),
       ),
@@ -703,9 +695,7 @@ class _ReadyPromptState extends State<_ReadyPrompt>
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
     final textColor = isDark ? Colors.white70 : Colors.black54;
-    final text = widget.isListening
-        ? 'Say something when you\'re ready'
-        : 'Tap the mic to start talking';
+    final text = widget.isListening ? 'Say something when you\'re ready' : '';
     return FadeTransition(
       opacity: _opacity,
       child: Text(
@@ -874,26 +864,14 @@ class _ChatButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.isDarkMode;
-    final bgColor = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.06);
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
-          child: Icon(
-            Icons.chat_bubble_outline_rounded,
-            color: context.primaryTextColor,
-            size: 20,
-          ),
-        ),
+    return IconButton(
+      onPressed: onTap,
+      tooltip: 'Open chat',
+      icon: Icon(
+        Icons.chat_bubble_outline_rounded,
+        color: context.primaryTextColor,
+        size: 22,
       ),
     );
   }
 }
-

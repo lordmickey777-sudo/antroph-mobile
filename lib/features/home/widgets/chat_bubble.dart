@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/features/home/models/chat_models.dart';
 
-// Dark mode colors
-const chatBubbleBgDark = Color(0xFF0B1118);
-const userBubbleDark = Color(0xFF1C2533);
-const assistantBubbleDark = Color(0xFF0F1720);
-
-// Light mode colors
-const chatBubbleBgLight = Color(0xFFF5F5F7);
-const userBubbleLight = Color(0xFF007AFF);
-const assistantBubbleLight = Color(0xFFE9E9EB);
+const _userBubbleDark = Color(0xFFF5F5F5);
+const _assistantBubbleDark = Color(0xFF1A1A1A);
+const _userBubbleLight = Color(0xFF111111);
+const _assistantBubbleLight = Color(0xFFF3F3F3);
 
 class ChatBubble extends StatelessWidget {
   const ChatBubble({
@@ -29,16 +24,36 @@ class ChatBubble extends StatelessWidget {
     final alignment = message.isUser
         ? Alignment.centerRight
         : Alignment.centerLeft;
-    final userBubble = isDark ? userBubbleDark : userBubbleLight;
-    final assistantBubble = isDark ? assistantBubbleDark : assistantBubbleLight;
+    final userBubble = isDark ? _userBubbleDark : _userBubbleLight;
+    final assistantBubble = isDark
+        ? _assistantBubbleDark
+        : _assistantBubbleLight;
     final bgColor = message.isUser ? userBubble : assistantBubble;
     final textColor = message.isUser
-        ? Colors.white
-        : (isDark ? Colors.white : Colors.black87);
+        ? (isDark ? Colors.black : Colors.white)
+        : (isDark ? Colors.white : const Color(0xFF171717));
     final statusColor = message.isUser
-        ? Colors.white70
-        : (isDark ? Colors.white70 : Colors.black45);
+        ? (isDark ? Colors.black54 : Colors.white70)
+        : (isDark ? Colors.white60 : Colors.black45);
     final isStreaming = !message.isUser && message.isStreaming;
+    final borderColor = message.isUser
+        ? Colors.transparent
+        : (isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.06));
+    final borderRadius = message.isUser
+        ? const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+            bottomLeft: Radius.circular(24),
+            bottomRight: Radius.circular(10),
+          )
+        : const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+            bottomLeft: Radius.circular(10),
+            bottomRight: Radius.circular(24),
+          );
 
     return Align(
       alignment: alignment,
@@ -47,15 +62,21 @@ class ChatBubble extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             color: bgColor,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: borderRadius,
+            border: Border.all(color: borderColor),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 message.message,
-                style: TextStyle(color: textColor, fontSize: 15, height: 1.4),
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 15,
+                  height: 1.45,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
               if (isStreaming) ...[
                 const SizedBox(height: 6),
@@ -90,7 +111,11 @@ class ChatBubble extends StatelessWidget {
 }
 
 class ChatStatusRow extends StatelessWidget {
-  const ChatStatusRow({super.key, required this.message, required this.onRetry});
+  const ChatStatusRow({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
 
   final ChatMessageModel message;
   final VoidCallback onRetry;
@@ -99,10 +124,10 @@ class ChatStatusRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final statusColor = message.isUser
-        ? Colors.white70
-        : (isDark ? Colors.white70 : Colors.black45);
+        ? (isDark ? Colors.black54 : Colors.white70)
+        : (isDark ? Colors.white60 : Colors.black45);
     final actionColor = message.isUser
-        ? Colors.white
+        ? (isDark ? Colors.black : Colors.white)
         : (isDark ? Colors.white : Colors.black87);
     if (message.isPending) {
       return Row(

@@ -97,8 +97,16 @@ class _ChatBottomSheetState extends ConsumerState<ChatBottomSheet> {
     final voiceState = ref.watch(voiceChatControllerProvider);
     final messages = _buildMessages(voiceState);
     final isDark = context.isDarkMode;
+    final sheetColor = context.backgroundColor;
+    final sectionDivider = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.08);
+    final mutedSurface = isDark
+        ? const Color(0xFF1A1A1A)
+        : const Color(0xFFF3F3F3);
+    final mutedText = isDark ? Colors.white60 : Colors.black54;
     final screenWidth = MediaQuery.of(context).size.width;
-    final bubbleMaxWidth = (screenWidth * 0.95).clamp(0.0, 460.0);
+    final bubbleMaxWidth = (screenWidth * 0.82).clamp(0.0, 420.0);
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 
     // Auto-scroll when new messages arrive
@@ -111,153 +119,223 @@ class _ChatBottomSheetState extends ConsumerState<ChatBottomSheet> {
       _scrollToBottom();
     }
 
-    return Column(
-      children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Chat',
-                style: TextStyle(
-                  color: context.primaryTextColor,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              GestureDetector(
-                onTap: () => Navigator.of(context).maybePop(),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.black.withValues(alpha: 0.08),
-                    shape: BoxShape.circle,
+    return ColoredBox(
+      color: sheetColor,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 14, 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Chat',
+                        style: TextStyle(
+                          color: context.primaryTextColor,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Continue this voice conversation in text.',
+                        style: TextStyle(
+                          color: mutedText,
+                          fontSize: 13,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
                   ),
-                  child: Icon(
-                    CupertinoIcons.xmark,
-                    color: isDark ? Colors.white : Colors.black87,
-                    size: 18,
-                  ),
                 ),
-              ),
-            ],
+                IconButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  style: IconButton.styleFrom(
+                    backgroundColor: mutedSurface,
+                    foregroundColor: context.primaryTextColor,
+                    minimumSize: const Size(44, 44),
+                  ),
+                  icon: const Icon(CupertinoIcons.xmark, size: 18),
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-
-        // Messages
-        Expanded(
-          child: messages.isEmpty
-              ? Center(
-                  child: Text(
-                    'Type a message to start chatting',
-                    style: TextStyle(
-                      color: context.secondaryTextColor,
-                      fontSize: 14,
+          Divider(height: 1, thickness: 1, color: sectionDivider),
+          Expanded(
+            child: messages.isEmpty
+                ? _EmptyState(
+                    isDark: isDark,
+                    mutedSurface: mutedSurface,
+                    primaryTextColor: context.primaryTextColor,
+                    secondaryTextColor: mutedText,
+                  )
+                : ListView.separated(
+                    controller: _listScrollController,
+                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                    itemCount: messages.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 14),
+                    itemBuilder: (context, index) {
+                      final message = messages[index];
+                      return _AnimatedBubble(
+                        key: ValueKey(message.id),
+                        child: ChatBubble(
+                          message: message,
+                          onRetry: () {},
+                          maxWidth: bubbleMaxWidth,
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          Container(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 14,
+              bottom: 14 + keyboardHeight,
+            ),
+            decoration: BoxDecoration(
+              color: sheetColor,
+              border: Border(top: BorderSide(color: sectionDivider)),
+            ),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: mutedSurface,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: sectionDivider),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _textController,
+                      maxLines: 5,
+                      minLines: 1,
+                      textCapitalization: TextCapitalization.sentences,
+                      cursorColor: context.primaryTextColor,
+                      style: TextStyle(
+                        color: context.primaryTextColor,
+                        fontSize: 16,
+                        height: 1.35,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Message',
+                        hintStyle: TextStyle(color: mutedText, fontSize: 16),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.fromLTRB(
+                          18,
+                          14,
+                          10,
+                          14,
+                        ),
+                        isDense: true,
+                      ),
+                      onSubmitted: (_) => _onSend(),
                     ),
                   ),
-                )
-              : ListView.separated(
-                  controller: _listScrollController,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  itemCount: messages.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    return _AnimatedBubble(
-                      key: ValueKey(message.id),
-                      child: ChatBubble(
-                        message: message,
-                        onRetry: () {},
-                        maxWidth: bubbleMaxWidth,
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6, bottom: 6),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: _canSend
+                            ? (isDark ? Colors.white : Colors.black)
+                            : Colors.transparent,
+                        shape: BoxShape.circle,
                       ),
-                    );
-                  },
-                ),
-        ),
-
-        // Input bar
-        Container(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 8,
-            top: 12,
-            bottom: 12 + keyboardHeight,
-          ),
-          decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.black.withValues(alpha: 0.03),
-            border: Border(
-              top: BorderSide(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.08),
+                      child: IconButton(
+                        onPressed: _canSend ? _onSend : null,
+                        splashRadius: 20,
+                        icon: Icon(
+                          Icons.arrow_upward_rounded,
+                          color: _canSend
+                              ? (isDark ? Colors.black : Colors.white)
+                              : mutedText,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _textController,
-                  maxLines: 5,
-                  minLines: 1,
-                  textCapitalization: TextCapitalization.sentences,
-                  style: TextStyle(
-                    color: context.primaryTextColor,
-                    fontSize: 16,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Type a message...',
-                    hintStyle: TextStyle(
-                      color: context.tertiaryTextColor,
-                      fontSize: 16,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _onSend(),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({
+    required this.isDark,
+    required this.mutedSurface,
+    required this.primaryTextColor,
+    required this.secondaryTextColor,
+  });
+
+  final bool isDark;
+  final Color mutedSurface;
+  final Color primaryTextColor;
+  final Color secondaryTextColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: mutedSurface,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.08),
                 ),
               ),
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: _canSend ? _onSend : null,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  margin: const EdgeInsets.only(bottom: 2),
-                  decoration: BoxDecoration(
-                    color: _canSend
-                        ? (isDark ? Colors.white : Colors.black87)
-                        : Colors.transparent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.arrow_upward_rounded,
-                    color: _canSend
-                        ? (isDark ? Colors.black : Colors.white)
-                        : context.tertiaryTextColor,
-                    size: 22,
-                  ),
-                ),
+              child: Icon(
+                CupertinoIcons.chat_bubble_text,
+                color: primaryTextColor,
+                size: 28,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Start the conversation',
+              style: TextStyle(
+                color: primaryTextColor,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.2,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Ask anything here and keep the voice session in sync.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: secondaryTextColor,
+                fontSize: 14,
+                height: 1.45,
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -284,17 +362,11 @@ class _AnimatedBubbleState extends State<_AnimatedBubble>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _fadeAnim = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    );
+    _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(
       begin: const Offset(0, 0.15),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _controller.forward();
   }
 
@@ -308,10 +380,7 @@ class _AnimatedBubbleState extends State<_AnimatedBubble>
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _fadeAnim,
-      child: SlideTransition(
-        position: _slideAnim,
-        child: widget.child,
-      ),
+      child: SlideTransition(position: _slideAnim, child: widget.child),
     );
   }
 }
