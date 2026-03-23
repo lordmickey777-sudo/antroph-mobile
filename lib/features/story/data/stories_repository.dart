@@ -63,6 +63,25 @@ class StoriesRepository {
     return [];
   }
 
+  Future<List<ContinuePlayingDto>> fetchContinuePlaying({
+    int limit = 10,
+  }) async {
+    try {
+      final res = await _dio.get(
+        '/stories/me/continue',
+        queryParameters: {'limit': limit},
+      );
+      final payload = res.data;
+      if (payload is! List) return const [];
+      return payload
+          .whereType<Map<String, dynamic>>()
+          .map(ContinuePlayingDto.fromJson)
+          .toList();
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
   Future<PlaylistDetailDto> fetchPlaylistDetail(String playlistId) async {
     try {
       final res = await _dio.get('/playlists/$playlistId');

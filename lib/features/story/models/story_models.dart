@@ -149,8 +149,45 @@ class StoriesHomeResponse {
   };
 }
 
+class ContinuePlayingDto {
+  ContinuePlayingDto({
+    required this.storyId,
+    required this.title,
+    required this.description,
+    required this.coverImageUrl,
+    required this.sessionId,
+    required this.progressPercentage,
+    required this.pathLength,
+    required this.milestonesReached,
+  });
+
+  final String storyId;
+  final String title;
+  final String description;
+  final String coverImageUrl;
+  final String sessionId;
+  final double progressPercentage;
+  final int pathLength;
+  final int milestonesReached;
+
+  factory ContinuePlayingDto.fromJson(Map<String, dynamic> json) =>
+      ContinuePlayingDto(
+        storyId: (json['story_id'] as String?)?.trim() ?? '',
+        title: (json['title'] as String?)?.trim() ?? '',
+        description: (json['description'] as String?)?.trim() ?? '',
+        coverImageUrl: (json['cover_image_url'] as String?)?.trim() ?? '',
+        sessionId: (json['session_id'] as String?)?.trim() ?? '',
+        progressPercentage:
+            (json['progress_percentage'] as num?)?.toDouble() ?? 0,
+        pathLength: (json['path_length'] as num?)?.toInt() ?? 0,
+        milestonesReached: (json['milestones_reached'] as num?)?.toInt() ?? 0,
+      );
+}
+
 RiveElementDto? _parseRiveElement(dynamic value) {
   if (value is Map<String, dynamic>) return RiveElementDto.fromJson(value);
-  if (value is Map) return RiveElementDto.fromJson(value.cast<String, dynamic>());
+  if (value is Map) {
+    return RiveElementDto.fromJson(value.cast<String, dynamic>());
+  }
   return null;
 }

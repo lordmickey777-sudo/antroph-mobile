@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +18,8 @@ import 'package:antroph_mobile/widgets/voice_activity_face.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_bottom_sheet.dart';
+import 'package:antroph_mobile/features/story/models/story_detail.dart';
+import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 
 const _accent = Color(0xFF9CC6FF);
 
@@ -27,6 +30,9 @@ class ChatPage extends ConsumerStatefulWidget {
     this.storyId,
     this.storySessionId,
     this.mascotConfig,
+    this.storySubtitle,
+    this.storyImage,
+    this.isAddedToPlaylist = false,
   });
 
   final String? storyTitle;
@@ -37,6 +43,9 @@ class ChatPage extends ConsumerStatefulWidget {
   /// If provided, resumes an existing story voice session
   final String? storySessionId;
   final MascotConfig? mascotConfig;
+  final String? storySubtitle;
+  final String? storyImage;
+  final bool isAddedToPlaylist;
 
   /// Whether this chat page is in story mode
   bool get isStoryMode => storyId != null || storySessionId != null;
@@ -125,6 +134,32 @@ class _ChatPageState extends ConsumerState<ChatPage>
         ref.read(voiceChatControllerProvider.notifier).toggleMute();
       }
     });
+  }
+
+  void _openStoryDetails(BuildContext context, StoryDetailDto? detail) {
+    final storyId = widget.storyId;
+    if (storyId == null) return;
+
+    showAppBottomSheet(
+      context: context,
+      builder: (_, scrollController) => StorySheetContent(
+        storyId: storyId,
+        title: (detail?.title.isNotEmpty ?? false)
+            ? detail!.title
+            : (widget.storyTitle?.isNotEmpty ?? false)
+            ? widget.storyTitle!
+            : 'Story',
+        subtitle: (detail?.description.isNotEmpty ?? false)
+            ? detail!.description
+            : (widget.storySubtitle ?? ''),
+        imageAsset: (widget.storyImage?.isNotEmpty ?? false)
+            ? widget.storyImage!
+            : 'assets/images/default.png',
+        mascotConfig: widget.mascotConfig ?? detail?.effectiveMascot,
+        isAdded: widget.isAddedToPlaylist,
+        scrollController: scrollController,
+      ),
+    );
   }
 
   void _precacheMascot(MascotConfig mascot) {
@@ -232,10 +267,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Widget build(BuildContext context) {
     final voiceState = ref.watch(voiceChatControllerProvider);
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    final storyDetail = widget.storyId != null
+        ? ref.watch(storyDetailProvider(widget.storyId!)).asData?.value
+        : null;
     MascotConfig? mascotConfig = widget.mascotConfig;
     if (mascotConfig == null && widget.storyId != null) {
-      final detailAsync = ref.watch(storyDetailProvider(widget.storyId!));
-      mascotConfig = detailAsync.asData?.value.effectiveMascot;
+      mascotConfig = storyDetail?.effectiveMascot;
     }
     if (mascotConfig != null) {
       _precacheMascot(mascotConfig);
@@ -266,6 +303,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
             softWrap: false,
           ),
           actions: [
+            if (widget.storyId != null)
+              IconButton(
+                onPressed: () => _openStoryDetails(context, storyDetail),
+                icon: const Icon(CupertinoIcons.info_circle),
+                color: context.primaryTextColor,
+                tooltip: 'Story details',
+              ),
             _ChatButton(
               onTap: () => _openChatSheet(context, voiceController, voiceState),
             ),

@@ -9,16 +9,14 @@ import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
-import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
+import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/story/models/story_models.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
-import 'package:antroph_mobile/features/story/data/stories_cache.dart';
 import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/features/story/presentation/story_page_shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
-import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
 import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
 import 'package:antroph_mobile/features/community_stories/providers/community_stories_providers.dart';
@@ -31,6 +29,7 @@ class StoryPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncHome = ref.watch(storiesHomeSectionsProvider);
+    final asyncContinue = ref.watch(continuePlayingProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -43,16 +42,29 @@ class StoryPage extends ConsumerWidget {
           final msg = err is ApiError ? err.message : 'Failed to load stories.';
           return _ErrorView(
             message: msg,
-            onRetry: () => ref.refresh(storiesHomeSectionsProvider.future),
+            onRetry: () async {
+              ref.invalidate(continuePlayingProvider);
+              final refreshed = ref.refresh(storiesHomeSectionsProvider.future);
+              await refreshed;
+            },
           );
         },
         data: (data) {
           final sections = data.sections;
           final featuredStories = data.featuredStories;
-          if (sections.isEmpty && featuredStories.isEmpty) {
+          final continueStories =
+              asyncContinue.asData?.value ?? const <ContinuePlayingDto>[];
+          if (sections.isEmpty &&
+              featuredStories.isEmpty &&
+              continueStories.isEmpty) {
             return _EmptyView(
-              onRefresh: () =>
-                  ref.refresh(storiesHomeSectionsProvider.future),
+              onRefresh: () async {
+                ref.invalidate(continuePlayingProvider);
+                final refreshed = ref.refresh(
+                  storiesHomeSectionsProvider.future,
+                );
+                await refreshed;
+              },
             );
           }
 
@@ -86,20 +98,30 @@ class StoryPage extends ConsumerWidget {
                   ),
                 ),
                 CupertinoSliverRefreshControl(
-                  onRefresh: () =>
-                      ref.refresh(storiesHomeSectionsProvider.future),
+                  onRefresh: () async {
+                    ref.invalidate(continuePlayingProvider);
+                    final refreshed = ref.refresh(
+                      storiesHomeSectionsProvider.future,
+                    );
+                    await refreshed;
+                  },
                 ),
+                if (continueStories.isNotEmpty)
+                  _ContinuePlayingSliver(
+                    stories: continueStories,
+                    onTap: (story) => _resumeStory(context, ref, story),
+                  ),
                 if (featuredStories.isNotEmpty)
                   SliverToBoxAdapter(
                     child: _FeaturedStoriesCarousel(
                       stories: featuredStories,
-                      onTap: (story) => _openFeaturedStory(context, story),
+                      onTap: (story) => _playFeaturedStory(context, ref, story),
                     ),
                   ),
                 for (final section in sections)
                   _SectionSliver(
                     section: section,
-                    onTap: (card) => _openStory(context, card),
+                    onTap: (card) => _playStoryCard(context, ref, card),
                   ),
                 _CommunityStoriesSliver(),
                 const SliverToBoxAdapter(child: SizedBox(height: 120)),
@@ -111,45 +133,95 @@ class StoryPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _openStory(BuildContext context, StoryCardDto card) async {
-    await showAppBottomSheet(
-      context: context,
-      builder: (_, scrollController) => StorySheetContent(
-        storyId: card.storyId,
-        title: card.title,
-        subtitle: card.subtitle,
-        imageAsset: card.image,
-        mascotConfig: card.mascotConfig,
-        users: card.users,
-        views: card.views,
-        isAdded: card.isAdded,
-        scrollController: scrollController,
-      ),
+  Future<void> _playStoryCard(
+    BuildContext context,
+    WidgetRef ref,
+    StoryCardDto card,
+  ) async {
+    await _startStory(
+      context,
+      ref,
+      storyId: card.storyId,
+      title: card.title,
+      subtitle: card.subtitle,
+      image: card.image,
+      mascotConfig: card.mascotConfig,
+      isAddedToPlaylist: card.isAdded,
     );
   }
 
-  Future<void> _openFeaturedStory(
+  Future<void> _playFeaturedStory(
     BuildContext context,
+    WidgetRef ref,
     FeaturedStoryDto story,
   ) async {
-    await showAppBottomSheet(
-      context: context,
-      builder: (_, scrollController) => StorySheetContent(
-        storyId: story.id,
-        title: story.title,
-        subtitle: story.description,
-        imageAsset: story.coverImageUrl,
-        mascotConfig: story.mascotConfig,
-        users: 0,
-        views: 0,
-        isAdded: story.isAdded,
-        scrollController: scrollController,
+    await _startStory(
+      context,
+      ref,
+      storyId: story.id,
+      title: story.title,
+      subtitle: story.description,
+      image: story.coverImageUrl,
+      mascotConfig: story.mascotConfig,
+      isAddedToPlaylist: story.isAdded,
+    );
+  }
+
+  Future<void> _resumeStory(
+    BuildContext context,
+    WidgetRef ref,
+    ContinuePlayingDto story,
+  ) async {
+    await _startStory(
+      context,
+      ref,
+      storyId: story.storyId,
+      storySessionId: story.sessionId,
+      title: story.title,
+      subtitle: story.description,
+      image: story.coverImageUrl,
+    );
+  }
+
+  Future<void> _startStory(
+    BuildContext context,
+    WidgetRef ref, {
+    required String storyId,
+    required String title,
+    String? storySessionId,
+    String? subtitle,
+    String? image,
+    MascotConfig? mascotConfig,
+    bool isAddedToPlaylist = false,
+  }) async {
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Start a story session',
+    );
+    if (!context.mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          storyTitle: title.isNotEmpty ? title : 'Chat',
+          storyId: storyId,
+          storySessionId: storySessionId,
+          storySubtitle: subtitle,
+          storyImage: image,
+          mascotConfig: mascotConfig,
+          isAddedToPlaylist: isAddedToPlaylist,
+        ),
       ),
     );
   }
 }
 
-class _FeaturedStoryCard extends ConsumerStatefulWidget {
+class _FeaturedStoryCard extends StatelessWidget {
   const _FeaturedStoryCard({
     required this.story,
     required this.onTap,
@@ -161,27 +233,11 @@ class _FeaturedStoryCard extends ConsumerStatefulWidget {
   final double textOpacity;
 
   @override
-  ConsumerState<_FeaturedStoryCard> createState() => _FeaturedStoryCardState();
-}
-
-class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
-  late bool _isAdded = widget.story.isAdded;
-  bool _isAdding = false;
-
-  @override
-  void didUpdateWidget(covariant _FeaturedStoryCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.story.isAdded != widget.story.isAdded) {
-      _isAdded = widget.story.isAdded;
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: onTap,
         child: SmoothClipRRect(
           smoothness: 0.6,
           borderRadius: BorderRadius.circular(24),
@@ -197,7 +253,7 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
               fit: StackFit.expand,
               children: [
                 // Background image
-                _StoryImage(image: widget.story.coverImageUrl),
+                _StoryImage(image: story.coverImageUrl),
                 // Modern gradient overlay
                 Positioned.fill(
                   child: DecoratedBox(
@@ -206,10 +262,10 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Colors.black.withOpacity(0.0),
-                          Colors.black.withOpacity(0.1),
-                          Colors.black.withOpacity(0.6),
-                          Colors.black.withOpacity(0.95),
+                          Colors.black.withValues(alpha: 0.0),
+                          Colors.black.withValues(alpha: 0.1),
+                          Colors.black.withValues(alpha: 0.6),
+                          Colors.black.withValues(alpha: 0.95),
                         ],
                         stops: const [0.0, 0.3, 0.7, 1.0],
                       ),
@@ -222,49 +278,57 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
                   right: 20,
                   bottom: 24,
                   child: Opacity(
-                    opacity: widget.textOpacity,
+                    opacity: textOpacity,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         TypographyText(
-                          widget.story.title,
+                          story.title,
                           variant: TypographyVariant.h2,
                           color: Colors.white,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                         const SizedBox(height: 10),
-                        if (widget.story.description.isNotEmpty)
+                        if (story.description.isNotEmpty)
                           TypographyText(
-                            widget.story.description,
+                            story.description,
                             variant: TypographyVariant.body1,
-                            color: Colors.white.withOpacity(0.85),
+                            color: Colors.white.withValues(alpha: 0.85),
                             fontSize: 14,
                             maxLines: 2,
                           ),
-                        const SizedBox(height: 20),
-                        AppPillButton(
-                          onPressed: _isAdding
-                              ? null
-                              : _isAdded
-                              ? _navigateToChat
-                              : _handleAddToPlaylist,
-                          isLoading: _isAdding,
-                          icon: _isAdded
-                              ? CupertinoIcons.play_fill
-                              : CupertinoIcons.add,
-                          label: _isAdding
-                              ? 'Adding...'
-                              : (_isAdded ? 'Continue' : 'My List'),
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
+                        const SizedBox(height: 16),
+                        Container(
                           padding: const EdgeInsets.symmetric(
-                            vertical: 12,
-                            horizontal: 24,
+                            horizontal: 12,
+                            vertical: 8,
                           ),
-                          variant: TypographyVariant.body1,
-                          fontWeight: FontWeight.w600,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                CupertinoIcons.play_fill,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                              SizedBox(width: 8),
+                              TypographyText(
+                                'Tap to start',
+                                variant: TypographyVariant.body2,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -273,66 +337,6 @@ class _FeaturedStoryCardState extends ConsumerState<_FeaturedStoryCard> {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _handleAddToPlaylist() async {
-    if (_isAdding || _isAdded) return;
-
-    // Check auth first
-    final authResult = await showAuthGuardSheet(
-      context,
-      ref,
-      actionDescription: 'Add stories to your playlist',
-    );
-    if (!mounted) return;
-    if (authResult != AuthGuardResult.authenticated &&
-        authResult != AuthGuardResult.loginSuccessful) {
-      return;
-    }
-
-    setState(() => _isAdding = true);
-    try {
-      await ref
-          .read(storiesRepositoryProvider)
-          .addStoriesToPlaylist(storyIds: [widget.story.id]);
-      if (!mounted) return;
-      setState(() {
-        _isAdding = false;
-        _isAdded = true;
-      });
-      await StoriesCacheService.clear();
-      ref.invalidate(storiesHomeSectionsProvider);
-    } catch (err) {
-      if (!mounted) return;
-      setState(() => _isAdding = false);
-      showToast(context, 'Failed to add story: $err');
-    }
-  }
-
-  Future<void> _navigateToChat() async {
-    // Check auth first
-    final authResult = await showAuthGuardSheet(
-      context,
-      ref,
-      actionDescription: 'Start a story session',
-    );
-    if (!mounted) return;
-    if (authResult != AuthGuardResult.authenticated &&
-        authResult != AuthGuardResult.loginSuccessful) {
-      return;
-    }
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatPage(
-          storyTitle: widget.story.title.isNotEmpty
-              ? widget.story.title
-              : 'Chat',
-          storyId: widget.story.id,
-          mascotConfig: widget.story.mascotConfig,
         ),
       ),
     );
@@ -516,34 +520,62 @@ class _SectionSliver extends StatelessWidget {
   }
 }
 
-class _StoryCard extends ConsumerStatefulWidget {
+class _ContinuePlayingSliver extends StatelessWidget {
+  const _ContinuePlayingSliver({required this.stories, required this.onTap});
+
+  final List<ContinuePlayingDto> stories;
+  final Future<void> Function(ContinuePlayingDto story) onTap;
+  static const double _cardListHeight = 190;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SliverToBoxAdapter(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            child: TypographyText(
+              'Continue Listening',
+              variant: TypographyVariant.body1,
+              color: isDark ? Colors.white : Colors.black87,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(
+            height: _cardListHeight,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemBuilder: (context, index) {
+                final item = stories[index];
+                return _ContinueStoryCard(item: item, onTap: () => onTap(item));
+              },
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemCount: stories.length,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StoryCard extends StatelessWidget {
   const _StoryCard({required this.item, required this.onTap});
 
   final StoryCardDto item;
   final VoidCallback onTap;
 
   @override
-  ConsumerState<_StoryCard> createState() => _StoryCardState();
-}
-
-class _StoryCardState extends ConsumerState<_StoryCard> {
-  bool _isAdding = false;
-  late bool _isAdded = widget.item.isAdded;
-
-  @override
-  void didUpdateWidget(covariant _StoryCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.item.isAdded != widget.item.isAdded) {
-      _isAdded = widget.item.isAdded;
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     const cardRadius = 16.0;
-    final item = widget.item;
     return GestureDetector(
-      onTap: widget.onTap,
+      onTap: onTap,
       child: SizedBox(
         width: 125,
         child: SmoothClipRRect(
@@ -594,26 +626,6 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
                     maxLines: 2,
                   ),
                 ),
-                // Button at top right
-                Positioned(
-                  right: 6,
-                  top: 6,
-                  child: AppCircleIconButton(
-                    onPressed: _isAdding
-                        ? null
-                        : _isAdded
-                        ? _navigateToChat
-                        : _handleAddToPlaylist,
-                    isLoading: _isAdding,
-                    icon: _isAdded
-                        ? CupertinoIcons.play_fill
-                        : CupertinoIcons.add,
-                    size: 34,
-                    iconSize: 18,
-                    backgroundColor: context.actionButtonBackground,
-                    foregroundColor: context.actionButtonForeground,
-                  ),
-                ),
               ],
             ),
           ),
@@ -621,60 +633,108 @@ class _StoryCardState extends ConsumerState<_StoryCard> {
       ),
     );
   }
+}
 
-  Future<void> _handleAddToPlaylist() async {
-    if (_isAdding || _isAdded) return;
+class _ContinueStoryCard extends StatelessWidget {
+  const _ContinueStoryCard({required this.item, required this.onTap});
 
-    // Check auth first
-    final authResult = await showAuthGuardSheet(
-      context,
-      ref,
-      actionDescription: 'Add stories to your playlist',
-    );
-    if (!mounted) return;
-    if (authResult != AuthGuardResult.authenticated &&
-        authResult != AuthGuardResult.loginSuccessful) {
-      return;
-    }
+  final ContinuePlayingDto item;
+  final VoidCallback onTap;
 
-    setState(() => _isAdding = true);
-    try {
-      await ref
-          .read(storiesRepositoryProvider)
-          .addStoriesToPlaylist(storyIds: [widget.item.storyId]);
-      if (!mounted) return;
-      setState(() {
-        _isAdding = false;
-        _isAdded = true;
-      });
-      await StoriesCacheService.clear();
-      ref.invalidate(storiesHomeSectionsProvider);
-    } catch (err) {
-      if (!mounted) return;
-      setState(() => _isAdding = false);
-      showToast(context, 'Failed to add story: $err');
-    }
-  }
+  @override
+  Widget build(BuildContext context) {
+    final progress = item.progressPercentage.clamp(0, 100).toDouble();
 
-  Future<void> _navigateToChat() async {
-    // Check auth first
-    final authResult = await showAuthGuardSheet(
-      context,
-      ref,
-      actionDescription: 'Start a story session',
-    );
-    if (!mounted) return;
-    if (authResult != AuthGuardResult.authenticated &&
-        authResult != AuthGuardResult.loginSuccessful) {
-      return;
-    }
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatPage(
-          storyTitle: widget.item.title.isNotEmpty ? widget.item.title : 'Chat',
-          storyId: widget.item.storyId,
-          mascotConfig: widget.item.mascotConfig,
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 150,
+        child: SmoothClipRRect(
+          smoothness: 0.6,
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.white.withValues(alpha: 0.15)
+                : Colors.black.withValues(alpha: 0.1),
+            width: 1,
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(child: _StoryImage(image: item.coverImageUrl)),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.0),
+                        Colors.black.withValues(alpha: 0.15),
+                        Colors.black.withValues(alpha: 0.7),
+                        Colors.black.withValues(alpha: 0.92),
+                      ],
+                      stops: const [0.0, 0.28, 0.68, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 10,
+                top: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: TypographyText(
+                    '${progress.round()}%',
+                    variant: TypographyVariant.body2,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TypographyText(
+                      item.title,
+                      variant: TypographyVariant.body1,
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: progress / 100,
+                        minHeight: 6,
+                        backgroundColor: Colors.white.withValues(alpha: 0.2),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

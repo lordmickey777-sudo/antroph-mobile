@@ -66,6 +66,19 @@ final storiesHomeSectionsProvider =
       }
     });
 
+final continuePlayingProvider =
+    FutureProvider.autoDispose<List<ContinuePlayingDto>>((ref) async {
+      final isAuthenticated = ref.watch(_isAuthenticatedProvider);
+      if (!isAuthenticated) return const [];
+
+      final repo = ref.read(storiesRepositoryProvider);
+      try {
+        return await repo.fetchContinuePlaying();
+      } on ApiError {
+        rethrow;
+      }
+    });
+
 /// Fetch a single story detail by id
 final storyDetailProvider = FutureProvider.family
     .autoDispose<StoryDetailDto, String>((ref, id) async {

@@ -228,15 +228,18 @@
 						CreatedOnToolsVersion = 14.0;
 						TestTargetID = 97C146ED1CF9000F007C117D;
 					};
-					97C146ED1CF9000F007C117D = {
-						CreatedOnToolsVersion = 7.3.1;
-						LastSwiftMigration = 1100;
-						SystemCapabilities = {
-							com.apple.SignInWithApple = {
-								enabled = 1;
+						97C146ED1CF9000F007C117D = {
+							CreatedOnToolsVersion = 7.3.1;
+							LastSwiftMigration = 1100;
+							SystemCapabilities = {
+								com.apple.Push = {
+									enabled = 1;
+								};
+								com.apple.SignInWithApple = {
+									enabled = 1;
+								};
 							};
 						};
-					};
 				};
 			};
 			buildConfigurationList = 97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */;

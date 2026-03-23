@@ -13,6 +13,8 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../core/auth/state/auth_state.dart';
 import '../../../core/env/env.dart';
 import '../../../core/services/device_id_service.dart';
+import '../../story/data/stories_cache.dart';
+import '../../story/providers/story_providers.dart';
 import '../../profile/providers/customization_controller.dart';
 import '../models/expression_models.dart';
 import '../models/realtime_voice_bridge_models.dart';
@@ -181,6 +183,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   bool _socketOpen = false;
   bool _audioEnabled = true;
   String? _pendingStorySessionId;
+  final Set<String> _syncedStorySessionIds = <String>{};
 
   static const int _sampleRate = 24000;
   static const String _outputAudioFormat = 'pcm16';
@@ -997,12 +1000,16 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         if (state.isStoryMode &&
             state.phase == RealtimeVoicePhase.waitingForReady) {
           _log.i('[IncomingMessage] Using session.updated as ready signal');
+          final sessionInfo = state.storySession;
           state = state.copyWith(
             phase: RealtimeVoicePhase.ready,
             isConnecting: false,
             isProcessing: false,
             errorMessage: null,
           );
+          if (sessionInfo != null) {
+            unawaited(_syncStartedStoryState(sessionInfo));
+          }
           _scheduleAutoListen();
         }
         break;
@@ -1124,6 +1131,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       storySession: sessionInfo.isValid ? sessionInfo : state.storySession,
       errorMessage: null,
     );
+    unawaited(_syncStartedStoryState(sessionInfo));
     _scheduleAutoListen();
   }
 
@@ -1163,6 +1171,22 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       final reason = payload['reason'] as String? ?? 'Takeover denied';
       state = state.copyWith(errorMessage: reason);
     }
+  }
+
+  Future<void> _syncStartedStoryState(StorySessionInfo sessionInfo) async {
+    final sessionId = sessionInfo.sessionId.trim();
+    final storyId = sessionInfo.storyId.trim();
+    if (sessionId.isEmpty || storyId.isEmpty) return;
+    if (!_syncedStorySessionIds.add(sessionId)) return;
+
+    final user = ref.read(authControllerProvider).asData?.value;
+    if (user == null) return;
+
+    await StoriesCacheService.clear();
+    if (!ref.mounted) return;
+
+    ref.invalidate(continuePlayingProvider);
+    ref.invalidate(storiesHomeSectionsProvider);
   }
 
   void _handleRoomJoined(Map<String, dynamic> payload) {
@@ -1320,6 +1344,15 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   void _handleErrorMessage(Map<String, dynamic> payload) {
     final error = RealtimeVoiceError.fromJson(payload);
     _log.w('Voice socket error: ${error.code} - ${error.message}');
+
+    final normalizedMessage = error.message.toLowerCase();
+    final isBenignCancellationRace =
+        normalizedMessage.contains('no active response found') ||
+        normalizedMessage.contains('cancellation failed');
+    if (isBenignCancellationRace) {
+      _log.i('Ignoring benign cancellation race: ${error.message}');
+      return;
+    }
 
     // Check for story-specific errors
     if (error.isStoryContextRequired || error.isStorySessionRequired) {
@@ -1630,10 +1663,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         response['voice'] = _outputVoice;
       }
 
-      _client.send({
-        'type': 'response.create',
-        'response': response,
-      });
+      _client.send({'type': 'response.create', 'response': response});
 
       // For text-only sends, push user message to history immediately
       // since _saveCompletedTurn relies on userTranscription (voice only).
@@ -1729,7 +1759,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Future<void> stopPlayback({bool restartListening = false}) async {
     _cancelAutoListenTimer();
     _cancelPlaybackIdleTimer();
-    if (_socketOpen) {
+    final shouldCancelActiveResponse =
+        _socketOpen &&
+        !_responseDoneForCurrentTurn &&
+        (state.isProcessing || state.isPlaying || state.isConnecting);
+    if (shouldCancelActiveResponse) {
       _client.send({'type': 'response.cancel'});
     }
     _ignoreIncomingAudioUntilNextResponse = true;
