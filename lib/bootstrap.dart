@@ -6,6 +6,7 @@ import 'package:logger/logger.dart' as l;
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'core/analytics/posthog_service.dart';
 import 'core/env/env.dart';
+import 'core/notifications/push_notification_service.dart';
 import 'firebase_options.dart';
 
 import 'core/logging/logger.dart';
@@ -19,6 +20,7 @@ Future<void> _initializeCoreServices() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
   }
+  PushNotificationService.registerBackgroundHandler();
   await AppEnv.load();
   Log.init();
   await PostHogService.setup();

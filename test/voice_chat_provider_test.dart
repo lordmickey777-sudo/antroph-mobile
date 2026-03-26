@@ -100,6 +100,43 @@ void main() {
 
       expect(fakePlayer.addedChunks.last, Uint8List.fromList(const [9, 8]));
     });
+
+    test(
+      'stopPlayback cancels upstream audio and ignores stale chunks',
+      () async {
+        await controller.sendTextPrompt('interrupt');
+        controller.state = container
+            .read(voiceChatControllerProvider)
+            .copyWith(isStoryMode: true, phase: RealtimeVoicePhase.ready);
+
+        fakeClient.emitJson({
+          'type': 'response.audio.delta',
+          'audio': base64Encode([1, 2, 3, 4]),
+        });
+        await _waitFor(() => fakePlayer.addedChunks.isNotEmpty);
+
+        await controller.stopPlayback();
+
+        expect(fakeClient.sent.last['type'], 'response.cancel');
+        final chunkCount = fakePlayer.addedChunks.length;
+
+        fakeClient.emitJson({
+          'type': 'response.audio.delta',
+          'audio': base64Encode([5, 6, 7, 8]),
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        expect(fakePlayer.addedChunks.length, chunkCount);
+
+        await controller.sendTextPrompt('resume');
+        fakeClient.emitJson({'type': 'response.created'});
+        fakeClient.emitJson({
+          'type': 'response.audio.delta',
+          'audio': base64Encode([9, 10, 11, 12]),
+        });
+        await _waitFor(() => fakePlayer.addedChunks.length == chunkCount + 1);
+      },
+    );
   });
 }
 

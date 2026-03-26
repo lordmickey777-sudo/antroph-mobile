@@ -318,11 +318,26 @@ class _CollectionCard extends StatelessWidget {
   final VoidCallback onStartChat;
   final Future<void> Function() onRemove;
 
+  void _showRemoveSheet(BuildContext context) {
+    showAppActionSheet(
+      context: context,
+      actions: [
+        AppActionSheetItem(
+          label: 'Remove from collection',
+          icon: CupertinoIcons.trash,
+          isDestructive: true,
+          onTap: () => onRemove(),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onStartChat,
+      onLongPress: () => _showRemoveSheet(context),
       child: SmoothClipRRect(
         smoothness: 0.6,
         borderRadius: BorderRadius.circular(20),
@@ -418,11 +433,26 @@ class _CollectionStoryCard extends StatelessWidget {
   final VoidCallback onStartChat;
   final Future<void> Function() onRemove;
 
+  void _showRemoveSheet(BuildContext context) {
+    showAppActionSheet(
+      context: context,
+      actions: [
+        AppActionSheetItem(
+          label: 'Remove from collection',
+          icon: CupertinoIcons.trash,
+          isDestructive: true,
+          onTap: () => onRemove(),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onPlay,
+      onLongPress: () => _showRemoveSheet(context),
       child: SmoothClipRRect(
         smoothness: 0.6,
         borderRadius: BorderRadius.circular(20),

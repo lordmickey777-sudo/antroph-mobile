@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/app_input.dart';
 import 'package:antroph_mobile/widgets/app_dropdown.dart';
@@ -31,6 +34,9 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
   late final TextEditingController _contextCtrl;
   bool _saving = false;
   bool _initialized = false;
+  bool _uploadingCover = false;
+  File? _newCoverImage;
+  String? _existingCoverUrl;
 
   @override
   void initState() {
@@ -59,6 +65,7 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
     _themes = List<String>.from(story.themes);
     _characters = List<String>.from(story.characters);
     _tags = List<String>.from(story.tags);
+    _existingCoverUrl = story.coverImageUrl;
   }
 
   String _tone = 'neutral';
@@ -66,6 +73,40 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
   List<String> _themes = [];
   List<String> _characters = [];
   List<String> _tags = [];
+
+  Future<void> _pickCoverImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
+    );
+    if (picked != null) {
+      setState(() => _newCoverImage = File(picked.path));
+      await _uploadCoverImage();
+    }
+  }
+
+  Future<void> _uploadCoverImage() async {
+    if (_newCoverImage == null) return;
+    setState(() => _uploadingCover = true);
+
+    try {
+      final repo = ref.read(communityStoriesRepositoryProvider);
+      await repo.uploadCoverImage(widget.storyId, _newCoverImage!);
+      ref.invalidate(communityStoryDetailProvider(widget.storyId));
+      ref.invalidate(myStoriesProvider);
+      if (mounted) {
+        showToast(context, 'Cover image updated', success: true);
+      }
+    } catch (e) {
+      if (mounted) {
+        showToast(context, e.toString(), success: false);
+        setState(() => _newCoverImage = null);
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingCover = false);
+    }
+  }
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
@@ -169,6 +210,16 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
                 vertical: 16,
               ),
               children: [
+                // Cover Image
+                _CoverImageSection(
+                  existingUrl: _existingCoverUrl,
+                  newImage: _newCoverImage,
+                  uploading: _uploadingCover,
+                  isDark: isDark,
+                  onEdit: _pickCoverImage,
+                ),
+                const SizedBox(height: 24),
+
                 _label('Title', isDark),
                 const SizedBox(height: 6),
                 AppInput(
@@ -278,6 +329,137 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
   }
 }
 
+class _CoverImageSection extends StatelessWidget {
+  const _CoverImageSection({
+    required this.existingUrl,
+    required this.newImage,
+    required this.uploading,
+    required this.isDark,
+    required this.onEdit,
+  });
+
+  final String? existingUrl;
+  final File? newImage;
+  final bool uploading;
+  final bool isDark;
+  final VoidCallback onEdit;
+
+  bool get _hasImage =>
+      newImage != null ||
+      (existingUrl != null && existingUrl!.isNotEmpty);
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Image
+            if (newImage != null)
+              Image.file(newImage!, fit: BoxFit.cover)
+            else if (existingUrl != null && existingUrl!.isNotEmpty)
+              Image.network(
+                existingUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _placeholder(),
+              )
+            else
+              _placeholder(),
+
+            // Gradient overlay at bottom for the edit button
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.0),
+                      Colors.black.withValues(alpha: 0.4),
+                    ],
+                    stops: const [0.5, 1.0],
+                  ),
+                ),
+              ),
+            ),
+
+            // Edit button overlay
+            Positioned(
+              right: 12,
+              bottom: 12,
+              child: GestureDetector(
+                onTap: uploading ? null : onEdit,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (uploading)
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      else
+                        const Icon(
+                          CupertinoIcons.camera_fill,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _hasImage ? 'Change Cover' : 'Add Cover',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _placeholder() {
+    return Container(
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.08)
+          : Colors.black.withValues(alpha: 0.06),
+      child: Center(
+        child: Icon(
+          CupertinoIcons.photo,
+          size: 40,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.3)
+              : Colors.black.withValues(alpha: 0.2),
+        ),
+      ),
+    );
+  }
+}
+
 class _StoryEditorPageShimmer extends StatelessWidget {
   const _StoryEditorPageShimmer();
 
@@ -287,6 +469,11 @@ class _StoryEditorPageShimmer extends StatelessWidget {
       child: ListView(
         physics: const NeverScrollableScrollPhysics(),
         children: const [
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: ShimmerBox(radius: 16),
+          ),
+          SizedBox(height: 24),
           ShimmerText(width: 120, height: 14),
           SizedBox(height: 6),
           ShimmerInput(height: 56),

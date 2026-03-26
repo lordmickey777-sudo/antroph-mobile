@@ -1,6 +1,5 @@
 import 'dart:async';
-import 'dart:math' as math;
-
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,28 +7,19 @@ import 'package:antroph_mobile/core/navigation/app_route_observer.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
-import 'package:antroph_mobile/features/home/models/chat_models.dart';
 import 'package:antroph_mobile/features/home/models/realtime_voice_bridge_models.dart';
 import 'package:antroph_mobile/features/home/providers/chat_provider.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
-import 'package:antroph_mobile/features/profile/providers/profile_controller.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/voice_activity_face.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
-
-// Dark mode colors
-const _chatBgDark = Color(0xFF0B1118);
-const _userBubbleDark = Color(0xFF1C2533);
-const _assistantBubbleDark = Color(0xFF0F1720);
-
-// Light mode colors
-const _chatBgLight = Color(0xFFF5F5F7);
-const _userBubbleLight = Color(0xFF007AFF);
-const _assistantBubbleLight = Color(0xFFE9E9EB);
+import 'package:antroph_mobile/features/home/presentation/chat_bottom_sheet.dart';
+import 'package:antroph_mobile/features/story/models/story_detail.dart';
+import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 
 const _accent = Color(0xFF9CC6FF);
 
@@ -40,6 +30,9 @@ class ChatPage extends ConsumerStatefulWidget {
     this.storyId,
     this.storySessionId,
     this.mascotConfig,
+    this.storySubtitle,
+    this.storyImage,
+    this.isAddedToPlaylist = false,
   });
 
   final String? storyTitle;
@@ -50,6 +43,9 @@ class ChatPage extends ConsumerStatefulWidget {
   /// If provided, resumes an existing story voice session
   final String? storySessionId;
   final MascotConfig? mascotConfig;
+  final String? storySubtitle;
+  final String? storyImage;
+  final bool isAddedToPlaylist;
 
   /// Whether this chat page is in story mode
   bool get isStoryMode => storyId != null || storySessionId != null;
@@ -113,6 +109,57 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (!voiceState.isBusy && !voiceState.isMuted) {
       voiceController.startRecording();
     }
+  }
+
+  void _openChatSheet(
+    BuildContext context,
+    VoiceChatController voiceController,
+    VoiceChatState voiceState,
+  ) {
+    final wasMuted = voiceState.isMuted;
+    // Mute voice and stop playback when entering text chat
+    if (!wasMuted) {
+      voiceController.toggleMute();
+    }
+    voiceController.stopPlayback();
+
+    showAppBottomSheet(
+      context: context,
+      backgroundColor: context.backgroundColor,
+      builder: (ctx, scrollController) =>
+          ChatBottomSheet(scrollController: scrollController),
+    ).then((_) {
+      // Restore mute state when sheet closes
+      if (!wasMuted && mounted) {
+        ref.read(voiceChatControllerProvider.notifier).toggleMute();
+      }
+    });
+  }
+
+  void _openStoryDetails(BuildContext context, StoryDetailDto? detail) {
+    final storyId = widget.storyId;
+    if (storyId == null) return;
+
+    showAppBottomSheet(
+      context: context,
+      builder: (_, scrollController) => StorySheetContent(
+        storyId: storyId,
+        title: (detail?.title.isNotEmpty ?? false)
+            ? detail!.title
+            : (widget.storyTitle?.isNotEmpty ?? false)
+            ? widget.storyTitle!
+            : 'Story',
+        subtitle: (detail?.description.isNotEmpty ?? false)
+            ? detail!.description
+            : (widget.storySubtitle ?? ''),
+        imageAsset: (widget.storyImage?.isNotEmpty ?? false)
+            ? widget.storyImage!
+            : 'assets/images/default.png',
+        mascotConfig: widget.mascotConfig ?? detail?.effectiveMascot,
+        isAdded: widget.isAddedToPlaylist,
+        scrollController: scrollController,
+      ),
+    );
   }
 
   void _precacheMascot(MascotConfig mascot) {
@@ -220,20 +267,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Widget build(BuildContext context) {
     final voiceState = ref.watch(voiceChatControllerProvider);
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
-    final chatState = widget.isStoryMode
-        ? null
-        : ref.watch(chatControllerProvider);
+    final storyDetail = widget.storyId != null
+        ? ref.watch(storyDetailProvider(widget.storyId!)).asData?.value
+        : null;
     MascotConfig? mascotConfig = widget.mascotConfig;
     if (mascotConfig == null && widget.storyId != null) {
-      final detailAsync = ref.watch(storyDetailProvider(widget.storyId!));
-      mascotConfig = detailAsync.asData?.value.effectiveMascot;
+      mascotConfig = storyDetail?.effectiveMascot;
     }
     if (mascotConfig != null) {
       _precacheMascot(mascotConfig);
     }
-    final userProfile = ref.watch(profileControllerProvider).value;
-    final userName = userProfile?.displayName ?? userProfile?.username;
-    final headline = _chatHeadline(chatState, voiceState);
     final isDark = context.isDarkMode;
     final overlayStyle = SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -244,7 +287,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlayStyle,
       child: Scaffold(
-        backgroundColor: isDark ? _chatBgDark : _chatBgLight,
+        backgroundColor: context.backgroundColor,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -260,31 +303,23 @@ class _ChatPageState extends ConsumerState<ChatPage>
             softWrap: false,
           ),
           actions: [
-            _TranscriptButton(
-              voiceState: voiceState,
-              headline: headline,
-              userName: userName,
-              onStop: () {
-                if (voiceState.isRecording) {
-                  voiceController.stopRecordingAndSend();
-                } else {
-                  voiceController.stopPlayback();
-                }
-              },
-              onCancel: () {
-                voiceController.cancelRecording();
-                voiceController.clearError();
-              },
+            if (widget.storyId != null)
+              IconButton(
+                onPressed: () => _openStoryDetails(context, storyDetail),
+                icon: const Icon(CupertinoIcons.info_circle),
+                color: context.primaryTextColor,
+                tooltip: 'Story details',
+              ),
+            _ChatButton(
+              onTap: () => _openChatSheet(context, voiceController, voiceState),
             ),
             const SizedBox(width: 8),
           ],
         ),
-        body: Container(
-          child: SafeArea(
-            child: ChatScreen(
-              isStoryMode: widget.isStoryMode,
-              mascotConfig: mascotConfig,
-            ),
+        body: SafeArea(
+          child: ChatScreen(
+            isStoryMode: widget.isStoryMode,
+            mascotConfig: mascotConfig,
           ),
         ),
       ),
@@ -325,41 +360,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  /// Build chat messages from voice conversation history + live current turn.
-  List<ChatMessageModel> _buildVoiceMessages(VoiceChatState voiceState) {
-    final messages = <ChatMessageModel>[];
-    // Add completed conversation history
-    for (var i = 0; i < voiceState.conversationHistory.length; i++) {
-      final item = voiceState.conversationHistory[i];
-      if (item.content.isEmpty) continue;
-      messages.add(ChatMessageModel(
-        id: 'voice_$i',
-        role: item.isUser ? ChatRole.user : ChatRole.assistant,
-        message: item.content,
-        ts: DateTime.now(),
-      ));
-    }
-    // Add live current turn (not yet saved to history)
-    if (voiceState.userTranscription?.isNotEmpty ?? false) {
-      messages.add(ChatMessageModel(
-        id: 'voice_live_user',
-        role: ChatRole.user,
-        message: voiceState.userTranscription!,
-        ts: DateTime.now(),
-      ));
-    }
-    if (voiceState.aiResponse?.isNotEmpty ?? false) {
-      messages.add(ChatMessageModel(
-        id: 'voice_live_ai',
-        role: ChatRole.assistant,
-        message: voiceState.aiResponse!,
-        ts: DateTime.now(),
-        streaming: voiceState.isProcessing || voiceState.isPlaying,
-      ));
-    }
-    return messages;
-  }
-
   @override
   Widget build(BuildContext context) {
     ref.listen<VoiceChatState>(voiceChatControllerProvider, (
@@ -390,10 +390,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       });
     }
 
-    // Only watch chatControllerProvider in non-story mode to avoid double WebSocket connection
-    final ChatState? chatState = widget.isStoryMode
-        ? null
-        : ref.watch(chatControllerProvider);
     final ChatController? chatController = widget.isStoryMode
         ? null
         : ref.read(chatControllerProvider.notifier);
@@ -407,13 +403,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           constraints,
         );
         final faceSize = (constraints.maxWidth * 0.75).clamp(250.0, 380.0);
-        final availableWidth = math.max(
-          0,
-          constraints.maxWidth - horizontalPadding * 2,
-        );
-        final bubbleMaxWidth = math.min(460.0, availableWidth * 0.95);
-        const bottomPadding = 200.0;
-
         return Column(
           children: [
             Padding(
@@ -430,23 +419,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 onReconnect: chatController?.forceReconnect,
                 onStartVoice: voiceController.startRecording,
                 onStopVoice: voiceController.stopRecordingAndSend,
-                onStopVoicePlayback: voiceController.stopPlayback,
+                onStopVoicePlayback: () {
+                  voiceController.stopPlayback(restartListening: true);
+                },
                 faceSize: faceSize,
+                hasConversation:
+                    voiceState.conversationHistory.isNotEmpty ||
+                    (voiceState.userTranscription?.isNotEmpty ?? false) ||
+                    (voiceState.aiResponse?.isNotEmpty ?? false),
               ),
             ),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                child: ChatList(
-                  messages: widget.isStoryMode
-                      ? _buildVoiceMessages(voiceState)
-                      : chatState?.messages ?? const [],
-                  onRetry: chatController?.retrySend,
-                  bubbleMaxWidth: bubbleMaxWidth,
-                  bottomPadding: bottomPadding,
-                ),
-              ),
-            ),
+            const Spacer(),
             SafeArea(
               top: false,
               child: Padding(
@@ -485,20 +468,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
-String _chatHeadline(ChatState? chat, VoiceChatState voice) {
-  if (voice.isRecording) return 'Listening';
-  if (voice.userTranscription?.isNotEmpty ?? false) {
-    return voice.userTranscription!;
-  }
-  if (voice.aiResponse?.isNotEmpty ?? false) {
-    return voice.aiResponse!;
-  }
-  if (chat != null && chat.messages.isNotEmpty) {
-    return chat.messages.last.message;
-  }
-  return '';
-}
-
 class _Header extends StatelessWidget {
   const _Header({
     required this.voiceState,
@@ -509,6 +478,7 @@ class _Header extends StatelessWidget {
     required this.onStopVoice,
     required this.onStopVoicePlayback,
     required this.faceSize,
+    this.hasConversation = false,
   });
 
   final VoiceChatState voiceState;
@@ -519,6 +489,7 @@ class _Header extends StatelessWidget {
   final VoidCallback onStopVoice;
   final VoidCallback onStopVoicePlayback;
   final double faceSize;
+  final bool hasConversation;
 
   @override
   Widget build(BuildContext context) {
@@ -541,6 +512,7 @@ class _Header extends StatelessWidget {
                   child: VoiceActivityFace(
                     levelStream: aiAudioLevelStream,
                     threshold: 0.008,
+                    silenceDelay: const Duration(milliseconds: 450),
                     mascotConfig: mascotConfig,
                   ),
                 ),
@@ -563,6 +535,12 @@ class _Header extends StatelessWidget {
                 _StatusPill(label: status.label, icon: status.icon),
               ],
             ),
+            if (!hasConversation &&
+                !voiceState.isPlaying &&
+                !voiceState.isProcessing) ...[
+              const SizedBox(height: 16),
+              _ReadyPrompt(isListening: voiceState.isRecording),
+            ],
           ],
         ),
       ),
@@ -724,6 +702,59 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
+class _ReadyPrompt extends StatefulWidget {
+  const _ReadyPrompt({this.isListening = false});
+
+  final bool isListening;
+
+  @override
+  State<_ReadyPrompt> createState() => _ReadyPromptState();
+}
+
+class _ReadyPromptState extends State<_ReadyPrompt>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _opacity = Tween<double>(
+      begin: 0.4,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final textColor = isDark ? Colors.white70 : Colors.black54;
+    final text = widget.isListening ? 'Say something when you\'re ready' : '';
+    return FadeTransition(
+      opacity: _opacity,
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
 class _HeroMicButton extends StatelessWidget {
   const _HeroMicButton({
     required this.voiceState,
@@ -870,459 +901,20 @@ class _EndButton extends StatelessWidget {
   }
 }
 
-class ChatList extends StatelessWidget {
-  const ChatList({
-    super.key,
-    required this.messages,
-    this.onRetry,
-    this.bubbleMaxWidth = 360,
-    this.bottomPadding = 160,
-  });
+class _ChatButton extends StatelessWidget {
+  const _ChatButton({required this.onTap});
 
-  final List<ChatMessageModel> messages;
-  final void Function(String messageId)? onRetry;
-  final double bubbleMaxWidth;
-  final double bottomPadding;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    if (messages.isEmpty) {
-      return const _EmptyState();
-    }
-    return ListView.separated(
-      reverse: true,
-      padding: EdgeInsets.only(top: 12, bottom: bottomPadding),
-      itemCount: messages.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final message = messages[messages.length - 1 - index];
-        return _ChatBubble(
-          message: message,
-          onRetry: () => onRetry?.call(message.id),
-          maxWidth: bubbleMaxWidth,
-        );
-      },
-    );
-  }
-}
-
-class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({
-    required this.message,
-    required this.onRetry,
-    required this.maxWidth,
-  });
-
-  final ChatMessageModel message;
-  final VoidCallback onRetry;
-  final double maxWidth;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final alignment = message.isUser
-        ? Alignment.centerRight
-        : Alignment.centerLeft;
-    final userBubble = isDark ? _userBubbleDark : _userBubbleLight;
-    final assistantBubble = isDark
-        ? _assistantBubbleDark
-        : _assistantBubbleLight;
-    final bgColor = message.isUser ? userBubble : assistantBubble;
-    final textColor = message.isUser
-        ? Colors.white
-        : (isDark ? Colors.white : Colors.black87);
-    final statusColor = message.isUser
-        ? Colors.white70
-        : (isDark ? Colors.white70 : Colors.black45);
-    final isStreaming = !message.isUser && message.isStreaming;
-
-    return Align(
-      alignment: alignment,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: Container(
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                message.message,
-                style: TextStyle(color: textColor, fontSize: 15, height: 1.4),
-              ),
-              if (isStreaming) ...[
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: statusColor,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Streaming...',
-                      style: TextStyle(color: statusColor, fontSize: 11),
-                    ),
-                  ],
-                ),
-              ] else if (message.isPending || message.isFailed) ...[
-                const SizedBox(height: 8),
-                _StatusRow(message: message, onRetry: onRetry),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusRow extends StatelessWidget {
-  const _StatusRow({required this.message, required this.onRetry});
-
-  final ChatMessageModel message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final statusColor = message.isUser
-        ? Colors.white70
-        : (isDark ? Colors.white70 : Colors.black45);
-    final actionColor = message.isUser
-        ? Colors.white
-        : (isDark ? Colors.white : Colors.black87);
-    if (message.isPending) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: statusColor,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            'Sending...',
-            style: TextStyle(color: statusColor, fontSize: 11),
-          ),
-        ],
-      );
-    }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.error_outline, color: Colors.redAccent, size: 16),
-        const SizedBox(width: 6),
-        const Text(
-          'Failed',
-          style: TextStyle(color: Colors.redAccent, fontSize: 11),
-        ),
-        TextButton(
-          onPressed: onRetry,
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            foregroundColor: actionColor,
-            textStyle: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          child: const Text('Retry'),
-        ),
-      ],
-    );
-  }
-}
-
-class _TranscriptButton extends StatelessWidget {
-  const _TranscriptButton({
-    required this.voiceState,
-    required this.headline,
-    required this.onStop,
-    required this.onCancel,
-    this.userName,
-  });
-
-  final VoiceChatState voiceState;
-  final String headline;
-  final VoidCallback onStop;
-  final VoidCallback onCancel;
-  final String? userName;
-
-  bool get _hasContent =>
-      (voiceState.userTranscription?.isNotEmpty ?? false) ||
-      (voiceState.aiResponse?.isNotEmpty ?? false) ||
-      headline.trim().isNotEmpty ||
-      (voiceState.errorMessage?.isNotEmpty ?? false);
-
-  @override
-  Widget build(BuildContext context) {
-    final hasError = voiceState.errorMessage?.isNotEmpty ?? false;
-    final iconColor = hasError
-        ? Colors.redAccent
-        : _hasContent
-        ? context.primaryTextColor
-        : context.tertiaryTextColor;
-    final activeBg = context.isDarkMode
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.06);
-    final inactiveBg = context.isDarkMode
-        ? Colors.white.withValues(alpha: 0.04)
-        : Colors.black.withValues(alpha: 0.04);
-    final bgColor = hasError
-        ? Colors.redAccent.withValues(alpha: 0.12)
-        : _hasContent
-        ? activeBg
-        : inactiveBg;
-
-    return GestureDetector(
-      onTap: _hasContent ? () => _showTranscriptSheet(context) : null,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: bgColor, shape: BoxShape.circle),
-          child: Icon(
-            hasError ? Icons.error_rounded : Icons.subtitles_rounded,
-            color: iconColor,
-            size: 20,
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showTranscriptSheet(BuildContext context) {
-    final hasError = voiceState.errorMessage?.isNotEmpty ?? false;
-    final active =
-        voiceState.isRecording ||
-        voiceState.isProcessing ||
-        voiceState.isPlaying;
-    final title = voiceState.isRecording
-        ? 'Listening...'
-        : voiceState.isProcessing
-        ? 'Processing voice...'
-        : voiceState.isPlaying
-        ? 'Playing reply...'
-        : hasError
-        ? 'Voice chat issue'
-        : 'Transcript';
-
-    showAppBottomSheet(
-      context: context,
-      builder: (context, scrollController) => _TranscriptSheetContent(
-        title: title,
-        hasError: hasError,
-        active: active,
-        voiceState: voiceState,
-        headline: headline,
-        userName: userName,
-        onStop: onStop,
-        onCancel: onCancel,
-        scrollController: scrollController,
-      ),
-    );
-  }
-}
-
-class _TranscriptSheetContent extends StatelessWidget {
-  const _TranscriptSheetContent({
-    required this.title,
-    required this.hasError,
-    required this.active,
-    required this.voiceState,
-    required this.headline,
-    required this.userName,
-    required this.onStop,
-    required this.onCancel,
-    required this.scrollController,
-  });
-
-  final String title;
-  final bool hasError;
-  final bool active;
-  final VoiceChatState voiceState;
-  final String headline;
-  final String? userName;
-  final VoidCallback onStop;
-  final VoidCallback onCancel;
-  final ScrollController scrollController;
-
-  @override
-  Widget build(BuildContext context) {
-    final textColor = context.primaryTextColor;
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
-              if (active || hasError)
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    if (hasError) {
-                      onCancel();
-                    } else {
-                      onStop();
-                    }
-                  },
-                  style: TextButton.styleFrom(
-                    foregroundColor: hasError ? Colors.redAccent : textColor,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                  ),
-                  child: Text(hasError ? 'Dismiss' : 'Stop'),
-                ),
-            ],
-          ),
-        ),
-        Divider(color: context.dividerColor, height: 1),
-        Expanded(
-          child: ListView(
-            controller: scrollController,
-            padding: const EdgeInsets.all(20),
-            children: [
-              if (voiceState.userTranscription?.isNotEmpty ?? false) ...[
-                _TranscriptLine(
-                  label: userName ?? 'You',
-                  text: voiceState.userTranscription!,
-                  isUser: true,
-                ),
-                const SizedBox(height: 16),
-              ],
-              if (voiceState.aiResponse?.isNotEmpty ?? false) ...[
-                _TranscriptLine(label: 'Aura', text: voiceState.aiResponse!),
-                const SizedBox(height: 16),
-              ],
-              if (headline.trim().isNotEmpty &&
-                  headline != voiceState.userTranscription &&
-                  headline != voiceState.aiResponse) ...[
-                Text(
-                  headline,
-                  style: TextStyle(color: textColor, fontSize: 15, height: 1.4),
-                ),
-              ],
-              if (hasError && voiceState.errorMessage != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.redAccent.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.redAccent.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        color: Colors.redAccent,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          voiceState.errorMessage!,
-                          style: TextStyle(
-                            color: context.secondaryTextColor,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TranscriptLine extends StatelessWidget {
-  const _TranscriptLine({
-    required this.label,
-    required this.text,
-    this.isUser = false,
-  });
-
-  final String label;
-  final String text;
-  final bool isUser;
-
-  @override
-  Widget build(BuildContext context) {
-    final textColor = context.primaryTextColor;
-    final isDark = context.isDarkMode;
-    final userLabelColor = isDark
-        ? _accent
-        : Theme.of(context).colorScheme.primary;
-    final assistantLabelColor = isDark ? Colors.lightGreenAccent : Colors.green;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: isUser ? userLabelColor : assistantLabelColor,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          text,
-          style: TextStyle(color: textColor, fontSize: 15, height: 1.4),
-        ),
-      ],
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(height: 10),
-          Text(
-            '',
-            style: TextStyle(color: context.secondaryTextColor, fontSize: 14),
-          ),
-        ],
+    return IconButton(
+      onPressed: onTap,
+      tooltip: 'Open chat',
+      icon: Icon(
+        Icons.chat_bubble_outline_rounded,
+        color: context.primaryTextColor,
+        size: 22,
       ),
     );
   }

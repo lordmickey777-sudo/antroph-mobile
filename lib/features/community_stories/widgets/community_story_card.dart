@@ -12,12 +12,16 @@ class CommunityStoryCard extends StatelessWidget {
     super.key,
     required this.story,
     this.onTap,
+    this.onLongPress,
+    this.trailing,
     this.showStatus = true,
     this.compact = false,
   });
 
   final CommunityStoryDto story;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final Widget? trailing;
   final bool showStatus;
   final bool compact;
 
@@ -79,6 +83,7 @@ class CommunityStoryCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
         decoration: BoxDecoration(
           color: bgColor,
@@ -105,11 +110,16 @@ class CommunityStoryCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (showStatus) ...[
-                      ModerationStatusBadge(
-                          status: story.moderationStatus),
-                      const SizedBox(height: 10),
-                    ],
+                    Row(
+                      children: [
+                        if (showStatus)
+                          ModerationStatusBadge(
+                              status: story.moderationStatus),
+                        const Spacer(),
+                        if (trailing != null) trailing!,
+                      ],
+                    ),
+                    if (showStatus) const SizedBox(height: 10),
                     Text(
                       story.title,
                       style: TextStyle(
@@ -178,6 +188,7 @@ class CommunityStoryCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
         decoration: BoxDecoration(
           color: bgColor,

@@ -13,6 +13,8 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../core/auth/state/auth_state.dart';
 import '../../../core/env/env.dart';
 import '../../../core/services/device_id_service.dart';
+import '../../story/data/stories_cache.dart';
+import '../../story/providers/story_providers.dart';
 import '../../profile/providers/customization_controller.dart';
 import '../models/expression_models.dart';
 import '../models/realtime_voice_bridge_models.dart';
@@ -171,6 +173,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   double _noiseFloor = 0.0;
   bool _responseDoneForCurrentTurn = false;
   bool _receivedAiAudioForCurrentTurn = false;
+  bool _ignoreIncomingAudioUntilNextResponse = false;
   final Queue<_TimedRmsSample> _pendingAiRmsSamples = Queue<_TimedRmsSample>();
   final StringBuffer _aiTextBuffer = StringBuffer();
   BytesBuilder _audioBuffer = BytesBuilder(copy: false);
@@ -180,6 +183,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   bool _socketOpen = false;
   bool _audioEnabled = true;
   String? _pendingStorySessionId;
+  final Set<String> _syncedStorySessionIds = <String>{};
 
   static const int _sampleRate = 24000;
   static const String _outputAudioFormat = 'pcm16';
@@ -996,12 +1000,16 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         if (state.isStoryMode &&
             state.phase == RealtimeVoicePhase.waitingForReady) {
           _log.i('[IncomingMessage] Using session.updated as ready signal');
+          final sessionInfo = state.storySession;
           state = state.copyWith(
             phase: RealtimeVoicePhase.ready,
             isConnecting: false,
             isProcessing: false,
             errorMessage: null,
           );
+          if (sessionInfo != null) {
+            unawaited(_syncStartedStoryState(sessionInfo));
+          }
           _scheduleAutoListen();
         }
         break;
@@ -1018,6 +1026,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       // Audio/transcript messages
       case RealtimeServerMessageType.responseCreated:
+        _ignoreIncomingAudioUntilNextResponse = false;
         _responseDoneForCurrentTurn = false;
         _receivedAiAudioForCurrentTurn = false;
         _lastAiAudioAt = null;
@@ -1080,8 +1089,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
         );
         _commitSent = false;
-        // Temporarily disable interruption: when a turn includes audio, only
-        // transition back to listening after playback completion.
+        if (_ignoreIncomingAudioUntilNextResponse) {
+          break;
+        }
         if (!state.isPlaying && !_receivedAiAudioForCurrentTurn) {
           _scheduleAutoListen();
         }
@@ -1121,6 +1131,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       storySession: sessionInfo.isValid ? sessionInfo : state.storySession,
       errorMessage: null,
     );
+    unawaited(_syncStartedStoryState(sessionInfo));
     _scheduleAutoListen();
   }
 
@@ -1160,6 +1171,22 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       final reason = payload['reason'] as String? ?? 'Takeover denied';
       state = state.copyWith(errorMessage: reason);
     }
+  }
+
+  Future<void> _syncStartedStoryState(StorySessionInfo sessionInfo) async {
+    final sessionId = sessionInfo.sessionId.trim();
+    final storyId = sessionInfo.storyId.trim();
+    if (sessionId.isEmpty || storyId.isEmpty) return;
+    if (!_syncedStorySessionIds.add(sessionId)) return;
+
+    final user = ref.read(authControllerProvider).asData?.value;
+    if (user == null) return;
+
+    await StoriesCacheService.clear();
+    if (!ref.mounted) return;
+
+    ref.invalidate(continuePlayingProvider);
+    ref.invalidate(storiesHomeSectionsProvider);
   }
 
   void _handleRoomJoined(Map<String, dynamic> payload) {
@@ -1318,6 +1345,15 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     final error = RealtimeVoiceError.fromJson(payload);
     _log.w('Voice socket error: ${error.code} - ${error.message}');
 
+    final normalizedMessage = error.message.toLowerCase();
+    final isBenignCancellationRace =
+        normalizedMessage.contains('no active response found') ||
+        normalizedMessage.contains('cancellation failed');
+    if (isBenignCancellationRace) {
+      _log.i('Ignoring benign cancellation race: ${error.message}');
+      return;
+    }
+
     // Check for story-specific errors
     if (error.isStoryContextRequired || error.isStorySessionRequired) {
       state = state.copyWith(
@@ -1346,6 +1382,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Future<void> _handleAudioDelta(String base64Audio) async {
     if (!ref.mounted) return;
     if (!_audioEnabled) return;
+    if (_ignoreIncomingAudioUntilNextResponse) return;
     _cancelAutoListenTimer();
     try {
       final normalized = base64.normalize(base64Audio);
@@ -1391,6 +1428,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Future<void> _handleAudioBytes(Uint8List bytes) async {
     if (!ref.mounted) return;
     if (!_audioEnabled) return;
+    if (_ignoreIncomingAudioUntilNextResponse) return;
     _cancelAutoListenTimer();
     try {
       if (bytes.isEmpty) return;
@@ -1585,7 +1623,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   /// Send a text prompt over the realtime socket using response.create.
-  Future<void> sendTextPrompt(String prompt) async {
+  Future<void> sendTextPrompt(String prompt, {bool textOnly = false}) async {
     final trimmed = prompt.trim();
     if (trimmed.isEmpty) return;
 
@@ -1594,7 +1632,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         await _connectSocket();
       }
 
-      _enableAudio();
+      if (!textOnly) _enableAudio();
       _aiTextBuffer.clear();
       state = state.copyWith(
         isProcessing: true,
@@ -1607,23 +1645,33 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         phase: state.isStoryMode ? RealtimeVoicePhase.processing : state.phase,
       );
 
-      _client.send({
-        'type': 'response.create',
-        'response': {
-          'modalities': ['text', 'audio'],
-          'output_audio_format': _outputAudioFormat,
-          'voice': _outputVoice,
-          'input': [
-            {
-              'type': 'message',
-              'role': 'user',
-              'content': [
-                {'type': 'input_text', 'text': trimmed},
-              ],
-            },
-          ],
-        },
-      });
+      final modalities = textOnly ? ['text'] : ['text', 'audio'];
+      final response = <String, dynamic>{
+        'modalities': modalities,
+        'input': [
+          {
+            'type': 'message',
+            'role': 'user',
+            'content': [
+              {'type': 'input_text', 'text': trimmed},
+            ],
+          },
+        ],
+      };
+      if (!textOnly) {
+        response['output_audio_format'] = _outputAudioFormat;
+        response['voice'] = _outputVoice;
+      }
+
+      _client.send({'type': 'response.create', 'response': response});
+
+      // For text-only sends, push user message to history immediately
+      // since _saveCompletedTurn relies on userTranscription (voice only).
+      if (textOnly) {
+        final history = [...state.conversationHistory];
+        history.add(ConversationItem(role: 'user', content: trimmed));
+        state = state.copyWith(conversationHistory: history);
+      }
     } catch (e, st) {
       _log.e('Failed to send text prompt', error: e, stackTrace: st);
       state = state.copyWith(
@@ -1707,10 +1755,18 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     );
   }
 
-  /// Stop audio playback
-  Future<void> stopPlayback() async {
+  /// Stop audio playback and optionally return to listening immediately.
+  Future<void> stopPlayback({bool restartListening = false}) async {
     _cancelAutoListenTimer();
     _cancelPlaybackIdleTimer();
+    final shouldCancelActiveResponse =
+        _socketOpen &&
+        !_responseDoneForCurrentTurn &&
+        (state.isProcessing || state.isPlaying || state.isConnecting);
+    if (shouldCancelActiveResponse) {
+      _client.send({'type': 'response.cancel'});
+    }
+    _ignoreIncomingAudioUntilNextResponse = true;
     _disableAudio();
     _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
@@ -1731,6 +1787,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       clearFace: true,
       phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
     );
+
+    if (restartListening &&
+        !state.isMuted &&
+        (state.isSessionReady || !state.isStoryMode)) {
+      await startRecording();
+    }
   }
 
   /// Clear error message
@@ -1892,6 +1954,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   Future<void> _teardownSocket() async {
     _socketOpen = false;
+    _ignoreIncomingAudioUntilNextResponse = false;
     await _socketSub?.cancel();
     _socketSub = null;
     await _client.close();

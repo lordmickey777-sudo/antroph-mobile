@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
+import 'package:antroph_mobile/core/consent/ai_consent_service.dart';
 import 'package:antroph_mobile/core/onboarding/onboarding_storage_service.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
@@ -44,6 +45,12 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
     if (!hasCompletedOnboarding) {
       _navigate('/onboarding');
+      return;
+    }
+
+    final hasConsented = await AiConsentService.hasAcceptedConsent();
+    if (!hasConsented) {
+      _navigate('/ai-consent');
       return;
     }
 
