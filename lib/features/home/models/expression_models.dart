@@ -33,13 +33,19 @@ class ExpressionTiming {
   final double startTime;
   final double? duration;
 
-  const ExpressionTiming({required this.action, required this.startTime, this.duration});
+  const ExpressionTiming({
+    required this.action,
+    required this.startTime,
+    this.duration,
+  });
 
   factory ExpressionTiming.fromJson(Map<String, dynamic> json) {
     return ExpressionTiming(
       action: RobotExpression.fromString(json['action'] as String),
       startTime: (json['start_time'] as num).toDouble(),
-      duration: json['duration'] != null ? (json['duration'] as num).toDouble() : null,
+      duration: json['duration'] != null
+          ? (json['duration'] as num).toDouble()
+          : null,
     );
   }
 
@@ -111,4 +117,43 @@ class VoiceChatResponse {
   @override
   String toString() =>
       'VoiceChatResponse(transcription: $transcription, text: $text, conversationId: $conversationId, expressions: ${expressions.length}, tokensUsed: $tokensUsed)';
+}
+
+/// Realtime mascot expression event emitted during active voice sessions.
+class MascotExpressionEvent {
+  const MascotExpressionEvent({
+    required this.expression,
+    this.intensity = 1.0,
+    this.durationMs = 2000,
+    this.riveElementId,
+    this.riveUrl,
+    this.timestamp,
+  });
+
+  final String expression;
+  final double intensity;
+  final int durationMs;
+  final String? riveElementId;
+  final String? riveUrl;
+  final DateTime? timestamp;
+
+  factory MascotExpressionEvent.fromJson(Map<String, dynamic> json) {
+    final rawExpression = (json['expression'] as String?)?.trim();
+    final rawIntensity = (json['intensity'] as num?)?.toDouble() ?? 1.0;
+    final rawDuration = (json['duration_ms'] as num?)?.toInt() ?? 2000;
+    final rawTimestamp = json['timestamp'] as String?;
+
+    return MascotExpressionEvent(
+      expression: (rawExpression == null || rawExpression.isEmpty)
+          ? RobotExpression.neutral.value
+          : rawExpression,
+      intensity: rawIntensity.clamp(0.0, 1.0),
+      durationMs: rawDuration < 0 ? 0 : rawDuration,
+      riveElementId: (json['rive_element_id'] as String?)?.trim(),
+      riveUrl: (json['rive_url'] as String?)?.trim(),
+      timestamp: rawTimestamp == null || rawTimestamp.isEmpty
+          ? null
+          : DateTime.tryParse(rawTimestamp)?.toUtc(),
+    );
+  }
 }

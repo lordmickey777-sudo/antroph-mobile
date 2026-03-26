@@ -160,6 +160,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   StreamSubscription<Uint8List>? _micStreamSubscription;
   StreamController<double>? _micLevelController;
   StreamController<double>? _aiAudioLevelController;
+  StreamController<MascotExpressionEvent>? _mascotExpressionController;
   Timer? _aiAudioLevelTimer;
   Timer? _silenceTimer;
   Timer? _autoListenTimer;
@@ -210,6 +211,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Stream<double> get aiAudioLevelStream =>
       _aiAudioLevelController?.stream ?? Stream<double>.empty();
 
+  Stream<MascotExpressionEvent> get mascotExpressionStream =>
+      _mascotExpressionController?.stream ??
+      Stream<MascotExpressionEvent>.empty();
+
   /// Gets the TTS voice from user's AI settings, or falls back to default.
   String get _outputVoice {
     final settings = ref.read(customizationControllerProvider).asData?.value;
@@ -225,6 +230,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _recorder = FlutterSoundRecorder();
     _micLevelController ??= StreamController<double>.broadcast();
     _aiAudioLevelController ??= StreamController<double>.broadcast();
+    _mascotExpressionController ??=
+        StreamController<MascotExpressionEvent>.broadcast();
 
     ref.onDispose(() async {
       _disableAudio();
@@ -240,6 +247,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _micLevelController = null;
       await _aiAudioLevelController?.close();
       _aiAudioLevelController = null;
+      await _mascotExpressionController?.close();
+      _mascotExpressionController = null;
     });
 
     return const VoiceChatState();
@@ -1023,6 +1032,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       case RealtimeServerMessageType.inputAudioTranscriptionCompleted:
         _handleUserTranscription(payload);
         break;
+      case RealtimeServerMessageType.mascotExpression:
+        _handleMascotExpression(payload);
+        break;
 
       // Audio/transcript messages
       case RealtimeServerMessageType.responseCreated:
@@ -1201,6 +1213,16 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (item.content.isEmpty) return;
     final history = [...state.conversationHistory, item];
     state = state.copyWith(conversationHistory: history);
+  }
+
+  void _handleMascotExpression(Map<String, dynamic> payload) {
+    final event = MascotExpressionEvent.fromJson(payload);
+    _log.d(
+      'Mascot expression received: ${event.expression} '
+      '(intensity=${event.intensity}, durationMs=${event.durationMs}, '
+      'riveElementId=${event.riveElementId})',
+    );
+    _mascotExpressionController?.add(event);
   }
 
   /// Handle conversation.history.full from server.

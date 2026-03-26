@@ -7,6 +7,7 @@ import 'package:antroph_mobile/core/navigation/app_route_observer.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
+import 'package:antroph_mobile/features/home/models/expression_models.dart';
 import 'package:antroph_mobile/features/home/models/realtime_voice_bridge_models.dart';
 import 'package:antroph_mobile/features/home/providers/chat_provider.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
@@ -170,7 +171,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _lastPrecachedMascotId = mascotId;
     unawaited(() async {
       try {
-        await ref.read(mascotCacheServiceProvider).cacheMascot(mascot);
+        await ref.read(riveRegistryServiceProvider).cacheMascotConfig(mascot);
       } catch (_) {
         // Cache warmup is best effort.
       }
@@ -271,8 +272,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
         ? ref.watch(storyDetailProvider(widget.storyId!)).asData?.value
         : null;
     MascotConfig? mascotConfig = widget.mascotConfig;
-    if (mascotConfig == null && widget.storyId != null) {
-      mascotConfig = storyDetail?.effectiveMascot;
+    final detailedMascot = storyDetail?.effectiveMascot;
+    if (widget.storyId != null &&
+        (mascotConfig == null ||
+            ((detailedMascot?.localAssetPath ?? '').trim().isNotEmpty))) {
+      mascotConfig = detailedMascot;
     }
     if (mascotConfig != null) {
       _precacheMascot(mascotConfig);
@@ -320,6 +324,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           child: ChatScreen(
             isStoryMode: widget.isStoryMode,
             mascotConfig: mascotConfig,
+            expressionStream: voiceController.mascotExpressionStream,
           ),
         ),
       ),
@@ -328,10 +333,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
 }
 
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({super.key, this.isStoryMode = false, this.mascotConfig});
+  const ChatScreen({
+    super.key,
+    this.isStoryMode = false,
+    this.mascotConfig,
+    this.expressionStream,
+  });
 
   final bool isStoryMode;
   final MascotConfig? mascotConfig;
+  final Stream<MascotExpressionEvent>? expressionStream;
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -416,6 +427,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 voiceState: voiceState,
                 aiAudioLevelStream: voiceController.aiAudioLevelStream,
                 mascotConfig: widget.mascotConfig,
+                expressionStream: widget.expressionStream,
                 onReconnect: chatController?.forceReconnect,
                 onStartVoice: voiceController.startRecording,
                 onStopVoice: voiceController.stopRecordingAndSend,
@@ -473,6 +485,7 @@ class _Header extends StatelessWidget {
     required this.voiceState,
     required this.aiAudioLevelStream,
     this.mascotConfig,
+    this.expressionStream,
     this.onReconnect,
     required this.onStartVoice,
     required this.onStopVoice,
@@ -484,6 +497,7 @@ class _Header extends StatelessWidget {
   final VoiceChatState voiceState;
   final Stream<double> aiAudioLevelStream;
   final MascotConfig? mascotConfig;
+  final Stream<MascotExpressionEvent>? expressionStream;
   final VoidCallback? onReconnect;
   final VoidCallback onStartVoice;
   final VoidCallback onStopVoice;
@@ -511,6 +525,7 @@ class _Header extends StatelessWidget {
                   height: faceSize,
                   child: VoiceActivityFace(
                     levelStream: aiAudioLevelStream,
+                    expressionStream: expressionStream,
                     threshold: 0.008,
                     silenceDelay: const Duration(milliseconds: 450),
                     mascotConfig: mascotConfig,

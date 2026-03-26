@@ -23,6 +23,7 @@ class StoryDetailDto {
     required this.tree,
     required this.previewNodeIds,
     this.riveElement,
+    this.resolvedMascotConfig,
   });
 
   final String id;
@@ -45,6 +46,7 @@ class StoryDetailDto {
   final DateTime? updatedAt;
   final Map<String, dynamic> tree;
   final List<String> previewNodeIds;
+  final MascotConfig? resolvedMascotConfig;
 
   factory StoryDetailDto.fromJson(Map<String, dynamic> json) => StoryDetailDto(
     id: (json['id'] as String?)?.trim() ?? '',
@@ -74,7 +76,9 @@ class StoryDetailDto {
 
   static RiveElementDto? _parseRiveElement(dynamic value) {
     if (value is Map<String, dynamic>) return RiveElementDto.fromJson(value);
-    if (value is Map) return RiveElementDto.fromJson(value.cast<String, dynamic>());
+    if (value is Map) {
+      return RiveElementDto.fromJson(value.cast<String, dynamic>());
+    }
     return null;
   }
 
@@ -113,6 +117,70 @@ class StoryDetailDto {
     'preview_node_ids': previewNodeIds,
   };
 
+  StoryDetailDto copyWith({
+    String? id,
+    String? categoryId,
+    Object? riveElementId = _copyUnset,
+    Object? riveElement = _copyUnset,
+    String? title,
+    String? description,
+    String? author,
+    int? ageRating,
+    List<String>? tags,
+    int? durationMinutes,
+    String? difficulty,
+    bool? isPremium,
+    num? price,
+    bool? isPublished,
+    Object? publishedAt = _copyUnset,
+    String? createdByAdminId,
+    Object? createdAt = _copyUnset,
+    Object? updatedAt = _copyUnset,
+    Map<String, dynamic>? tree,
+    List<String>? previewNodeIds,
+    Object? resolvedMascotConfig = _copyUnset,
+  }) {
+    return StoryDetailDto(
+      id: id ?? this.id,
+      categoryId: categoryId ?? this.categoryId,
+      riveElementId: riveElementId == _copyUnset
+          ? this.riveElementId
+          : riveElementId as String?,
+      riveElement: riveElement == _copyUnset
+          ? this.riveElement
+          : riveElement as RiveElementDto?,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      author: author ?? this.author,
+      ageRating: ageRating ?? this.ageRating,
+      tags: tags ?? this.tags,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
+      difficulty: difficulty ?? this.difficulty,
+      isPremium: isPremium ?? this.isPremium,
+      price: price ?? this.price,
+      isPublished: isPublished ?? this.isPublished,
+      publishedAt: publishedAt == _copyUnset
+          ? this.publishedAt
+          : publishedAt as DateTime?,
+      createdByAdminId: createdByAdminId ?? this.createdByAdminId,
+      createdAt: createdAt == _copyUnset
+          ? this.createdAt
+          : createdAt as DateTime?,
+      updatedAt: updatedAt == _copyUnset
+          ? this.updatedAt
+          : updatedAt as DateTime?,
+      tree: tree ?? this.tree,
+      previewNodeIds: previewNodeIds ?? this.previewNodeIds,
+      resolvedMascotConfig: resolvedMascotConfig == _copyUnset
+          ? this.resolvedMascotConfig
+          : resolvedMascotConfig as MascotConfig?,
+    );
+  }
+
   MascotConfig get effectiveMascot =>
-      riveElement?.toMascotConfig() ?? MascotConfig.defaultAnthroph();
+      resolvedMascotConfig ??
+      riveElement?.toMascotConfig() ??
+      MascotConfig.defaultAnthroph();
 }
+
+const _copyUnset = Object();

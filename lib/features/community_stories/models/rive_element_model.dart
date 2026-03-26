@@ -11,6 +11,7 @@ class RiveElementDto {
     this.riveAssetUrl,
     this.thumbnailUrl,
     this.storageProvider,
+    this.contentHash,
     this.stateMachine = 'FaceSm',
     this.artboard,
     this.fallbackAsset,
@@ -29,6 +30,7 @@ class RiveElementDto {
   final String? riveAssetUrl;
   final String? thumbnailUrl;
   final String? storageProvider;
+  final String? contentHash;
   final String stateMachine;
   final String? artboard;
   final String? fallbackAsset;
@@ -70,8 +72,8 @@ class RiveElementDto {
       riveAssetUrl: (json['rive_asset_url'] as String?)?.trim(),
       thumbnailUrl: (json['thumbnail_url'] as String?)?.trim(),
       storageProvider: (json['storage_provider'] as String?)?.trim(),
-      stateMachine:
-          (json['state_machine'] as String?)?.trim() ?? 'FaceSm',
+      contentHash: (json['content_hash'] as String?)?.trim(),
+      stateMachine: (json['state_machine'] as String?)?.trim() ?? 'FaceSm',
       artboard: (json['artboard'] as String?)?.trim(),
       fallbackAsset: (json['fallback_asset'] as String?)?.trim(),
       expressionConfig: expressionConfig,
@@ -82,25 +84,80 @@ class RiveElementDto {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        if (description != null) 'description': description,
-        'category': category,
-        if (riveAssetFileId != null) 'rive_asset_file_id': riveAssetFileId,
-        if (thumbnailFileId != null) 'thumbnail_file_id': thumbnailFileId,
-        if (riveAssetUrl != null) 'rive_asset_url': riveAssetUrl,
-        if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
-        'state_machine': stateMachine,
-        if (artboard != null) 'artboard': artboard,
-        if (fallbackAsset != null) 'fallback_asset': fallbackAsset,
-        'expression_config': expressionConfig,
-        'tags': tags,
-        'is_active': isActive,
-        'display_order': displayOrder,
-      };
+    'id': id,
+    'name': name,
+    if (description != null) 'description': description,
+    'category': category,
+    if (riveAssetFileId != null) 'rive_asset_file_id': riveAssetFileId,
+    if (thumbnailFileId != null) 'thumbnail_file_id': thumbnailFileId,
+    if (riveAssetUrl != null) 'rive_asset_url': riveAssetUrl,
+    if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
+    if (contentHash != null) 'content_hash': contentHash,
+    'state_machine': stateMachine,
+    if (artboard != null) 'artboard': artboard,
+    if (fallbackAsset != null) 'fallback_asset': fallbackAsset,
+    'expression_config': expressionConfig,
+    'tags': tags,
+    'is_active': isActive,
+    'display_order': displayOrder,
+  };
 
   /// Converts to MascotConfig for ChatPage voice preview compatibility.
-  MascotConfig toMascotConfig() {
+  RiveElementDto copyWith({
+    String? id,
+    String? name,
+    String? description,
+    String? category,
+    Object? riveAssetFileId = _copyUnset,
+    Object? thumbnailFileId = _copyUnset,
+    Object? riveAssetUrl = _copyUnset,
+    Object? thumbnailUrl = _copyUnset,
+    Object? storageProvider = _copyUnset,
+    Object? contentHash = _copyUnset,
+    String? stateMachine,
+    Object? artboard = _copyUnset,
+    Object? fallbackAsset = _copyUnset,
+    Map<String, dynamic>? expressionConfig,
+    List<String>? tags,
+    bool? isActive,
+    int? displayOrder,
+  }) {
+    return RiveElementDto(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      category: category ?? this.category,
+      riveAssetFileId: riveAssetFileId == _copyUnset
+          ? this.riveAssetFileId
+          : riveAssetFileId as String?,
+      thumbnailFileId: thumbnailFileId == _copyUnset
+          ? this.thumbnailFileId
+          : thumbnailFileId as String?,
+      riveAssetUrl: riveAssetUrl == _copyUnset
+          ? this.riveAssetUrl
+          : riveAssetUrl as String?,
+      thumbnailUrl: thumbnailUrl == _copyUnset
+          ? this.thumbnailUrl
+          : thumbnailUrl as String?,
+      storageProvider: storageProvider == _copyUnset
+          ? this.storageProvider
+          : storageProvider as String?,
+      contentHash: contentHash == _copyUnset
+          ? this.contentHash
+          : contentHash as String?,
+      stateMachine: stateMachine ?? this.stateMachine,
+      artboard: artboard == _copyUnset ? this.artboard : artboard as String?,
+      fallbackAsset: fallbackAsset == _copyUnset
+          ? this.fallbackAsset
+          : fallbackAsset as String?,
+      expressionConfig: expressionConfig ?? this.expressionConfig,
+      tags: tags ?? this.tags,
+      isActive: isActive ?? this.isActive,
+      displayOrder: displayOrder ?? this.displayOrder,
+    );
+  }
+
+  MascotConfig toMascotConfig({String? localAssetPath}) {
     final expressions = <String, ExpressionParams>{};
     for (final entry in expressionConfig.entries) {
       if (entry.value is Map) {
@@ -118,6 +175,9 @@ class RiveElementDto {
       artboard: artboard,
       fallbackAsset: fallbackAsset,
       expressions: expressions,
+      localAssetPath: localAssetPath,
     );
   }
 }
+
+const _copyUnset = Object();

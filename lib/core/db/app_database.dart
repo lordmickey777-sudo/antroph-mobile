@@ -16,6 +16,25 @@ class Settings extends Table {
   Set<Column> get primaryKey => {key};
 }
 
+class RiveElements extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get category => text()();
+  TextColumn get stateMachine => text().withDefault(const Constant('FaceSm'))();
+  TextColumn get artboard => text().nullable()();
+  TextColumn get fallbackAsset => text().nullable()();
+  TextColumn get expressionConfig => text().withDefault(const Constant('{}'))();
+  TextColumn get tags => text().withDefault(const Constant('[]'))();
+  IntColumn get displayOrder => integer().withDefault(const Constant(0))();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+  TextColumn get contentHash => text().nullable()();
+  TextColumn get localRivPath => text().nullable()();
+  DateTimeColumn get syncedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dir = await getApplicationDocumentsDirectory();
@@ -24,12 +43,25 @@ LazyDatabase _openConnection() {
   });
 }
 
-@DriftDatabase(tables: [Settings])
+@DriftDatabase(tables: [Settings, RiveElements])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
+  AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) async {
+      await m.createAll();
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.createTable(riveElements);
+      }
+    },
+  );
+
+  @override
+  int get schemaVersion => 2;
 }
 
 final databaseProvider = Provider<AppDatabase>((ref) {

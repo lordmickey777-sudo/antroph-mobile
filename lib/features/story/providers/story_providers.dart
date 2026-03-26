@@ -3,20 +3,31 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/stories_repository.dart';
-import '../models/mascot_model.dart';
 import '../models/story_models.dart';
 import '../models/story_detail.dart';
 import '../services/mascot_cache_service.dart';
+import '../services/rive_registry_service.dart';
+import '../../../core/db/app_database.dart';
 import '../../../core/network/error_formatter.dart';
 import '../../../core/auth/state/auth_state.dart';
+import '../../community_stories/models/rive_element_model.dart';
 import '../data/stories_cache.dart';
 
 final storiesRepositoryProvider = Provider<StoriesRepository>((ref) {
   return StoriesRepository();
 });
 
-final mascotCacheServiceProvider = Provider<MascotCacheService>((ref) {
-  return MascotCacheService();
+final riveRegistryServiceProvider = Provider<RiveRegistryService>((ref) {
+  final database = ref.read(databaseProvider);
+  late final RiveRegistryService registry;
+  final mascotCacheService = MascotCacheService(
+    onFilesDeleted: (paths) => registry.clearLocalPathsForFiles(paths),
+  );
+  registry = RiveRegistryService(
+    database: database,
+    mascotCacheService: mascotCacheService,
+  );
+  return registry;
 });
 
 /// Stable boolean derived from auth state.
@@ -31,7 +42,7 @@ final _isAuthenticatedProvider = Provider.autoDispose<bool>((ref) {
 final storiesHomeSectionsProvider =
     FutureProvider.autoDispose<StoriesHomeResponse>((ref) async {
       final repo = ref.read(storiesRepositoryProvider);
-      final mascotCache = ref.read(mascotCacheServiceProvider);
+      final riveRegistry = ref.read(riveRegistryServiceProvider);
       final isAuthenticated = ref.watch(_isAuthenticatedProvider);
 
       // Try cache first (cache validates auth context to avoid serving stale guest data)
@@ -39,7 +50,8 @@ final storiesHomeSectionsProvider =
         isAuthenticated: isAuthenticated,
       );
       if (cached != null) {
-        _preloadStoryMascots(mascotCache, cached);
+        unawaited(riveRegistry.syncManifest().catchError((_) {}));
+        _preloadStoryMascots(riveRegistry, cached);
         // Background refresh; ignore result/errors.
         () async {
           try {
@@ -48,7 +60,8 @@ final storiesHomeSectionsProvider =
               fresh,
               isAuthenticated: isAuthenticated,
             );
-            _preloadStoryMascots(mascotCache, fresh);
+            unawaited(riveRegistry.syncManifest().catchError((_) {}));
+            _preloadStoryMascots(riveRegistry, fresh);
           } catch (_) {
             // swallow
           }
@@ -59,7 +72,8 @@ final storiesHomeSectionsProvider =
       try {
         final res = await repo.fetchHomeSections();
         await StoriesCacheService.save(res, isAuthenticated: isAuthenticated);
-        _preloadStoryMascots(mascotCache, res);
+        unawaited(riveRegistry.syncManifest().catchError((_) {}));
+        _preloadStoryMascots(riveRegistry, res);
         return res;
       } on ApiError {
         rethrow;
@@ -83,25 +97,32 @@ final continuePlayingProvider =
 final storyDetailProvider = FutureProvider.family
     .autoDispose<StoryDetailDto, String>((ref, id) async {
       final repo = ref.read(storiesRepositoryProvider);
+      final riveRegistry = ref.read(riveRegistryServiceProvider);
       try {
-        return await repo.fetchStoryDetail(id);
+        final detail = await repo.fetchStoryDetail(id);
+        final enriched = await riveRegistry.attachLocalMascot(detail);
+        unawaited(
+          riveRegistry.cacheElementFromDetail(detail).catchError((_) {}),
+        );
+        unawaited(riveRegistry.syncManifest().catchError((_) {}));
+        return enriched;
       } on ApiError {
         rethrow;
       }
     });
 
 void _preloadStoryMascots(
-  MascotCacheService cache,
+  RiveRegistryService registry,
   StoriesHomeResponse response,
 ) {
   final elementIds = <String>{};
-  final mascotConfigs = <MascotConfig>[];
+  final riveElements = <RiveElementDto>[];
 
   for (final section in response.sections) {
     for (final story in section.items) {
-      final config = story.mascotConfig;
-      if (config != null) {
-        mascotConfigs.add(config);
+      final riveElement = story.riveElement;
+      if (riveElement != null) {
+        riveElements.add(riveElement);
         continue;
       }
       final elementId = story.riveElementId?.trim() ?? '';
@@ -110,19 +131,35 @@ void _preloadStoryMascots(
   }
 
   for (final story in response.featuredStories) {
-    final config = story.mascotConfig;
-    if (config != null) {
-      mascotConfigs.add(config);
+    final riveElement = story.riveElement;
+    if (riveElement != null) {
+      riveElements.add(riveElement);
       continue;
     }
     final elementId = story.riveElementId?.trim() ?? '';
     if (elementId.isNotEmpty) elementIds.add(elementId);
   }
 
-  if (mascotConfigs.isNotEmpty) {
-    unawaited(cache.preloadMascotConfigs(mascotConfigs));
+  if (riveElements.isNotEmpty) {
+    unawaited(() async {
+      for (final element in riveElements) {
+        try {
+          await registry.cacheElementDto(element);
+        } catch (_) {
+          // Best-effort preload.
+        }
+      }
+    }());
   }
   if (elementIds.isNotEmpty) {
-    unawaited(cache.preloadMascots(elementIds.toList()));
+    unawaited(() async {
+      for (final elementId in elementIds) {
+        try {
+          await registry.ensureElementById(elementId);
+        } catch (_) {
+          // Best-effort preload.
+        }
+      }
+    }());
   }
 }
