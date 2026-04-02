@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -6,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:rive/rive.dart';
 
+import '../../../core/security/rive_crypto_service.dart';
 import '../../../core/env/env.dart';
 import '../../../core/network/api_client.dart';
 import '../../community_stories/models/rive_element_model.dart';
@@ -20,25 +22,44 @@ class MascotCacheException implements Exception {
 }
 
 class MascotCacheService {
-  MascotCacheService({Dio? dio}) : _dio = dio ?? ApiClient.I.dio;
+  MascotCacheService({
+    Dio? dio,
+    RiveCryptoService? cryptoService,
+    FutureOr<void> Function(List<String> deletedPaths)? onFilesDeleted,
+  }) : _dio = dio ?? ApiClient.I.dio,
+       _cryptoService = cryptoService ?? RiveCryptoService(),
+       _onFilesDeleted = onFilesDeleted;
   final Dio _dio;
+  final RiveCryptoService _cryptoService;
+  final FutureOr<void> Function(List<String> deletedPaths)? _onFilesDeleted;
 
   static const int _defaultConcurrentDownloads = 3;
   static const int _maxCacheFiles = 24;
   static const Duration _maxAge = Duration(days: 60);
 
-  Future<File> cacheMascot(MascotConfig mascot) async {
+  Future<File> cacheMascot(
+    MascotConfig mascot, {
+    bool forceRefresh = false,
+  }) async {
     final mascotId = mascot.id.trim();
     if (mascotId.isEmpty) {
       throw MascotCacheException('Mascot id is required for caching.');
     }
 
-    final existingPath = await getCachedPath(mascotId);
-    if (existingPath != null) {
-      return File(existingPath);
+    if (!forceRefresh) {
+      final existingPath = await getCachedPath(mascotId);
+      if (existingPath != null) {
+        return File(existingPath);
+      }
+    } else {
+      await deleteCachedMascot(mascotId);
     }
 
-    final assetRef = mascot.riveAssetUrl.trim();
+    final sourceMascot = await _resolveDownloadSource(
+      mascot,
+      forceRefresh: forceRefresh,
+    );
+    final assetRef = sourceMascot.riveAssetUrl.trim();
     if (assetRef.isEmpty) {
       throw MascotCacheException(
         'Missing rive asset reference for mascot "$mascotId".',
@@ -47,7 +68,7 @@ class MascotCacheService {
 
     final cacheDir = await _ensureCacheDir();
     final target = File(
-      p.join(cacheDir.path, '${_safeFileName(mascotId)}.riv'),
+      p.join(cacheDir.path, '${_safeFileName(mascotId)}.riv.enc'),
     );
     final candidates = await _candidateUrls(assetRef);
 
@@ -57,7 +78,7 @@ class MascotCacheService {
         try {
           final bytes = await _downloadBytes(url);
           _validateRive(bytes);
-          await _writeFile(target, bytes);
+          await _writeEncryptedFile(target, mascotId, bytes);
           await pruneCache();
           return target;
         } catch (err) {
@@ -71,6 +92,32 @@ class MascotCacheService {
     );
   }
 
+  Future<void> deleteCachedMascot(String mascotId) async {
+    final id = mascotId.trim();
+    if (id.isEmpty) return;
+
+    final cacheDir = await _ensureCacheDir();
+    final safeId = _safeFileName(id);
+    final candidates = <File>[
+      File(p.join(cacheDir.path, '$safeId.riv.enc')),
+      File(p.join(cacheDir.path, '$safeId.riv')),
+    ];
+
+    final deletedPaths = <String>[];
+    for (final file in candidates) {
+      try {
+        if (await file.exists()) {
+          deletedPaths.add(file.path);
+          await file.delete();
+        }
+      } catch (_) {
+        // Best effort cleanup only.
+      }
+    }
+
+    await _notifyDeletedPaths(deletedPaths);
+  }
+
   Future<bool> isCached(String mascotId) async =>
       (await getCachedPath(mascotId)) != null;
 
@@ -78,14 +125,28 @@ class MascotCacheService {
     final id = mascotId.trim();
     if (id.isEmpty) return null;
     final cacheDir = await _ensureCacheDir();
-    final file = File(p.join(cacheDir.path, '${_safeFileName(id)}.riv'));
-    if (!await file.exists()) return null;
-    try {
-      await file.setLastModified(DateTime.now());
-    } catch (_) {
-      // Best effort; stale timestamps are acceptable.
+    final safeId = _safeFileName(id);
+
+    final encryptedFile = File(p.join(cacheDir.path, '$safeId.riv.enc'));
+    if (await encryptedFile.exists()) {
+      await _touchFile(encryptedFile);
+      return encryptedFile.path;
     }
-    return file.path;
+
+    final legacyPlaintextFile = File(p.join(cacheDir.path, '$safeId.riv'));
+    if (!await legacyPlaintextFile.exists()) return null;
+
+    try {
+      final migratedFile = await _migrateLegacyPlaintextFile(
+        id,
+        legacyPlaintextFile,
+      );
+      await _touchFile(migratedFile);
+      return migratedFile.path;
+    } catch (_) {
+      // Leave the legacy file untouched; a later sync can retry migration.
+    }
+    return null;
   }
 
   Future<void> preloadMascots(List<String> mascotIds) async {
@@ -123,13 +184,19 @@ class MascotCacheService {
     final dir = await _ensureCacheDir();
     final now = DateTime.now();
     final survivors = <_CacheFile>[];
+    final deletedPaths = <String>[];
 
     await for (final entity in dir.list(followLinks: false)) {
-      if (entity is! File || !entity.path.endsWith('.riv')) continue;
+      if (entity is! File ||
+          (!entity.path.endsWith('.riv') &&
+              !entity.path.endsWith('.riv.enc'))) {
+        continue;
+      }
       try {
         final stat = await entity.stat();
         final age = now.difference(stat.modified);
         if (age > _maxAge) {
+          deletedPaths.add(entity.path);
           await entity.delete();
           continue;
         }
@@ -145,11 +212,14 @@ class MascotCacheService {
     final overflow = survivors.length - _maxCacheFiles;
     for (var i = 0; i < overflow; i++) {
       try {
+        deletedPaths.add(survivors[i].file.path);
         await survivors[i].file.delete();
       } catch (_) {
         // Ignore delete failures.
       }
     }
+
+    await _notifyDeletedPaths(deletedPaths);
   }
 
   Future<void> _preloadSingleMascot(String mascotId) async {
@@ -177,11 +247,42 @@ class MascotCacheService {
     }
   }
 
+  Future<MascotConfig> _resolveDownloadSource(
+    MascotConfig mascot, {
+    required bool forceRefresh,
+  }) async {
+    final assetRef = mascot.riveAssetUrl.trim();
+    if (_canDownloadDirectly(assetRef) &&
+        (!forceRefresh || !_looksLikeLocalPath(assetRef))) {
+      return mascot;
+    }
+
+    final fetched = await _fetchMascotById(mascot.id.trim());
+    if (fetched != null && _canDownloadDirectly(fetched.riveAssetUrl.trim())) {
+      return fetched;
+    }
+
+    return mascot;
+  }
+
   Future<Directory> _ensureCacheDir() async {
     final root = await getApplicationSupportDirectory();
     final dir = Directory(p.join(root.path, 'mascots'));
     if (await dir.exists()) return dir;
     return dir.create(recursive: true);
+  }
+
+  bool _canDownloadDirectly(String assetRef) {
+    return assetRef.isNotEmpty &&
+        !assetRef.startsWith('assets/') &&
+        !_looksLikeLocalPath(assetRef);
+  }
+
+  bool _looksLikeLocalPath(String value) {
+    return value.startsWith('/') ||
+        value.startsWith('./') ||
+        value.startsWith('../') ||
+        value.startsWith('file://');
   }
 
   Map<String, dynamic>? _extractMascotRecord(dynamic payload) {
@@ -275,14 +376,49 @@ class MascotCacheService {
     }
   }
 
-  Future<void> _writeFile(File target, Uint8List bytes) async {
+  Future<void> _writeEncryptedFile(
+    File target,
+    String mascotId,
+    Uint8List plainBytes,
+  ) async {
+    final encryptedBytes = await _cryptoService.encrypt(plainBytes, mascotId);
     final tempPath = '${target.path}.tmp';
     final tmp = File(tempPath);
-    await tmp.writeAsBytes(bytes, flush: true);
+    await tmp.writeAsBytes(encryptedBytes, flush: true);
     if (await target.exists()) {
       await target.delete();
     }
     await tmp.rename(target.path);
+  }
+
+  Future<File> _migrateLegacyPlaintextFile(
+    String mascotId,
+    File legacyFile,
+  ) async {
+    final plainBytes = await legacyFile.readAsBytes();
+    _validateRive(plainBytes);
+
+    final encryptedFile = File(
+      p.join(legacyFile.parent.path, '${_safeFileName(mascotId)}.riv.enc'),
+    );
+    await _writeEncryptedFile(encryptedFile, mascotId, plainBytes);
+    await legacyFile.delete();
+    return encryptedFile;
+  }
+
+  Future<void> _touchFile(File file) async {
+    try {
+      await file.setLastModified(DateTime.now());
+    } catch (_) {
+      // Best effort; stale timestamps are acceptable.
+    }
+  }
+
+  Future<void> _notifyDeletedPaths(List<String> deletedPaths) async {
+    if (deletedPaths.isEmpty) return;
+    final callback = _onFilesDeleted;
+    if (callback == null) return;
+    await callback(deletedPaths);
   }
 
   String _safeFileName(String value) {

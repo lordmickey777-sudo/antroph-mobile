@@ -35,7 +35,10 @@ enum RealtimeServerMessageType {
 
   // OpenAI Realtime conversation messages
   conversationItemCreate('conversation.item.create'),
-  inputAudioTranscriptionCompleted('conversation.item.input_audio_transcription.completed'),
+  inputAudioTranscriptionCompleted(
+    'conversation.item.input_audio_transcription.completed',
+  ),
+  mascotExpression('mascot.expression'),
 
   // OpenAI Realtime response messages
   responseCreated('response.created'),
@@ -117,7 +120,10 @@ class StorySessionInfo {
 
   factory StorySessionInfo.fromJson(Map<String, dynamic> json) {
     return StorySessionInfo(
-      sessionId: json['session_id'] as String? ?? json['story_session_id'] as String? ?? '',
+      sessionId:
+          json['session_id'] as String? ??
+          json['story_session_id'] as String? ??
+          '',
       storyId: json['story_id'] as String? ?? '',
       roomId: json['room_id'] as String?,
       currentNodeId: json['current_node_id'] as String?,
@@ -159,7 +165,8 @@ class RoomState {
   factory RoomState.fromJson(Map<String, dynamic> json) {
     return RoomState(
       roomId: json['room_id'] as String? ?? '',
-      participants: (json['participants'] as List<dynamic>?)
+      participants:
+          (json['participants'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
@@ -180,7 +187,10 @@ class DeviceTakeoverResult {
     this.previousDevice,
   });
 
-  factory DeviceTakeoverResult.fromJson(Map<String, dynamic> json, bool granted) {
+  factory DeviceTakeoverResult.fromJson(
+    Map<String, dynamic> json,
+    bool granted,
+  ) {
     return DeviceTakeoverResult(
       granted: granted,
       reason: json['reason'] as String?,
@@ -205,8 +215,12 @@ class RealtimeVoiceError {
     final error = json['error'] as Map<String, dynamic>?;
     return RealtimeVoiceError(
       code: error?['code'] as String? ?? json['code'] as String? ?? 'unknown',
-      message: error?['message'] as String? ?? json['message'] as String? ?? 'Unknown error',
-      retryable: error?['retryable'] as bool? ?? json['retryable'] as bool? ?? false,
+      message:
+          error?['message'] as String? ??
+          json['message'] as String? ??
+          'Unknown error',
+      retryable:
+          error?['retryable'] as bool? ?? json['retryable'] as bool? ?? false,
     );
   }
 

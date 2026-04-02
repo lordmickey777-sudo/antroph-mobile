@@ -93,7 +93,6 @@ Prerequisites: macOS, Xcode, CocoaPods, and valid provisioning profiles / signin
 
 ```sh
 cd ios && pod install && cd -
-```
 
 **Archive for App Store/TestFlight (via Xcode)**
 
