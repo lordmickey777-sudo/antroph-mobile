@@ -13,6 +13,7 @@ class RiveElementDto {
     this.storageProvider,
     this.contentHash,
     this.stateMachine = 'FaceSm',
+    this.maxEyeExpression,
     this.artboard,
     this.fallbackAsset,
     this.expressionConfig = const {},
@@ -32,6 +33,7 @@ class RiveElementDto {
   final String? storageProvider;
   final String? contentHash;
   final String stateMachine;
+  final int? maxEyeExpression;
   final String? artboard;
   final String? fallbackAsset;
   final Map<String, dynamic> expressionConfig;
@@ -74,6 +76,9 @@ class RiveElementDto {
       storageProvider: (json['storage_provider'] as String?)?.trim(),
       contentHash: (json['content_hash'] as String?)?.trim(),
       stateMachine: (json['state_machine'] as String?)?.trim() ?? 'FaceSm',
+      maxEyeExpression:
+          (json['max_eye_expression'] as num?)?.toInt() ??
+          (json['eye_expression_max'] as num?)?.toInt(),
       artboard: (json['artboard'] as String?)?.trim(),
       fallbackAsset: (json['fallback_asset'] as String?)?.trim(),
       expressionConfig: expressionConfig,
@@ -94,6 +99,7 @@ class RiveElementDto {
     if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
     if (contentHash != null) 'content_hash': contentHash,
     'state_machine': stateMachine,
+    if (maxEyeExpression != null) 'max_eye_expression': maxEyeExpression,
     if (artboard != null) 'artboard': artboard,
     if (fallbackAsset != null) 'fallback_asset': fallbackAsset,
     'expression_config': expressionConfig,
@@ -115,6 +121,7 @@ class RiveElementDto {
     Object? storageProvider = _copyUnset,
     Object? contentHash = _copyUnset,
     String? stateMachine,
+    Object? maxEyeExpression = _copyUnset,
     Object? artboard = _copyUnset,
     Object? fallbackAsset = _copyUnset,
     Map<String, dynamic>? expressionConfig,
@@ -146,6 +153,9 @@ class RiveElementDto {
           ? this.contentHash
           : contentHash as String?,
       stateMachine: stateMachine ?? this.stateMachine,
+      maxEyeExpression: maxEyeExpression == _copyUnset
+          ? this.maxEyeExpression
+          : maxEyeExpression as int?,
       artboard: artboard == _copyUnset ? this.artboard : artboard as String?,
       fallbackAsset: fallbackAsset == _copyUnset
           ? this.fallbackAsset
@@ -172,6 +182,7 @@ class RiveElementDto {
       name: name,
       riveAssetUrl: effectiveRiveAsset,
       stateMachine: stateMachine,
+      maxEyeExpression: maxEyeExpression,
       artboard: artboard,
       fallbackAsset: fallbackAsset,
       expressions: expressions,

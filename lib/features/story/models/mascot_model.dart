@@ -42,6 +42,7 @@ class MascotConfig {
     required this.name,
     required this.riveAssetUrl,
     this.stateMachine = defaultStateMachine,
+    this.maxEyeExpression,
     this.artboard,
     this.fallbackAsset,
     this.expressions = const {},
@@ -55,6 +56,7 @@ class MascotConfig {
   final String name;
   final String riveAssetUrl;
   final String stateMachine;
+  final int? maxEyeExpression;
   final String? artboard;
   final String? fallbackAsset;
   final Map<String, ExpressionParams> expressions;
@@ -76,6 +78,7 @@ class MascotConfig {
     String? name,
     String? riveAssetUrl,
     String? stateMachine,
+    Object? maxEyeExpression = _copyUnset,
     String? artboard,
     Object? fallbackAsset = _copyUnset,
     Map<String, ExpressionParams>? expressions,
@@ -86,6 +89,9 @@ class MascotConfig {
       name: name ?? this.name,
       riveAssetUrl: riveAssetUrl ?? this.riveAssetUrl,
       stateMachine: stateMachine ?? this.stateMachine,
+      maxEyeExpression: maxEyeExpression == _copyUnset
+          ? this.maxEyeExpression
+          : maxEyeExpression as int?,
       artboard: artboard ?? this.artboard,
       fallbackAsset: fallbackAsset == _copyUnset
           ? this.fallbackAsset
@@ -122,6 +128,9 @@ class MascotConfig {
       riveAssetUrl: (json['rive_asset_url'] as String?)?.trim() ?? '',
       stateMachine:
           (json['state_machine'] as String?)?.trim() ?? defaultStateMachine,
+      maxEyeExpression:
+          (json['max_eye_expression'] as num?)?.toInt() ??
+          (json['eye_expression_max'] as num?)?.toInt(),
       artboard: (json['artboard'] as String?)?.trim(),
       fallbackAsset: (json['fallback_asset'] as String?)?.trim(),
       expressions: expressions,
@@ -134,6 +143,7 @@ class MascotConfig {
     'name': name,
     'rive_asset_url': riveAssetUrl,
     'state_machine': stateMachine,
+    if (maxEyeExpression != null) 'max_eye_expression': maxEyeExpression,
     'artboard': artboard,
     'fallback_asset': fallbackAsset,
     'expressions': expressions.map(
@@ -148,6 +158,7 @@ class MascotConfig {
       name: 'Aura',
       riveAssetUrl: defaultFallbackAsset,
       stateMachine: defaultStateMachine,
+      maxEyeExpression: 3,
       fallbackAsset: defaultFallbackAsset,
     );
   }

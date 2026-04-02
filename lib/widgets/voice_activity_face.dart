@@ -63,6 +63,8 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
   Timer? _expressionResetTimer;
   _ResolvedRiveSource? _resolvedSource;
   int _sourceResolutionId = 0;
+  int _artboardLoadId = 0;
+  Artboard? _loadedArtboard;
 
   // Rive inputs - Try to find these in your state machine
   SMINumber? _mouthOpenInput; // 0-100: mouth openness
@@ -90,6 +92,7 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
   void initState() {
     super.initState();
     _resolvedSource = _buildSourceFallback();
+    unawaited(_loadAndStoreArtboard(_resolvedSource!));
     unawaited(_resolveAndStoreRiveSource());
     _subscribeToLevelStream(_effectiveLevelStream);
     _subscribeToExpressionStream(widget.expressionStream);
@@ -259,7 +262,9 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
 
       // Occasional cute expression when not speaking
       if (!_isSpeaking && _random.nextDouble() > 0.85) {
-        _setEyeExpression(_random.nextInt(3)); // Random cute expression
+        _setEyeExpression(
+          _random.nextInt(2),
+        ); // Generic mascots only assume 0/1
       }
 
       // Subtle head tilt variation
@@ -291,10 +296,35 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
 
   void _setEyeExpression(int expression) {
     final input = _eyeExpressionInput;
-    final clamped = expression.toDouble().clamp(0.0, 3.0);
+    final maxExpression = _maxEyeExpressionAllowed().toDouble();
+    final clamped = expression.toDouble().clamp(0.0, maxExpression);
+    if (clamped != expression.toDouble()) {
+      Log.i.d(
+        '[VoiceActivityFace] clamped eyeExpression '
+        'requested=$expression '
+        'applied=${clamped.toInt()} '
+        'max=${maxExpression.toInt()} '
+        'element=${widget.mascotConfig?.id ?? 'fallback'}',
+      );
+    }
     if (input != null && (input.value - clamped).abs() > 0.01) {
       input.value = clamped;
     }
+  }
+
+  int _maxEyeExpressionAllowed() {
+    final explicit = widget.mascotConfig?.maxEyeExpression;
+    if (explicit != null) {
+      return explicit.clamp(0, 10);
+    }
+
+    final source = _resolvedSource;
+    if (source?.type == _RiveSourceType.asset &&
+        source?.path == MascotConfig.defaultFallbackAsset) {
+      return 3;
+    }
+
+    return 1;
   }
 
   void _setHeadTilt(double degrees) {
@@ -399,7 +429,7 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
         );
       case 'sad':
         return const ExpressionParams(
-          eyeExpression: 2,
+          eyeExpression: 0,
           eyeOpen: 72,
           headTilt: -4,
         );
@@ -410,10 +440,10 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
           headBob: 4,
         );
       case 'surprised':
-        return const ExpressionParams(eyeExpression: 3, eyeOpen: 100);
+        return const ExpressionParams(eyeExpression: 1, eyeOpen: 100);
       case 'worried':
         return const ExpressionParams(
-          eyeExpression: 2,
+          eyeExpression: 0,
           eyeOpen: 84,
           headTilt: -2,
         );
@@ -471,12 +501,24 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
     final requestId = ++_sourceResolutionId;
     final source = await _resolveRiveSource();
     if (!mounted || requestId != _sourceResolutionId) return;
-    if (_resolvedSource == source) return;
+    if (_resolvedSource == source && _loadedArtboard != null) return;
 
-    setState(() {
-      _resetRiveInputs();
-      _resolvedSource = source;
-    });
+    Log.i.d(
+      '[VoiceActivityFace] resolved source '
+      'type=${source.type.name} '
+      'path=${source.path ?? '<direct>'} '
+      'stateMachine=${source.stateMachine} '
+      'artboard=${source.artboard ?? '<main>'}',
+    );
+
+    if (_resolvedSource != source) {
+      setState(() {
+        _resetRiveInputs();
+        _loadedArtboard = null;
+        _resolvedSource = source;
+      });
+    }
+    unawaited(_loadAndStoreArtboard(source));
   }
 
   _ResolvedRiveSource _buildSourceFallback() {
@@ -701,6 +743,16 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
 
   void _onRiveInit(Artboard artboard, String configuredStateMachine) {
     _resetRiveInputs();
+    final availableStateMachines = artboard.animations
+        .whereType<StateMachine>()
+        .map((machine) => machine.name)
+        .toList();
+
+    Log.i.d(
+      '[VoiceActivityFace] init artboard=${artboard.name} '
+      'requestedStateMachine=$configuredStateMachine '
+      'availableStateMachines=${availableStateMachines.join(', ')}',
+    );
 
     var controller = StateMachineController.fromArtboard(
       artboard,
@@ -725,26 +777,59 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
       _reportRiveFallback(
         reason: 'missing_state_machine',
         elementId: widget.mascotConfig?.id ?? 'unknown',
-        extra: {'state_machine': configuredStateMachine},
+        extra: {
+          'state_machine': configuredStateMachine,
+          'artboard': artboard.name,
+          'available_state_machines': availableStateMachines.join('|'),
+        },
       );
       return;
     }
 
-    artboard.addController(controller);
+    try {
+      final added = artboard.addController(controller);
+      if (!added) {
+        _reportRiveFallback(
+          reason: 'state_machine_attach_failed',
+          elementId: widget.mascotConfig?.id ?? 'unknown',
+          extra: {
+            'state_machine': configuredStateMachine,
+            'artboard': artboard.name,
+          },
+        );
+        return;
+      }
 
-    // Try to find all available inputs
-    _mouthOpenInput = controller.findInput<double>('mouthOpen') as SMINumber?;
-    _eyeOpenInput = controller.findInput<double>('eyeOpen') as SMINumber?;
-    _blinkInput = controller.findInput<bool>('blink') as SMITrigger?;
-    _eyeExpressionInput =
-        controller.findInput<double>('eyeExpression') as SMINumber?;
-    _headTiltInput = controller.findInput<double>('headTilt') as SMINumber?;
-    _headBobInput = controller.findInput<double>('headBob') as SMINumber?;
+      // Try to find all available inputs
+      _mouthOpenInput = controller.findInput<double>('mouthOpen') as SMINumber?;
+      _eyeOpenInput = controller.findInput<double>('eyeOpen') as SMINumber?;
+      _blinkInput = controller.findInput<bool>('blink') as SMITrigger?;
+      _eyeExpressionInput =
+          controller.findInput<double>('eyeExpression') as SMINumber?;
+      _headTiltInput = controller.findInput<double>('headTilt') as SMINumber?;
+      _headBobInput = controller.findInput<double>('headBob') as SMINumber?;
 
-    // Initialize default values
-    _setEyeOpen(100.0); // Eyes open
-    _setMouthOpen(0.0); // Mouth closed
-    _setEyeExpression(1); // Cute expression
+      // Initialize default values and immediately advance once to catch
+      // broken backend state machines before the frame render loop does.
+      _setEyeOpen(100.0); // Eyes open
+      _setMouthOpen(0.0); // Mouth closed
+      _setEyeExpression(1); // Cute expression
+      artboard.advance(0);
+    } catch (error, stackTrace) {
+      artboard.removeController(controller);
+      _resetRiveInputs();
+      _reportRiveFallback(
+        reason: 'state_machine_runtime_failed',
+        elementId: widget.mascotConfig?.id ?? 'unknown',
+        extra: {
+          'state_machine': configuredStateMachine,
+          'artboard': artboard.name,
+          'available_state_machines': availableStateMachines.join('|'),
+        },
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   void _reportRiveFallback({
@@ -772,38 +857,82 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
     );
   }
 
-  Widget _buildRiveWidget(_ResolvedRiveSource source) {
+  Future<void> _loadAndStoreArtboard(_ResolvedRiveSource source) async {
+    final requestId = ++_artboardLoadId;
+
+    try {
+      final artboard = await _loadArtboard(source);
+      if (!mounted || requestId != _artboardLoadId) return;
+      setState(() {
+        _loadedArtboard = artboard;
+      });
+    } catch (error, stackTrace) {
+      _reportRiveFallback(
+        reason: 'artboard_load_failed',
+        elementId: widget.mascotConfig?.id ?? 'unknown',
+        extra: {
+          'source_type': source.type.name,
+          'source_path': source.path,
+          'state_machine': source.stateMachine,
+          'artboard': source.artboard,
+        },
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (!mounted || requestId != _artboardLoadId) return;
+      setState(() {
+        _loadedArtboard = null;
+      });
+    }
+  }
+
+  Future<Artboard> _loadArtboard(_ResolvedRiveSource source) async {
+    final riveFile = await _loadRiveFile(source);
+    final configuredArtboard = source.artboard?.trim() ?? '';
+    final availableArtboards = riveFile.artboards.map((a) => a.name).toList();
+
+    Log.i.d(
+      '[VoiceActivityFace] loading artboard '
+      'requested=${configuredArtboard.isEmpty ? '<main>' : configuredArtboard} '
+      'available=${availableArtboards.join(', ')}',
+    );
+
+    Artboard? artboard;
+    if (configuredArtboard.isNotEmpty) {
+      artboard = riveFile.artboardByName(configuredArtboard);
+      if (artboard == null) {
+        _reportRiveFallback(
+          reason: 'missing_artboard',
+          elementId: widget.mascotConfig?.id ?? 'unknown',
+          extra: {
+            'artboard': configuredArtboard,
+            'available_artboards': availableArtboards.join('|'),
+          },
+        );
+      }
+    }
+
+    final resolvedArtboard = (artboard ?? riveFile.mainArtboard).instance();
+    _onRiveInit(resolvedArtboard, source.stateMachine);
+    return resolvedArtboard;
+  }
+
+  Future<RiveFile> _loadRiveFile(_ResolvedRiveSource source) {
+    switch (source.type) {
+      case _RiveSourceType.direct:
+        return Future.value(source.file!);
+      case _RiveSourceType.file:
+        return RiveFile.file(source.path!);
+      case _RiveSourceType.asset:
+        return RiveFile.asset(source.path!);
+    }
+  }
+
+  Widget _buildRiveWidget(_ResolvedRiveSource source, Artboard artboard) {
     final key = ValueKey(
       '${source.type.name}:${source.cacheKey}:${source.stateMachine}:${source.artboard ?? ''}',
     );
-
-    if (source.type == _RiveSourceType.direct) {
-      return RiveAnimation.direct(
-        source.file!,
-        key: key,
-        artboard: source.artboard,
-        onInit: (artboard) => _onRiveInit(artboard, source.stateMachine),
-        fit: widget.fit,
-      );
-    }
-
-    if (source.type == _RiveSourceType.file) {
-      return RiveAnimation.file(
-        source.path!,
-        key: key,
-        artboard: source.artboard,
-        onInit: (artboard) => _onRiveInit(artboard, source.stateMachine),
-        fit: widget.fit,
-      );
-    }
-
-    return RiveAnimation.asset(
-      source.path!,
-      key: key,
-      artboard: source.artboard,
-      onInit: (artboard) => _onRiveInit(artboard, source.stateMachine),
-      fit: widget.fit,
-    );
+    return Rive(artboard: artboard, key: key, fit: widget.fit);
   }
 
   @override
@@ -813,7 +942,12 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
         // Debug: Trigger a blink on tap
         _triggerBlink();
       },
-      child: _buildRiveWidget(_resolvedSource ?? _buildSourceFallback()),
+      child: _loadedArtboard == null
+          ? const SizedBox()
+          : _buildRiveWidget(
+              _resolvedSource ?? _buildSourceFallback(),
+              _loadedArtboard!,
+            ),
     );
   }
 }
@@ -822,20 +956,18 @@ enum _RiveSourceType { asset, file, direct }
 
 class _ResolvedRiveSource {
   const _ResolvedRiveSource.asset(
-    String path, {
+    String this.path, {
     required this.stateMachine,
     this.artboard,
   }) : type = _RiveSourceType.asset,
-       path = path,
        file = null,
        cacheKey = path;
 
   const _ResolvedRiveSource.file(
-    String path, {
+    String this.path, {
     required this.stateMachine,
     this.artboard,
   }) : type = _RiveSourceType.file,
-       path = path,
        file = null,
        cacheKey = path;
 
