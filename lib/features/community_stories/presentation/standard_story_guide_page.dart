@@ -28,10 +28,7 @@ class StandardStoryGuidePage extends ConsumerWidget {
           color: context.primaryTextColor,
         ),
         leading: IconButton(
-          icon: Icon(
-            CupertinoIcons.back,
-            color: context.primaryTextColor,
-          ),
+          icon: Icon(CupertinoIcons.back, color: context.primaryTextColor),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -96,9 +93,7 @@ class StandardStoryGuidePage extends ConsumerWidget {
                 minimumSize: const Size.fromHeight(58),
                 backgroundColor: Colors.black,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
+                shape: const StadiumBorder(),
                 elevation: 0,
               ),
               child: const Text(
@@ -315,11 +310,7 @@ class _ChecklistRow extends StatelessWidget {
             color: Colors.black.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(
-            Icons.check_rounded,
-            size: 16,
-            color: Colors.black,
-          ),
+          child: const Icon(Icons.check_rounded, size: 16, color: Colors.black),
         ),
         const SizedBox(width: 10),
         Expanded(

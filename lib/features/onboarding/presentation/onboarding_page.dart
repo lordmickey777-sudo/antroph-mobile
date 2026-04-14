@@ -20,22 +20,16 @@ class _OnboardingPageState extends State<OnboardingPage> {
   // Slide content configuration
   static const _slides = [
     (
-      title: 'Chat With Your\nFavourite Ai',
+      title: 'Enter Stories\nThat Talk Back',
       subtitle:
-          'Chat with the smartest AI Future\nExperience power of AI with us',
-      kind: 'eye',
-      asset: 'assets/images/onboarding_3.png',
+          'Step into an interactive story world where every session feels playful, personal, and alive.',
+      kind: 'logo',
+      asset: 'assets/images/app_logo.png',
     ),
     (
-      title: 'Chat With Your\nFavourite Ai',
+      title: 'Create Your\nExperience',
       subtitle:
-          'Chat with the smartest AI Future\nExperience power of AI with us',
-      kind: 'eye',
-      asset: 'assets/images/onboarding_3.png',
-    ),
-    (
-      title: 'Your Sweet\nCompanion',
-      subtitle: 'Have crazy fun with the smartest AI powered\nTablebot',
+          'Pick the interests and voice that shape Aura before you land in your story home.',
       kind: 'image',
       asset: 'assets/images/onboarding_3.png',
     ),
@@ -60,7 +54,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
               constraints: const BoxConstraints(maxWidth: ContentWidth.form),
               child: PageView.builder(
                 controller: _controller,
-                itemCount: 3,
+                itemCount: _slides.length,
                 onPageChanged: (i) => setState(() => _index = i),
                 itemBuilder: (context, i) {
                   return Padding(
@@ -77,7 +71,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         // Page indicators under the image
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(3, (d) {
+                          children: List.generate(_slides.length, (d) {
                             final selected = d == _index;
                             return AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
@@ -148,7 +142,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                   ),
                                 ),
                                 onPressed: () async {
-                                  if (_index < 2) {
+                                  if (_index < _slides.length - 1) {
                                     _controller.nextPage(
                                       duration: const Duration(
                                         milliseconds: 250,
@@ -157,9 +151,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                     );
                                   } else {
                                     await OnboardingStorageService.markCompleted();
-                                    if (mounted) {
-                                      context.go('/ai-consent');
-                                    }
+                                    if (!mounted) return;
+                                    this.context.go('/auth/login');
                                   }
                                 },
                                 child: Row(
@@ -181,7 +174,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                     Expanded(
                                       child: Center(
                                         child: TypographyText(
-                                          _index < 2 ? 'Next' : 'Start',
+                                          _index < _slides.length - 1
+                                              ? 'Next'
+                                              : 'Continue',
                                           variant: TypographyVariant.body1,
                                           color: context.actionButtonForeground,
                                         ),
@@ -244,7 +239,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       );
     }
     return Image.asset(
-      'assets/images/app_logo.png',
+      slide.asset,
       height: MediaQuery.of(context).size.height * 0.42,
       fit: BoxFit.cover,
       alignment: Alignment.topLeft,

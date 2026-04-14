@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,7 +5,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
-import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
@@ -194,6 +192,7 @@ class _ProfileMenu extends ConsumerWidget {
     final items = [
       (Icons.person_outline, 'Profile', true),
       (Icons.settings_outlined, 'Customization', true),
+      (Icons.auto_awesome_outlined, 'Story mood', true),
       (Icons.qr_code_scanner, 'Scan', true),
       (Icons.lock_outline, 'Security', true),
       (Icons.help_outline, 'Support', true),
@@ -211,19 +210,20 @@ class _ProfileMenu extends ConsumerWidget {
     const authRequiredActions = {
       'Profile',
       'Customization',
+      'Story mood',
       'Scan',
       'Security',
     };
 
-    final isDarkMode = ref.watch(themeModeProvider) == ThemeMode.dark;
+    // final isDarkMode = ref.watch(themeModeProvider) == ThemeMode.dark;
 
     return Column(
       children: [
         // Theme toggle row
-        _ThemeToggleRow(
-          isDarkMode: isDarkMode,
-          onToggle: () => ref.read(themeModeProvider.notifier).toggleTheme(),
-        ),
+        // _ThemeToggleRow(
+        //   isDarkMode: isDarkMode,
+        //   onToggle: () => ref.read(themeModeProvider.notifier).toggleTheme(),
+        // ),
         for (int i = 0; i < items.length; i++) ...[
           InkWell(
             onTap: () async {
@@ -249,6 +249,9 @@ class _ProfileMenu extends ConsumerWidget {
                   break;
                 case 'Customization':
                   context.pushNamed('customization');
+                  break;
+                case 'Story mood':
+                  context.pushNamed('setup-interests');
                   break;
                 case 'Scan':
                   context.pushNamed('scan');
@@ -390,47 +393,6 @@ class _ProfileMenuItem extends StatelessWidget {
             ),
           ),
           if (showChevron) Icon(Icons.chevron_right, color: chevronColor),
-        ],
-      ),
-    );
-  }
-}
-
-class _ThemeToggleRow extends StatelessWidget {
-  const _ThemeToggleRow({required this.isDarkMode, required this.onToggle});
-
-  final bool isDarkMode;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black87;
-    final iconColor = isDark ? Colors.white : Colors.black87;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      child: Row(
-        children: [
-          Icon(
-            isDarkMode ? Icons.dark_mode : Icons.light_mode,
-            color: iconColor,
-            size: 26,
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: TypographyText(
-              isDarkMode ? 'Dark Mode' : 'Light Mode',
-              variant: TypographyVariant.body1,
-              color: textColor,
-            ),
-          ),
-          CupertinoSwitch(
-            value: isDarkMode,
-            onChanged: (_) => onToggle(),
-            activeTrackColor: isDark ? Colors.white : Colors.black87,
-            inactiveTrackColor: isDark ? Colors.white24 : Colors.black26,
-          ),
         ],
       ),
     );

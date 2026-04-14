@@ -9,6 +9,7 @@ class UserProfile {
   final String? timezone;
   final String? language;
   final bool isCompleted;
+  final bool personalizationCompleted;
 
   const UserProfile({
     required this.id,
@@ -21,6 +22,7 @@ class UserProfile {
     this.timezone,
     this.language,
     this.isCompleted = false,
+    this.personalizationCompleted = false,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -35,6 +37,8 @@ class UserProfile {
       timezone: json['timezone'] as String?,
       language: json['language'] as String?,
       isCompleted: json['is_completed'] as bool? ?? false,
+      personalizationCompleted:
+          json['personalization_completed'] as bool? ?? false,
     );
   }
 
@@ -57,8 +61,9 @@ class UsernameAvailability {
   final bool available;
   const UsernameAvailability({required this.username, required this.available});
 
-  factory UsernameAvailability.fromJson(Map<String, dynamic> json) => UsernameAvailability(
-    username: (json['username'] ?? '').toString(),
-    available: json['available'] as bool? ?? false,
-  );
+  factory UsernameAvailability.fromJson(Map<String, dynamic> json) =>
+      UsernameAvailability(
+        username: (json['username'] ?? '').toString(),
+        available: json['available'] as bool? ?? false,
+      );
 }

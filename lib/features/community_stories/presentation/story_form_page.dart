@@ -92,10 +92,7 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
           color: context.primaryTextColor,
         ),
         leading: IconButton(
-          icon: Icon(
-            CupertinoIcons.back,
-            color: context.primaryTextColor,
-          ),
+          icon: Icon(CupertinoIcons.back, color: context.primaryTextColor),
           onPressed: () {
             notifier.reset();
             Navigator.of(context).pop();
@@ -229,8 +226,7 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
                   label: 'Themes',
                   controller: _themeInputCtrl,
                   chips: creation.themes,
-                  onAdd: (v) =>
-                      notifier.updateThemes([...creation.themes, v]),
+                  onAdd: (v) => notifier.updateThemes([...creation.themes, v]),
                   onRemove: (v) => notifier.updateThemes(
                     creation.themes.where((t) => t != v).toList(),
                   ),
@@ -239,8 +235,8 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
                   label: 'Characters',
                   controller: _charInputCtrl,
                   chips: creation.characters,
-                  onAdd: (v) => notifier
-                      .updateCharacters([...creation.characters, v]),
+                  onAdd: (v) =>
+                      notifier.updateCharacters([...creation.characters, v]),
                   onRemove: (v) => notifier.updateCharacters(
                     creation.characters.where((c) => c != v).toList(),
                   ),
@@ -249,8 +245,7 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
                   label: 'Tags',
                   controller: _tagInputCtrl,
                   chips: creation.tags,
-                  onAdd: (v) =>
-                      notifier.updateTags([...creation.tags, v]),
+                  onAdd: (v) => notifier.updateTags([...creation.tags, v]),
                   onRemove: (v) => notifier.updateTags(
                     creation.tags.where((t) => t != v).toList(),
                   ),
@@ -305,7 +300,7 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
             // Submit button
             SmoothClipRRect(
               smoothness: 0.6,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(999),
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton(
@@ -320,9 +315,7 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
                     backgroundColor: context.actionButtonBackground,
                     foregroundColor: context.actionButtonForeground,
                     padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
+                    shape: const StadiumBorder(),
                   ),
                   child: creation.isSubmitting
                       ? SizedBox(
@@ -351,10 +344,7 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
 // ---------------------------------------------------------------------------
 
 class _FormSection extends StatelessWidget {
-  const _FormSection({
-    required this.title,
-    required this.children,
-  });
+  const _FormSection({required this.title, required this.children});
 
   final String title;
   final List<Widget> children;
@@ -563,11 +553,7 @@ class _MascotSelector extends StatelessWidget {
                   ),
                 )
               else
-                Icon(
-                  Icons.smart_toy_rounded,
-                  color: hintColor,
-                  size: 28,
-                ),
+                Icon(Icons.smart_toy_rounded, color: hintColor, size: 28),
               const SizedBox(height: 8),
               Text(
                 selectedName ?? 'Choose mascot',

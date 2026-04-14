@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _themeKey = 'app_theme_mode';
+const _fullButtonShape = StadiumBorder();
 
 /// Theme mode provider with persistence
 final themeModeProvider = NotifierProvider<ThemeModeNotifier, ThemeMode>(
@@ -64,6 +65,7 @@ class AppTheme {
       foregroundColor: foreground,
       disabledBackgroundColor: background.withValues(alpha: 0.4),
       disabledForegroundColor: foreground.withValues(alpha: 0.6),
+      shape: _fullButtonShape,
     );
   }
 
@@ -77,6 +79,7 @@ class AppTheme {
       foregroundColor: foreground,
       disabledBackgroundColor: background.withValues(alpha: 0.4),
       disabledForegroundColor: foreground.withValues(alpha: 0.6),
+      shape: _fullButtonShape,
     );
   }
 
@@ -85,6 +88,7 @@ class AppTheme {
     return TextButton.styleFrom(
       foregroundColor: buttonScheme.primary,
       disabledForegroundColor: buttonScheme.primary.withValues(alpha: 0.4),
+      shape: _fullButtonShape,
     );
   }
 
@@ -94,6 +98,7 @@ class AppTheme {
       foregroundColor: buttonScheme.primary,
       disabledForegroundColor: buttonScheme.primary.withValues(alpha: 0.4),
       side: BorderSide(color: buttonScheme.primary),
+      shape: _fullButtonShape,
     );
   }
 

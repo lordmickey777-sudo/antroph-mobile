@@ -62,7 +62,7 @@ class AuthButton extends StatelessWidget {
       height: 64,
       child: Material(
         color: buttonBackground,
-        borderRadius: BorderRadius.circular(40),
+        borderRadius: BorderRadius.circular(999),
         child: InkWell(
           onTap: loading
               ? null
@@ -70,7 +70,7 @@ class AuthButton extends StatelessWidget {
                   HapticFeedback.lightImpact();
                   onTap();
                 },
-          borderRadius: BorderRadius.circular(40),
+          borderRadius: BorderRadius.circular(999),
           child: Center(
             child: loading
                 ? SizedBox(

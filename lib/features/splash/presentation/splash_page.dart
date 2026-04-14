@@ -4,9 +4,9 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:antroph_mobile/core/onboarding/app_setup_route_service.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
-import 'package:antroph_mobile/core/consent/ai_consent_service.dart';
 import 'package:antroph_mobile/core/onboarding/onboarding_storage_service.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
@@ -27,17 +27,16 @@ class _SplashPageState extends ConsumerState<SplashPage> {
   }
 
   Future<void> _determineStartRoute() async {
-    // Keep the splash visible briefly while we restore session/onboarding state.
-    final hasCompletedOnboarding = await OnboardingStorageService.hasCompletedOnboarding();
+    final hasCompletedOnboarding =
+        await OnboardingStorageService.hasCompletedOnboarding();
     final minimumDisplay = hasCompletedOnboarding
         ? Future<void>.value()
         : Future.delayed(const Duration(milliseconds: 1200));
 
-    // Attempt to restore auth session in background (for returning users)
     try {
       await ref.read(authControllerProvider.future);
     } catch (_) {
-      // Ignore auth errors - user can continue as guest
+      // Ignore auth restore errors and fall back to the auth flow.
     }
 
     await minimumDisplay;
@@ -48,14 +47,15 @@ class _SplashPageState extends ConsumerState<SplashPage> {
       return;
     }
 
-    final hasConsented = await AiConsentService.hasAcceptedConsent();
-    if (!hasConsented) {
-      _navigate('/ai-consent');
+    final user = ref.read(authControllerProvider).value;
+    if (user == null) {
+      _navigate('/auth/login');
       return;
     }
 
-    // Always go to home - auth is handled via auth guard sheets when needed
-    _navigate('/home');
+    final nextRoute = await AppSetupRouteService.resolveAuthenticatedRoute();
+    if (!mounted) return;
+    _navigate(nextRoute);
   }
 
   void _navigate(String path) {

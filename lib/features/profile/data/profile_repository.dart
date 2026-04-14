@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/error_formatter.dart';
+import '../models/user_personalization.dart';
 import '../models/user_profile.dart';
 
 class ProfileRepository {
@@ -18,6 +19,32 @@ class ProfileRepository {
     }
   }
 
+  Future<UserPersonalization?> getPersonalization() async {
+    try {
+      final res = await _dio.get('/users/me/personalization');
+      return UserPersonalization.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        return null;
+      }
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<UserPersonalization> savePersonalization({
+    required String vibe,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/users/me/personalization',
+        data: <String, dynamic>{'vibe': vibe},
+      );
+      return UserPersonalization.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
   /// Upload avatar image via multipart/form-data to /users/me/avatar
   /// Returns the avatar URL from the response.
   Future<String> uploadAvatar({
@@ -26,17 +53,12 @@ class ProfileRepository {
   }) async {
     try {
       final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(
-          filePath,
-          filename: fileName,
-        ),
+        'file': await MultipartFile.fromFile(filePath, filename: fileName),
       });
       final res = await _dio.post(
         '/users/me/avatar',
         data: formData,
-        options: Options(
-          contentType: 'multipart/form-data',
-        ),
+        options: Options(contentType: 'multipart/form-data'),
       );
       final data = res.data;
       if (data is String) return data;
@@ -60,12 +82,24 @@ class ProfileRepository {
   }) async {
     try {
       final payload = <String, dynamic>{};
-      if (username != null) payload['username'] = username;
-      if (displayName != null) payload['display_name'] = displayName;
-      if (bio != null) payload['bio'] = bio;
-      if (dateOfBirth != null) payload['date_of_birth'] = dateOfBirth.toIso8601String();
-      if (timezone != null) payload['timezone'] = timezone;
-      if (language != null) payload['language'] = language;
+      if (username != null) {
+        payload['username'] = username;
+      }
+      if (displayName != null) {
+        payload['display_name'] = displayName;
+      }
+      if (bio != null) {
+        payload['bio'] = bio;
+      }
+      if (dateOfBirth != null) {
+        payload['date_of_birth'] = dateOfBirth.toIso8601String();
+      }
+      if (timezone != null) {
+        payload['timezone'] = timezone;
+      }
+      if (language != null) {
+        payload['language'] = language;
+      }
 
       final res = await _dio.put('/users/me', data: payload);
       return UserProfile.fromJson(res.data as Map<String, dynamic>);

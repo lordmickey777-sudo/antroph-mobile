@@ -57,7 +57,7 @@ class MicrophoneEducationDialog extends StatelessWidget {
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(999),
                         side: const BorderSide(color: Colors.white24),
                       ),
                     ),
@@ -79,9 +79,7 @@ class MicrophoneEducationDialog extends StatelessWidget {
                       backgroundColor: actionBg,
                       foregroundColor: actionFg,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      shape: const StadiumBorder(),
                     ),
                     child: Text(
                       'Continue',
@@ -166,7 +164,7 @@ class MicrophonePermissionModal extends StatelessWidget {
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(999),
                         side: const BorderSide(color: Colors.white24),
                       ),
                     ),
@@ -193,9 +191,7 @@ class MicrophonePermissionModal extends StatelessWidget {
                       backgroundColor: actionBg,
                       foregroundColor: actionFg,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      shape: const StadiumBorder(),
                     ),
                     child: Text(
                       'Open Settings',

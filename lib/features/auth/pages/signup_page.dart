@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'package:antroph_mobile/core/onboarding/app_setup_route_service.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 import '../../../widgets/typography_text.dart';
@@ -90,6 +91,12 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
     );
   }
 
+  Future<void> _handleAuthenticatedUser() async {
+    final nextRoute = await AppSetupRouteService.resolveAuthenticatedRoute();
+    if (!mounted) return;
+    context.go(nextRoute);
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
@@ -102,7 +109,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
       final prevUser = previous?.value;
       if (mounted && user != null && user != prevUser) {
         showToast(context, 'Account created.', success: true);
-        context.go('/home');
+        _handleAuthenticatedUser();
       }
     });
     final loading = authState.isLoading;
@@ -114,36 +121,20 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: ContentWidth.form),
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
-                96,
-                horizontalPadding,
-                24,
-              ),
+              padding: EdgeInsets.fromLTRB(horizontalPadding, 36, horizontalPadding, 24),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const TypographyText(
-                      'Create your',
-                      variant: TypographyVariant.h2,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    const SizedBox(height: 4),
-                    const TypographyText(
-                      'Account',
+                      'Create Account',
                       variant: TypographyVariant.h2,
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
                     ),
                     const SizedBox(height: 36),
-                    AuthInput(
-                      controller: _nameCtrl,
-                      hint: 'Full Name',
-                      icon: Icons.person_outline,
-                    ),
+                    AuthInput(controller: _nameCtrl, hint: 'Full Name', icon: Icons.person_outline),
                     const SizedBox(height: 20),
                     AuthInput(
                       controller: _emailCtrl,
@@ -158,8 +149,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                       hint: 'Password',
                       icon: Icons.lock_outline,
                       obscure: _obscure,
-                      onToggleObscure: () =>
-                          setState(() => _obscure = !_obscure),
+                      onToggleObscure: () => setState(() => _obscure = !_obscure),
                       validator: _validatePassword,
                     ),
                     const SizedBox(height: 12),
@@ -170,11 +160,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                       hasDigit: _hasDigit,
                     ),
                     const SizedBox(height: 28),
-                    AuthButton(
-                      label: 'Register',
-                      onTap: _submit,
-                      loading: loading,
-                    ),
+                    AuthButton(label: 'Register', onTap: _submit, loading: loading),
                     const SizedBox(height: 20),
                     const OrDivider(),
                     const SizedBox(height: 20),
@@ -276,25 +262,25 @@ class _PasswordPolicyChecklist extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final policies = <MapEntry<String, bool>>[
+    final policies1 = <MapEntry<String, bool>>[
       MapEntry('At least 8 characters', hasMinLength),
       MapEntry('Contains an uppercase letter', hasUppercase),
+    ];
+    final policies2 = <MapEntry<String, bool>>[
       MapEntry('Contains a lowercase letter', hasLowercase),
       MapEntry('Contains a number', hasDigit),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final policy in policies)
+        for (final policy in policies1)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
                 Icon(
-                  policy.value
-                      ? Icons.check_circle
-                      : Icons.radio_button_unchecked,
-                  size: 18,
+                  policy.value ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 12,
                   color: policy.value ? Colors.greenAccent : Colors.white38,
                 ),
                 const SizedBox(width: 8),
@@ -302,6 +288,29 @@ class _PasswordPolicyChecklist extends StatelessWidget {
                   child: TypographyText(
                     policy.key,
                     variant: TypographyVariant.body2,
+                    fontSize: 12,
+                    color: policy.value ? Colors.white : Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        for (final policy in policies2)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  policy.value ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 12,
+                  color: policy.value ? Colors.greenAccent : Colors.white38,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TypographyText(
+                    policy.key,
+                    variant: TypographyVariant.body2,
+                    fontSize: 12,
                     color: policy.value ? Colors.white : Colors.white70,
                   ),
                 ),
@@ -334,9 +343,7 @@ class _WebViewPageState extends State<_WebViewPage> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xFF101214))
       ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (_) => setState(() => _isLoading = false),
-        ),
+        NavigationDelegate(onPageFinished: (_) => setState(() => _isLoading = false)),
       )
       ..loadRequest(Uri.parse(widget.url));
   }
@@ -356,9 +363,7 @@ class _WebViewPageState extends State<_WebViewPage> {
           WebViewWidget(controller: _controller),
           if (_isLoading)
             const Positioned.fill(
-              child: ShimmerWebViewPlaceholder(
-                backgroundColor: Color(0xFF101214),
-              ),
+              child: ShimmerWebViewPlaceholder(backgroundColor: Color(0xFF101214)),
             ),
         ],
       ),
