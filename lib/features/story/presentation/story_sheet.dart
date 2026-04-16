@@ -1,11 +1,10 @@
-import 'dart:ui';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
+import 'package:antroph_mobile/widgets/blurred_fade_image.dart';
 import 'package:antroph_mobile/widgets/premium_star.dart';
 import 'package:antroph_mobile/widgets/smooth_card.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -99,11 +98,11 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                       isAdded: _isAdded,
                       isAddingToPlaylist: _isAddingToPlaylist,
                       isPremium: isPremium,
+                      tags: tags,
                       onAddToPlaylist: _handleAddToPlaylist,
                       onPlayPressed: _navigateToChat,
                     ),
                     const SizedBox(height: 20),
-                    if (tags.isNotEmpty) ...[_TagChips(tags: tags), const SizedBox(height: 12)],
                     TypographyText(
                       widget.title,
                       variant: TypographyVariant.h2,
@@ -215,6 +214,7 @@ class _HeroCard extends ConsumerWidget {
     required this.isAdded,
     required this.isAddingToPlaylist,
     required this.isPremium,
+    required this.tags,
     required this.onAddToPlaylist,
     required this.onPlayPressed,
   });
@@ -225,6 +225,7 @@ class _HeroCard extends ConsumerWidget {
   final bool isAdded;
   final bool isAddingToPlaylist;
   final bool isPremium;
+  final List<String> tags;
   final VoidCallback onAddToPlaylist;
   final VoidCallback onPlayPressed;
 
@@ -234,41 +235,19 @@ class _HeroCard extends ConsumerWidget {
       radius: 36,
       child: Stack(
         children: [
-          AspectRatio(aspectRatio: 0.85, child: _HeroImage(image: imageAsset)),
-          Positioned.fill(
-            child: IgnorePointer(
-              child: ShaderMask(
-                shaderCallback: (rect) => const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black],
-                  stops: [0.55, 0.85],
-                ).createShader(rect),
-                blendMode: BlendMode.dstIn,
-                child: ClipRect(
-                  child: ImageFiltered(
-                    imageFilter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-                    child: _HeroImage(image: imageAsset),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0),
-                      Colors.black.withValues(alpha: 0.04),
-                      Colors.black.withValues(alpha: 0.85),
-                    ],
-                    stops: const [0.0, 0.6, 1.0],
-                  ),
-                ),
+          AspectRatio(
+            aspectRatio: 0.85,
+            child: BlurredFadeImage(
+              imageBuilder: (_) => _HeroImage(image: imageAsset),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0),
+                  Colors.black.withValues(alpha: 0.04),
+                  Colors.black.withValues(alpha: 0.85),
+                ],
+                stops: const [0.0, 0.6, 1.0],
               ),
             ),
           ),
@@ -292,6 +271,8 @@ class _HeroCard extends ConsumerWidget {
             ),
           ),
           if (isPremium) const Positioned(right: 20, bottom: 34, child: PremiumStar(size: 24)),
+          if (tags.isNotEmpty)
+            Positioned(top: 20, left: 20, right: 20, child: _TagChips(tags: tags)),
         ],
       ),
     );
@@ -423,21 +404,29 @@ class _TagChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.isDarkMode;
-    final chipBg = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.06);
-    final chipTextColor = isDark ? Colors.white70 : Colors.black54;
+    final chipBg = Colors.black.withValues(alpha: 0.58);
+    final chipBorder = Colors.white.withValues(alpha: 0.05);
 
     return Wrap(
-      spacing: 8,
+      spacing: 6,
       runSpacing: 6,
       children: tags
           .map(
             (tag) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: chipBg, borderRadius: BorderRadius.circular(20)),
-              child: Text(tag, style: TextStyle(color: chipTextColor, fontSize: 13)),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: chipBg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: chipBorder),
+              ),
+              child: Text(
+                tag,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           )
           .toList(),

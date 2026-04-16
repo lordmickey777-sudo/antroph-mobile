@@ -7,6 +7,7 @@ import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
+import 'package:antroph_mobile/widgets/blurred_fade_image.dart';
 import 'package:antroph_mobile/widgets/premium_star.dart';
 import 'package:antroph_mobile/widgets/smooth_card.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -272,33 +273,26 @@ class _FeaturedStoryCard extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Background image
-                _StoryImage(image: story.coverImageUrl),
-                // Modern gradient overlay
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.0),
-                          Colors.black.withValues(alpha: 0.1),
-                          Colors.black.withValues(alpha: 0.6),
-                          Colors.black.withValues(alpha: 0.95),
-                        ],
-                        stops: const [0.0, 0.3, 0.7, 1.0],
-                      ),
-                    ),
+                BlurredFadeImage(
+                  imageBuilder: (_) => _StoryImage(image: story.coverImageUrl),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.0),
+                      Colors.black.withValues(alpha: 0.1),
+                      Colors.black.withValues(alpha: 0.6),
+                      Colors.black.withValues(alpha: 0.95),
+                    ],
+                    stops: const [0.0, 0.3, 0.7, 1.0],
                   ),
                 ),
                 if (story.isPremium)
                   const Positioned(
-                    top: 16,
-                    right: 16,
+                    right: 20,
+                    bottom: 34,
                     child: PremiumStar(size: 24),
                   ),
-                // Content at bottom
                 Positioned(
                   left: 20,
                   right: 20,
@@ -326,35 +320,18 @@ class _FeaturedStoryCard extends StatelessWidget {
                             maxLines: 2,
                           ),
                         const SizedBox(height: 16),
-                        Container(
+                        AppPillButton(
+                          onPressed: onTap,
+                          icon: CupertinoIcons.play_fill,
+                          label: 'Tap to start',
+                          backgroundColor: context.actionButtonBackground,
+                          foregroundColor: context.actionButtonForeground,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
+                            vertical: 12,
+                            horizontal: 24,
                           ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.2),
-                            ),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                CupertinoIcons.play_fill,
-                                color: Colors.white,
-                                size: 14,
-                              ),
-                              SizedBox(width: 8),
-                              TypographyText(
-                                'Tap to start',
-                                variant: TypographyVariant.body2,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ],
-                          ),
+                          variant: TypographyVariant.body1,
+                          fontWeight: FontWeight.w600,
                         ),
                       ],
                     ),
