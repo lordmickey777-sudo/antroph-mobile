@@ -158,6 +158,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             : 'assets/images/default.png',
         mascotConfig: widget.mascotConfig ?? detail?.effectiveMascot,
         isAdded: widget.isAddedToPlaylist,
+        isPremium: detail?.isPremium ?? false,
         scrollController: scrollController,
       ),
     );

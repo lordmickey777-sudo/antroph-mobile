@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
+import 'package:antroph_mobile/widgets/premium_star.dart';
+import 'package:antroph_mobile/widgets/smooth_card.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
@@ -28,6 +30,7 @@ class StorySheetContent extends ConsumerStatefulWidget {
     this.users,
     this.views,
     this.isAdded = false,
+    this.isPremium = false,
   });
 
   final String storyId;
@@ -39,6 +42,7 @@ class StorySheetContent extends ConsumerStatefulWidget {
   final int? users;
   final int? views;
   final bool isAdded;
+  final bool isPremium;
 
   @override
   ConsumerState<StorySheetContent> createState() => _StorySheetContentState();
@@ -69,9 +73,11 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
     final bottom = MediaQuery.of(context).padding.bottom;
     final sessionState = ref.watch(storySessionProvider);
     final textColor = context.primaryTextColor;
-    final secondaryTextColor = context.secondaryTextColor;
     final tertiaryColor = context.tertiaryTextColor;
     final detailAsync = ref.watch(storyDetailProvider(widget.storyId));
+    final detail = detailAsync.asData?.value;
+    final isPremium = widget.isPremium || (detail?.isPremium ?? false);
+    final tags = detail?.tags ?? const <String>[];
 
     return Stack(
       children: [
@@ -90,10 +96,15 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                       sessionState: sessionState,
                       isAdded: _isAdded,
                       isAddingToPlaylist: _isAddingToPlaylist,
+                      isPremium: isPremium,
                       onAddToPlaylist: _handleAddToPlaylist,
                       onPlayPressed: _navigateToChat,
                     ),
                     const SizedBox(height: 20),
+                    if (tags.isNotEmpty) ...[
+                      _TagChips(tags: tags),
+                      const SizedBox(height: 12),
+                    ],
                     TypographyText(
                       widget.title,
                       variant: TypographyVariant.h2,
@@ -101,14 +112,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 10),
-                    TypographyText(
-                      widget.subtitle,
-                      variant: TypographyVariant.body1,
-                      color: secondaryTextColor,
-                      fontSize: 14,
-                      height: 1.35,
-                    ),
+
                     const SizedBox(height: 16),
                     detailAsync.when(
                       loading: () => const _StoryDetailShimmer(),
@@ -121,7 +125,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                           fontSize: 13,
                         ),
                       ),
-                      data: (detail) => _StoryDetailContent(detail: detail),
+                      data: (d) => _StoryDescription(detail: d),
                     ),
                     SizedBox(height: bottom + 40),
                   ],
@@ -211,6 +215,7 @@ class _HeroCard extends ConsumerWidget {
     required this.sessionState,
     required this.isAdded,
     required this.isAddingToPlaylist,
+    required this.isPremium,
     required this.onAddToPlaylist,
     required this.onPlayPressed,
   });
@@ -220,24 +225,17 @@ class _HeroCard extends ConsumerWidget {
   final StorySessionState sessionState;
   final bool isAdded;
   final bool isAddingToPlaylist;
+  final bool isPremium;
   final VoidCallback onAddToPlaylist;
   final VoidCallback onPlayPressed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const cardRadius = 24.0;
-    final borderColor = context.isDarkMode
-        ? Colors.white.withValues(alpha: 0.15)
-        : Colors.black.withValues(alpha: 0.1);
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(cardRadius),
+    return SmoothCard(
+      radius: 36,
       child: Stack(
         children: [
-          // Background image with network/asset handling and fallback
           AspectRatio(aspectRatio: 0.85, child: _HeroImage(image: imageAsset)),
-
-          // Modern gradient overlay (matching featured card)
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -255,18 +253,6 @@ class _HeroCard extends ConsumerWidget {
               ),
             ),
           ),
-
-          // Border overlay
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(cardRadius),
-                border: Border.all(color: borderColor, width: 1),
-              ),
-            ),
-          ),
-
-          // Button only
           Positioned(
             left: 20,
             right: 20,
@@ -286,6 +272,8 @@ class _HeroCard extends ConsumerWidget {
                     ),
             ),
           ),
+          if (isPremium)
+            const Positioned(top: 16, right: 16, child: PremiumStar(size: 24)),
         ],
       ),
     );
@@ -332,123 +320,81 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppPillButton(
-      onPressed: isLoading
-          ? null
-          : isAdded
-          ? onPlayPressed
-          : onAddPressed,
-      isLoading: isLoading,
-      icon: isAdded ? CupertinoIcons.play_fill : CupertinoIcons.add,
-      label: isLoading ? 'Adding...' : (isAdded ? 'Continue' : 'My List'),
-      backgroundColor: context.actionButtonBackground,
-      foregroundColor: context.actionButtonForeground,
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-      variant: TypographyVariant.body1,
-      fontWeight: FontWeight.w600,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AppPillButton(
+          onPressed: onPlayPressed,
+          icon: CupertinoIcons.play_fill,
+          label: 'Play',
+          backgroundColor: context.actionButtonBackground,
+          foregroundColor: context.actionButtonForeground,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+          variant: TypographyVariant.body1,
+          fontWeight: FontWeight.w600,
+        ),
+        const SizedBox(width: 10),
+        _AddToListIconButton(isAdded: isAdded, isLoading: isLoading, onPressed: onAddPressed),
+      ],
     );
   }
 }
 
-/// Renders the info row, description, and tag chips from story detail data.
-class _StoryDetailContent extends StatelessWidget {
-  const _StoryDetailContent({required this.detail});
+class _AddToListIconButton extends StatelessWidget {
+  const _AddToListIconButton({
+    required this.isAdded,
+    required this.isLoading,
+    required this.onPressed,
+  });
+
+  final bool isAdded;
+  final bool isLoading;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = Colors.white.withValues(alpha: 0.18);
+    final border = Colors.white.withValues(alpha: 0.25);
+    return GestureDetector(
+      onTap: isAdded || isLoading ? null : onPressed,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: bg,
+          shape: BoxShape.circle,
+          border: Border.all(color: border),
+        ),
+        alignment: Alignment.center,
+        child: isLoading
+            ? const CupertinoActivityIndicator(color: Colors.white, radius: 9)
+            : Icon(
+                isAdded ? CupertinoIcons.checkmark : CupertinoIcons.add,
+                color: Colors.white,
+                size: 20,
+              ),
+      ),
+    );
+  }
+}
+
+/// Renders the description from story detail data.
+/// Tags are rendered separately above the title.
+class _StoryDescription extends StatelessWidget {
+  const _StoryDescription({required this.detail});
   final StoryDetailDto detail;
 
   @override
   Widget build(BuildContext context) {
+    if (detail.description.isEmpty) return const SizedBox.shrink();
     final secondaryTextColor = context.secondaryTextColor;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _InfoRow(
-          author: detail.author,
-          durationMinutes: detail.durationMinutes,
-          difficulty: detail.difficulty,
-          ageRating: detail.ageRating,
-          isPremium: detail.isPremium,
-        ),
-        if (detail.description.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          TypographyText(
-            detail.description,
-            variant: TypographyVariant.body1,
-            color: secondaryTextColor,
-            fontSize: 14,
-            height: 1.35,
-          ),
-        ],
-        if (detail.tags.isNotEmpty) ...[const SizedBox(height: 16), _TagChips(tags: detail.tags)],
-      ],
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.author,
-    required this.durationMinutes,
-    required this.difficulty,
-    required this.ageRating,
-    required this.isPremium,
-  });
-
-  final String author;
-  final int durationMinutes;
-  final String difficulty;
-  final int ageRating;
-  final bool isPremium;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = context.tertiaryTextColor;
-    final items = <Widget>[];
-
-    if (durationMinutes > 0) {
-      items.add(_InfoItem(icon: CupertinoIcons.clock, label: '$durationMinutes min', color: color));
-    }
-
-    if (difficulty.isNotEmpty) {
-      items.add(_InfoItem(icon: CupertinoIcons.chart_bar, label: difficulty, color: color));
-    }
-
-    if (ageRating > 0) {
-      items.add(_InfoItem(icon: CupertinoIcons.person_2, label: '$ageRating+', color: color));
-    }
-
-    if (author.isNotEmpty) {
-      items.add(_InfoItem(icon: CupertinoIcons.pencil, label: author, color: color));
-    }
-
-    if (isPremium) {
-      items.add(
-        _InfoItem(icon: CupertinoIcons.star_fill, label: 'Premium', color: Colors.amber.shade600),
-      );
-    }
-
-    if (items.isEmpty) return const SizedBox.shrink();
-
-    return Wrap(spacing: 16, runSpacing: 8, children: items);
-  }
-}
-
-class _InfoItem extends StatelessWidget {
-  const _InfoItem({required this.icon, required this.label, required this.color});
-
-  final IconData icon;
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 4),
-        Text(label, style: TextStyle(color: color, fontSize: 12)),
-      ],
+    return TypographyText(
+      detail.description,
+      variant: TypographyVariant.body1,
+      color: secondaryTextColor,
+      fontSize: 14,
+      height: 1.35,
     );
   }
 }

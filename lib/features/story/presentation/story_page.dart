@@ -7,7 +7,8 @@ import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
-import 'package:smooth_corner/smooth_corner.dart';
+import 'package:antroph_mobile/widgets/premium_star.dart';
+import 'package:antroph_mobile/widgets/smooth_card.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/story/models/story_models.dart';
@@ -18,6 +19,7 @@ import 'package:antroph_mobile/widgets/empty_state.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
+import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
 import 'package:antroph_mobile/features/community_stories/providers/community_stories_providers.dart';
 import 'package:antroph_mobile/features/community_stories/models/community_story_model.dart';
@@ -138,15 +140,15 @@ class StoryPage extends ConsumerWidget {
     WidgetRef ref,
     StoryCardDto card,
   ) async {
-    await _startStory(
+    _openStorySheet(
       context,
-      ref,
       storyId: card.storyId,
       title: card.title,
       subtitle: card.subtitle,
       image: card.image,
       mascotConfig: card.mascotConfig,
-      isAddedToPlaylist: card.isAdded,
+      isAdded: card.isAdded,
+      isPremium: card.isPremium,
     );
   }
 
@@ -155,15 +157,40 @@ class StoryPage extends ConsumerWidget {
     WidgetRef ref,
     FeaturedStoryDto story,
   ) async {
-    await _startStory(
+    _openStorySheet(
       context,
-      ref,
       storyId: story.id,
       title: story.title,
       subtitle: story.description,
       image: story.coverImageUrl,
       mascotConfig: story.mascotConfig,
-      isAddedToPlaylist: story.isAdded,
+      isAdded: story.isAdded,
+      isPremium: story.isPremium,
+    );
+  }
+
+  void _openStorySheet(
+    BuildContext context, {
+    required String storyId,
+    required String title,
+    required String subtitle,
+    required String image,
+    MascotConfig? mascotConfig,
+    bool isAdded = false,
+    bool isPremium = false,
+  }) {
+    showAppBottomSheet(
+      context: context,
+      builder: (_, scrollController) => StorySheetContent(
+        storyId: storyId,
+        title: title,
+        subtitle: subtitle,
+        imageAsset: image.isNotEmpty ? image : 'assets/images/default.png',
+        mascotConfig: mascotConfig,
+        isAdded: isAdded,
+        isPremium: isPremium,
+        scrollController: scrollController,
+      ),
     );
   }
 
@@ -238,15 +265,8 @@ class _FeaturedStoryCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
       child: GestureDetector(
         onTap: onTap,
-        child: SmoothClipRRect(
-          smoothness: 0.6,
-          borderRadius: BorderRadius.circular(24),
-          side: BorderSide(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white.withValues(alpha: 0.15)
-                : Colors.black.withValues(alpha: 0.1),
-            width: 1,
-          ),
+        child: SmoothCard(
+          radius: 36,
           child: AspectRatio(
             aspectRatio: 0.85,
             child: Stack(
@@ -272,6 +292,12 @@ class _FeaturedStoryCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (story.isPremium)
+                  const Positioned(
+                    top: 16,
+                    right: 16,
+                    child: PremiumStar(size: 24),
+                  ),
                 // Content at bottom
                 Positioned(
                   left: 20,
@@ -573,20 +599,12 @@ class _StoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const cardRadius = 16.0;
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
         width: 125,
-        child: SmoothClipRRect(
-          smoothness: 0.6,
-          borderRadius: BorderRadius.circular(cardRadius),
-          side: BorderSide(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white.withValues(alpha: 0.15)
-                : Colors.black.withValues(alpha: 0.1),
-            width: 1,
-          ),
+        child: SmoothCard(
+          radius: 24,
           child: AspectRatio(
             aspectRatio: 0.75,
             child: Stack(
@@ -626,6 +644,12 @@ class _StoryCard extends StatelessWidget {
                     maxLines: 2,
                   ),
                 ),
+                if (item.isPremium)
+                  const Positioned(
+                    top: 8,
+                    right: 8,
+                    child: PremiumStar(size: 18),
+                  ),
               ],
             ),
           ),
@@ -649,15 +673,8 @@ class _ContinueStoryCard extends StatelessWidget {
       onTap: onTap,
       child: SizedBox(
         width: 150,
-        child: SmoothClipRRect(
-          smoothness: 0.6,
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white.withValues(alpha: 0.15)
-                : Colors.black.withValues(alpha: 0.1),
-            width: 1,
-          ),
+        child: SmoothCard(
+          radius: 26,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -1111,97 +1128,87 @@ class _CommunityStoryCompactCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.15)
-        : Colors.black.withValues(alpha: 0.1);
-
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
         width: width,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: borderColor),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Cover image (fallback to rive thumbnail, then default asset)
-                _buildCoverImage(),
+        child: SmoothCard(
+          radius: 24,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Cover image (fallback to rive thumbnail, then default asset)
+              _buildCoverImage(),
 
-                // Gradient overlay
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    height: 80,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.0),
-                          Colors.black.withValues(alpha: 0.7),
-                        ],
-                      ),
+              // Gradient overlay
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  height: 80,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.0),
+                        Colors.black.withValues(alpha: 0.7),
+                      ],
                     ),
                   ),
                 ),
+              ),
 
-                // Title + author
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 12,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+              // Title + author
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      story.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (story.creatorName != null) ...[
+                      const SizedBox(height: 2),
                       Text(
-                        story.title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                        story.creatorName!,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 11,
                         ),
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (story.creatorName != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          story.creatorName!,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.7),
-                            fontSize: 11,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
                     ],
+                  ],
+                ),
+              ),
+              // Play button
+              if (onPlay != null)
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: AppCircleIconButton(
+                    onPressed: onPlay,
+                    icon: CupertinoIcons.play_fill,
+                    size: 34,
+                    iconSize: 18,
+                    backgroundColor: context.actionButtonBackground,
+                    foregroundColor: context.actionButtonForeground,
                   ),
                 ),
-                // Play button
-                if (onPlay != null)
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: AppCircleIconButton(
-                      onPressed: onPlay,
-                      icon: CupertinoIcons.play_fill,
-                      size: 34,
-                      iconSize: 18,
-                      backgroundColor: context.actionButtonBackground,
-                      foregroundColor: context.actionButtonForeground,
-                    ),
-                  ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
