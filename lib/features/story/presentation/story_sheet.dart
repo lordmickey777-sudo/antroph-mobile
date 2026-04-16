@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -101,10 +103,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                       onPlayPressed: _navigateToChat,
                     ),
                     const SizedBox(height: 20),
-                    if (tags.isNotEmpty) ...[
-                      _TagChips(tags: tags),
-                      const SizedBox(height: 12),
-                    ],
+                    if (tags.isNotEmpty) ...[_TagChips(tags: tags), const SizedBox(height: 12)],
                     TypographyText(
                       widget.title,
                       variant: TypographyVariant.h2,
@@ -237,18 +236,38 @@ class _HeroCard extends ConsumerWidget {
         children: [
           AspectRatio(aspectRatio: 0.85, child: _HeroImage(image: imageAsset)),
           Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
+            child: IgnorePointer(
+              child: ShaderMask(
+                shaderCallback: (rect) => const LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.0),
-                    Colors.black.withValues(alpha: 0.1),
-                    Colors.black.withValues(alpha: 0.6),
-                    Colors.black.withValues(alpha: 0.95),
-                  ],
-                  stops: const [0.0, 0.3, 0.7, 1.0],
+                  colors: [Colors.transparent, Colors.black],
+                  stops: [0.55, 0.85],
+                ).createShader(rect),
+                blendMode: BlendMode.dstIn,
+                child: ClipRect(
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                    child: _HeroImage(image: imageAsset),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0),
+                      Colors.black.withValues(alpha: 0.04),
+                      Colors.black.withValues(alpha: 0.85),
+                    ],
+                    stops: const [0.0, 0.6, 1.0],
+                  ),
                 ),
               ),
             ),
@@ -272,8 +291,7 @@ class _HeroCard extends ConsumerWidget {
                     ),
             ),
           ),
-          if (isPremium)
-            const Positioned(top: 16, right: 16, child: PremiumStar(size: 24)),
+          if (isPremium) const Positioned(right: 20, bottom: 34, child: PremiumStar(size: 24)),
         ],
       ),
     );

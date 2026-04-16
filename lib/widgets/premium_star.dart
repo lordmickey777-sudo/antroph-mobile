@@ -7,6 +7,8 @@ class PremiumStar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Icon(Icons.star_rounded, color: const Color(0xFFFFD54A), size: size);
+    return Container(
+      child: Icon(Icons.star_rounded, color: const Color.fromARGB(255, 255, 206, 44), size: size),
+    );
   }
 }
