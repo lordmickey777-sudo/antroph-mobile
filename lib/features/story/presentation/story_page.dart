@@ -19,7 +19,7 @@ import 'package:antroph_mobile/features/story/presentation/story_page_shimmer.da
 import 'package:antroph_mobile/widgets/empty_state.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
-import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
+import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
 import 'package:antroph_mobile/features/community_stories/providers/community_stories_providers.dart';
@@ -235,7 +235,7 @@ class StoryPage extends ConsumerWidget {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatPage(
+        builder: (_) => StoryChatFlowPage(
           storyTitle: title.isNotEmpty ? title : 'Chat',
           storyId: storyId,
           storySessionId: storySessionId,
@@ -894,7 +894,7 @@ class _CommunityStoriesSliver extends ConsumerWidget {
     if (!context.mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatPage(
+        builder: (_) => StoryChatFlowPage(
           storyTitle: story.title.isNotEmpty ? story.title : 'Chat',
           storyId: story.id,
         ),

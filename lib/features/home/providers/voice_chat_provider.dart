@@ -467,8 +467,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   /// End the current story session and disconnect.
   Future<void> endStorySession() async {
+    if (!ref.mounted) return;
     _cancelAutoListenTimer();
     await cancelRecording();
+    if (!ref.mounted) return;
     state = state.copyWith(
       isStoryMode: false,
       clearStorySession: true,
@@ -1749,6 +1751,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   /// Cancel current recording and tear down the current session.
   Future<void> cancelRecording() async {
+    if (!ref.mounted) return;
     _cancelAutoListenTimer();
     _cancelPlaybackIdleTimer();
     _disableAudio();
@@ -1761,6 +1764,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _commitSent = false;
     _resetAudioBuffer();
     _pendingStorySessionId = null;
+    if (!ref.mounted) return;
     state = state.copyWith(
       isRecording: false,
       isProcessing: false,
@@ -1801,13 +1805,16 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
     _resetAudioBuffer();
     _lastSpeechAt = null;
+    final nextPhase = state.isStoryMode
+        ? (state.isSessionReady ? RealtimeVoicePhase.ready : state.phase)
+        : state.phase;
     state = state.copyWith(
       isPlaying: false,
       isProcessing: false,
       isConnecting: false,
       currentExpression: RobotExpression.neutral,
       clearFace: true,
-      phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
+      phase: nextPhase,
     );
 
     if (restartListening &&

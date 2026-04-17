@@ -15,7 +15,7 @@ import 'package:antroph_mobile/features/story/models/story_detail.dart';
 import 'package:antroph_mobile/features/story/providers/story_session_provider.dart';
 import 'package:antroph_mobile/features/story/data/stories_cache.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
-import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
+import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
 
 /// Content widget for the story bottom sheet.
 /// Used with [showAppBottomSheet] for consistent sheet styling.
@@ -196,7 +196,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatPage(
+        builder: (_) => StoryChatFlowPage(
           storyTitle: widget.title.isNotEmpty ? widget.title : 'Chat',
           storyId: widget.storyId,
           mascotConfig: widget.mascotConfig,
@@ -247,7 +247,7 @@ class _HeroCard extends ConsumerWidget {
                   Colors.black.withValues(alpha: 0.04),
                   Colors.black.withValues(alpha: 0.85),
                 ],
-                stops: const [0.0, 0.6, 1.0],
+                stops: const [0.0, 0.5, 1],
               ),
             ),
           ),

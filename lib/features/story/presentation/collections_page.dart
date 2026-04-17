@@ -11,7 +11,7 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
-import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
+import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
 import 'package:antroph_mobile/features/story/models/story_playlists_models.dart';
 import 'package:antroph_mobile/features/story/presentation/story_player_page.dart';
 import '../providers/story_playlists_provider.dart';
@@ -113,7 +113,7 @@ class CollectionsPage extends ConsumerWidget {
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatPage(
+        builder: (_) => StoryChatFlowPage(
           storyTitle: collection.name.isNotEmpty ? collection.name : 'Chat',
           storyId: storyId,
           mascotConfig: collection.mascot,
@@ -261,7 +261,7 @@ class CollectionDetailPage extends ConsumerWidget {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatPage(
+        builder: (_) => StoryChatFlowPage(
           storyTitle: story.title.isNotEmpty ? story.title : 'Chat',
           storyId: story.storyId,
           mascotConfig: story.mascot,
