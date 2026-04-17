@@ -262,57 +262,35 @@ class _PasswordPolicyChecklist extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final policies1 = <MapEntry<String, bool>>[
-      MapEntry('At least 8 characters', hasMinLength),
-      MapEntry('Contains an uppercase letter', hasUppercase),
+    final policies = <MapEntry<String, bool>>[
+      MapEntry('8+ chars', hasMinLength),
+      MapEntry('Uppercase', hasUppercase),
+      MapEntry('Lowercase', hasLowercase),
+      MapEntry('Number', hasDigit),
     ];
-    final policies2 = <MapEntry<String, bool>>[
-      MapEntry('Contains a lowercase letter', hasLowercase),
-      MapEntry('Contains a number', hasDigit),
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
       children: [
-        for (final policy in policies1)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+        for (final policy in policies)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  policy.value ? Icons.check_circle : Icons.radio_button_unchecked,
-                  size: 12,
+                  policy.value ? Icons.check : Icons.circle_outlined,
+                  size: 11,
                   color: policy.value ? Colors.greenAccent : Colors.white38,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TypographyText(
-                    policy.key,
-                    variant: TypographyVariant.body2,
-                    fontSize: 12,
-                    color: policy.value ? Colors.white : Colors.white70,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        for (final policy in policies2)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Icon(
-                  policy.value ? Icons.check_circle : Icons.radio_button_unchecked,
-                  size: 12,
-                  color: policy.value ? Colors.greenAccent : Colors.white38,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TypographyText(
-                    policy.key,
-                    variant: TypographyVariant.body2,
-                    fontSize: 12,
-                    color: policy.value ? Colors.white : Colors.white70,
-                  ),
+                const SizedBox(width: 4),
+                TypographyText(
+                  policy.key,
+                  variant: TypographyVariant.body2,
+                  fontSize: 11,
+                  color: policy.value ? Colors.white : Colors.white70,
                 ),
               ],
             ),

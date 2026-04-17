@@ -3,6 +3,7 @@ import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/features/profile/data/profile_repository.dart';
+import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:flutter/material.dart';
@@ -16,44 +17,23 @@ class InterestSelectionPage extends StatefulWidget {
 }
 
 class _InterestSelectionPageState extends State<InterestSelectionPage> {
-  static const List<
-    ({String key, String label, String emoji, String description})
-  >
-  _vibeOptions = [
-    (
-      key: 'feel_good',
-      label: 'Feel-good & uplifting',
-      emoji: '😊',
-      description: 'Warm, happy stories that leave you smiling',
-    ),
-    (
-      key: 'thrilling',
-      label: 'Thrilling & intense',
-      emoji: '🔥',
-      description: 'Edge-of-your-seat stories with high stakes',
-    ),
-    (
-      key: 'calm',
-      label: 'Calm & soothing',
-      emoji: '🌙',
-      description: 'Gentle, peaceful stories for winding down',
-    ),
-    (
-      key: 'funny',
-      label: 'Funny & silly',
-      emoji: '😂',
-      description: 'Playful, laugh-out-loud moments and characters',
-    ),
-    (
-      key: 'mysterious',
-      label: 'Mysterious & surprising',
-      emoji: '🕵️',
-      description: 'Twists, secrets, and stories that make you think',
-    ),
+  static const List<({String key, String label})> _vibeOptions = [
+    (key: 'reduce_stress', label: 'Reduce stress'),
+    (key: 'ease_anxiety', label: 'Ease anxiety'),
+    (key: 'reflect_on_life', label: 'Reflect on life'),
+    (key: 'build_better_habits', label: 'Build better habits'),
+    (key: 'stay_disciplined', label: 'Stay disciplined'),
+    (key: 'be_more_productive', label: 'Be more productive'),
+    (key: 'spiritual', label: 'Spiritual'),
+    (key: 'improve_relationships', label: 'Improve relationships'),
+    (key: 'improve_communication', label: 'Improve communication'),
+    (key: 'build_confidence', label: 'Build confidence'),
   ];
 
+  static const int _maxSelections = 3;
+
   final ProfileRepository _profileRepository = ProfileRepository();
-  String? _selectedVibeKey;
+  final Set<String> _selectedVibeKeys = <String>{};
   bool _isSaving = false;
 
   @override
@@ -65,7 +45,11 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
   Future<void> _restoreSelection() async {
     final saved = await AppSetupStorageService.getSelectedVibe();
     if (mounted && saved != null && saved.isNotEmpty) {
-      setState(() => _selectedVibeKey = saved);
+      setState(() {
+        _selectedVibeKeys
+          ..clear()
+          ..addAll(_splitKeys(saved));
+      });
     }
 
     try {
@@ -74,43 +58,62 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
         return;
       }
 
-      setState(() => _selectedVibeKey = personalization.vibe);
+      setState(() {
+        _selectedVibeKeys
+          ..clear()
+          ..addAll(_splitKeys(personalization.vibe));
+      });
     } catch (_) {
       // Ignore restore failures and allow selection flow to continue.
     }
   }
 
-  Future<void> _selectVibe(String vibeKey) async {
+  Iterable<String> _splitKeys(String raw) =>
+      raw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).take(_maxSelections);
+
+  void _toggleVibe(String vibeKey) {
     if (_isSaving) return;
-
     setState(() {
-      _isSaving = true;
-      _selectedVibeKey = vibeKey;
+      if (_selectedVibeKeys.contains(vibeKey)) {
+        _selectedVibeKeys.remove(vibeKey);
+      } else if (_selectedVibeKeys.length < _maxSelections) {
+        _selectedVibeKeys.add(vibeKey);
+      }
     });
+  }
 
-    try {
-      await _profileRepository.savePersonalization(vibe: vibeKey);
-      await AppSetupStorageService.saveSelectedVibe(vibeKey);
-      final hasCompletedSetup =
-          await AppSetupStorageService.hasCompletedSetup();
-      if (!mounted) return;
+  Future<void> _continue() async {
+    if (_selectedVibeKeys.isEmpty || _isSaving) return;
+    final joined = _selectedVibeKeys.join(',');
 
-      if (hasCompletedSetup) {
-        if (context.canPop()) {
-          context.pop();
-        } else {
-          context.go('/home');
-        }
+    setState(() => _isSaving = true);
+    await AppSetupStorageService.saveSelectedVibe(joined);
+    if (!mounted) return;
+
+    final hasCompletedSetup = await AppSetupStorageService.hasCompletedSetup();
+    if (!mounted) return;
+
+    if (hasCompletedSetup) {
+      try {
+        await _profileRepository.savePersonalization(vibe: joined);
+      } catch (error) {
+        if (!mounted) return;
+        setState(() => _isSaving = false);
+        final message = error is ApiError ? error.message : error.toString();
+        showToast(context, message);
         return;
       }
-
-      context.go('/setup/voice');
-    } catch (error) {
       if (!mounted) return;
-      setState(() => _isSaving = false);
-      final message = error is ApiError ? error.message : error.toString();
-      showToast(context, message);
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/home');
+      }
+      return;
     }
+
+    context.push('/setup/voice');
+    if (mounted) setState(() => _isSaving = false);
   }
 
   @override
@@ -132,54 +135,63 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: ContentWidth.form),
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    32,
-                    horizontalPadding,
-                    24,
-                  ),
+                  padding: EdgeInsets.fromLTRB(horizontalPadding, 32, horizontalPadding, 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       _SetupHeader(
-                        step: 'Step 1 of 2',
-                        title: 'What kind of stories are you in the mood for?',
-                        subtitle:
-                            'Pick one vibe. Aura will use it to personalize your home feed right away.',
+                        currentStep: 1,
+                        totalSteps: 2,
+                        title: 'What do you want to focus on?',
+                        subtitle: 'Pick up to 3 goals. You can always update these later.',
+                        onBack: (context.canPop() && !_isSaving) ? () => context.pop() : null,
                       ),
                       const SizedBox(height: 28),
                       Expanded(
-                        child: GridView.builder(
-                          itemCount: _vibeOptions.length,
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 14,
-                                mainAxisSpacing: 14,
-                                childAspectRatio: 0.96,
-                              ),
-                          itemBuilder: (context, index) {
-                            final option = _vibeOptions[index];
-                            final isSelected = option.key == _selectedVibeKey;
-                            final isBusy = _isSaving && isSelected;
-                            return _VibeCard(
-                              emoji: option.emoji,
-                              title: option.label,
-                              description: option.description,
-                              isSelected: isSelected,
-                              isBusy: isBusy,
-                              onTap: () => _selectVibe(option.key),
-                            );
-                          },
+                        child: SingleChildScrollView(
+                          child: Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              for (final option in _vibeOptions)
+                                _VibeChip(
+                                  label: option.label,
+                                  isSelected: _selectedVibeKeys.contains(option.key),
+                                  isAtCapacity:
+                                      _selectedVibeKeys.length >= _maxSelections &&
+                                      !_selectedVibeKeys.contains(option.key),
+                                  onTap: () => _toggleVibe(option.key),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 18),
-                      TypographyText(
-                        _isSaving
-                            ? 'Saving your vibe...'
-                            : 'Tap a vibe to continue. You can change this later from your profile.',
-                        variant: TypographyVariant.body2,
-                        color: Colors.white70,
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 60,
+                        child: AppButton(
+                          onPressed: _selectedVibeKeys.isEmpty || _isSaving ? null : _continue,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black,
+                            disabledBackgroundColor: Colors.white.withValues(alpha: 0.18),
+                            disabledForegroundColor: Colors.white.withValues(alpha: 0.6),
+                            shape: const StadiumBorder(),
+                          ),
+                          child: _isSaving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const TypographyText(
+                                  'Continue',
+                                  variant: TypographyVariant.body1,
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                        ),
                       ),
                     ],
                   ),
@@ -193,85 +205,55 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
   }
 }
 
-class _VibeCard extends StatelessWidget {
-  const _VibeCard({
-    required this.emoji,
-    required this.title,
-    required this.description,
+class _VibeChip extends StatelessWidget {
+  const _VibeChip({
+    required this.label,
     required this.isSelected,
-    required this.isBusy,
+    required this.isAtCapacity,
     required this.onTap,
   });
 
-  final String emoji;
-  final String title;
-  final String description;
+  final String label;
   final bool isSelected;
-  final bool isBusy;
+  final bool isAtCapacity;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(28),
-        onTap: isBusy ? null : onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(
-              color: isSelected ? Colors.white : Colors.white12,
+    final disabled = isAtCapacity;
+    final foreground = isSelected ? Colors.black : (disabled ? Colors.white38 : Colors.white);
+    final background = isSelected ? Colors.white : const Color(0xFF1C1F21);
+    final border = isSelected ? Colors.white : (disabled ? Colors.white10 : Colors.white12);
+
+    return Opacity(
+      opacity: disabled ? 0.6 : 1,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: disabled ? null : onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.fromLTRB(12, 7, 8, 7),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: border),
+              color: background,
             ),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isSelected
-                  ? const <Color>[Color(0xFFFFFFFF), Color(0xFFE6EEF2)]
-                  : const <Color>[Color(0xFF232628), Color(0xFF151718)],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                TypographyText(
+                  label,
+                  variant: TypographyVariant.body2,
+                  fontSize: 13,
+                  color: foreground,
+                  fontWeight: FontWeight.w600,
+                ),
+                const SizedBox(width: 6),
+                Icon(isSelected ? Icons.check : Icons.add, size: 14, color: foreground),
+              ],
             ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Text(emoji, style: const TextStyle(fontSize: 26)),
-                  const Spacer(),
-                  if (isBusy)
-                    SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: isSelected ? Colors.black : Colors.white,
-                      ),
-                    )
-                  else
-                    Icon(
-                      isSelected
-                          ? Icons.check_circle
-                          : Icons.arrow_forward_rounded,
-                      color: isSelected ? Colors.black : Colors.white54,
-                    ),
-                ],
-              ),
-              const Spacer(),
-              TypographyText(
-                title,
-                variant: TypographyVariant.body1,
-                color: isSelected ? Colors.black : Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-              const SizedBox(height: 8),
-              TypographyText(
-                description,
-                variant: TypographyVariant.body2,
-                color: isSelected ? Colors.black87 : Colors.white70,
-              ),
-            ],
           ),
         ),
       ),
@@ -281,34 +263,53 @@ class _VibeCard extends StatelessWidget {
 
 class _SetupHeader extends StatelessWidget {
   const _SetupHeader({
-    required this.step,
+    required this.currentStep,
+    required this.totalSteps,
     required this.title,
     required this.subtitle,
+    this.onBack,
   });
 
-  final String step;
+  final int currentStep;
+  final int totalSteps;
   final String title;
   final String subtitle;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            color: Colors.white.withValues(alpha: 0.08),
-          ),
-          child: TypographyText(
-            step,
-            variant: TypographyVariant.body2,
-            color: Colors.white70,
-            fontWeight: FontWeight.w600,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            if (onBack != null) ...<Widget>[_BackCircle(onTap: onBack!), const SizedBox(width: 12)],
+            Expanded(
+              child: Row(
+                children: <Widget>[
+                  for (int i = 0; i < totalSteps; i++) ...<Widget>[
+                    Expanded(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOut,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          color: i < currentStep
+                              ? Colors.white
+                              : Colors.white.withValues(alpha: 0.12),
+                        ),
+                      ),
+                    ),
+                    if (i < totalSteps - 1) const SizedBox(width: 6),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 54),
         TypographyText(
           title,
           variant: TypographyVariant.h3,
@@ -316,12 +317,31 @@ class _SetupHeader extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
         const SizedBox(height: 10),
-        TypographyText(
-          subtitle,
-          variant: TypographyVariant.body2,
-          color: Colors.white70,
-        ),
+        TypographyText(subtitle, variant: TypographyVariant.body2, color: Colors.white70),
       ],
+    );
+  }
+}
+
+class _BackCircle extends StatelessWidget {
+  const _BackCircle({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: const SizedBox(
+          width: 36,
+          height: 36,
+          child: Icon(Icons.arrow_back, size: 18, color: Colors.black),
+        ),
+      ),
     );
   }
 }
