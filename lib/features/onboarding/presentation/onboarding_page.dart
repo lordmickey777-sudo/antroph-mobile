@@ -26,7 +26,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       asset: 'assets/images/onboarding_2.png',
     ),
     (
-      title: 'Create Your Experience',
+      title: 'Create Your\nExperience',
       subtitle: 'Pick the interests and voice that shape Aura before you land in your story home.',
       asset: 'assets/images/onboarding_3.png',
     ),
@@ -74,9 +74,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: selected ? Colors.transparent : Colors.white24,
-                              border: selected
-                                  ? Border.all(color: Colors.white, width: 0.7)
-                                  : null,
+                              border: selected ? Border.all(color: Colors.white, width: 0.7) : null,
                             ),
                             child: selected
                                 ? Center(
@@ -105,79 +103,79 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           color: Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                        child: TypographyText(
-                          _slides[i].subtitle,
-                          variant: TypographyVariant.body2,
-                          textAlign: TextAlign.center,
-                          color: Colors.white70,
-                        ),
-                      ),
+                      // const SizedBox(height: 12),
+                      // Padding(
+                      //   padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                      //   child: TypographyText(
+                      //     _slides[i].subtitle,
+                      //     variant: TypographyVariant.body2,
+                      //     textAlign: TextAlign.center,
+                      //     color: Colors.white70,
+                      //   ),
+                      // ),
                       const Spacer(),
 
                       // Primary button
                       Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              height: 76,
-                              width: 200,
-                              child: AppButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: context.actionButtonBackground,
-                                  foregroundColor: context.actionButtonForeground,
-                                  shape: const StadiumBorder(),
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                ),
-                                onPressed: () async {
-                                  if (_index < _slides.length - 1) {
-                                    _controller.nextPage(
-                                      duration: const Duration(milliseconds: 250),
-                                      curve: Curves.easeOut,
-                                    );
-                                  } else {
-                                    await OnboardingStorageService.markCompleted();
-                                    if (!mounted) return;
-                                    this.context.go('/auth/login');
-                                  }
-                                },
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.max,
-                                  children: [
-                                    Container(
-                                      width: 64,
-                                      height: 64,
-                                      decoration: BoxDecoration(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            height: 58,
+                            width: 168,
+                            child: AppButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: context.actionButtonBackground,
+                                foregroundColor: context.actionButtonForeground,
+                                shape: const StadiumBorder(),
+                                padding: const EdgeInsets.symmetric(horizontal: 6),
+                              ),
+                              onPressed: () async {
+                                if (_index < _slides.length - 1) {
+                                  _controller.nextPage(
+                                    duration: const Duration(milliseconds: 250),
+                                    curve: Curves.easeOut,
+                                  );
+                                } else {
+                                  await OnboardingStorageService.markCompleted();
+                                  if (!mounted) return;
+                                  this.context.go('/auth/login');
+                                }
+                              },
+                              child: Row(
+                                mainAxisSize: MainAxisSize.max,
+                                children: [
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: context.actionButtonForeground,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.auto_awesome,
+                                      size: 22,
+                                      color: context.actionButtonBackground,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Center(
+                                      child: TypographyText(
+                                        _index < _slides.length - 1 ? 'Next' : 'Continue',
+                                        variant: TypographyVariant.body1,
                                         color: context.actionButtonForeground,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        Icons.smart_toy_outlined,
-                                        size: 32,
-                                        color: context.actionButtonBackground,
                                       ),
                                     ),
-                                    Expanded(
-                                      child: Center(
-                                        child: TypographyText(
-                                          _index < _slides.length - 1 ? 'Next' : 'Continue',
-                                          variant: TypographyVariant.body1,
-                                          color: context.actionButtonForeground,
-                                        ),
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 12.0, top: 4.0),
-                                      child: const Icon(Icons.double_arrow),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 10.0),
+                                    child: Icon(Icons.double_arrow, size: 18),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 24),
                     ],
                   );
@@ -192,10 +190,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   Widget _buildTopVisual(BuildContext context, int index) {
     final slide = _slides[index];
-    return Image.asset(
-      slide.asset,
-      width: double.infinity,
-      fit: BoxFit.fitWidth,
-    );
+    return Image.asset(slide.asset, width: double.infinity, fit: BoxFit.fitWidth);
   }
 }
