@@ -3,6 +3,7 @@ import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/features/profile/data/profile_repository.dart';
+import 'package:antroph_mobile/features/setup/data/voices_repository.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -33,6 +34,7 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
   static const int _maxSelections = 3;
 
   final ProfileRepository _profileRepository = ProfileRepository();
+  final VoicesRepository _voicesRepository = VoicesRepository();
   final Set<String> _selectedVibeKeys = <String>{};
   bool _isSaving = false;
 
@@ -40,6 +42,8 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
   void initState() {
     super.initState();
     _restoreSelection();
+    // Warm the voices cache in the background so /setup/voice opens instantly.
+    _voicesRepository.prefetch();
   }
 
   Future<void> _restoreSelection() async {

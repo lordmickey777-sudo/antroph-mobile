@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/core/onboarding/app_setup_storage_service.dart';
@@ -10,6 +11,7 @@ import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -20,52 +22,47 @@ class VoiceSelectionPage extends StatefulWidget {
   State<VoiceSelectionPage> createState() => _VoiceSelectionPageState();
 }
 
-typedef _BrandedVoice = ({
-  String name,
-  String tone,
-  IconData icon,
-  String voiceId,
-});
+typedef _BrandedVoice = ({String name, String tone, String voiceId, List<Color> gradient});
 
-class _VoiceSelectionPageState extends State<VoiceSelectionPage> {
+class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProviderStateMixin {
   // Branded mobile voices mapped to their backend voice_id.
-  // The backend preview_audio_url for each voice_id is fetched from GET /ai/voices.
+  // Gradients drive the orb, background tint, and strip accents.
   static const List<_BrandedVoice> _voices = <_BrandedVoice>[
     (
       name: 'Nova',
       tone: 'Bright and playful',
-      icon: Icons.wb_sunny_outlined,
       voiceId: 'shimmer',
+      gradient: <Color>[Color(0xFFFFD36E), Color(0xFFFF6A88)],
     ),
     (
       name: 'Atlas',
       tone: 'Confident and grounded',
-      icon: Icons.public_outlined,
       voiceId: 'cedar',
+      gradient: <Color>[Color(0xFF7FD8FF), Color(0xFF2E5BFF)],
     ),
     (
       name: 'Luna',
       tone: 'Gentle and dreamy',
-      icon: Icons.nights_stay_outlined,
       voiceId: 'marin',
+      gradient: <Color>[Color(0xFFC7B8FF), Color(0xFF5B5AD6)],
     ),
     (
       name: 'Sage',
       tone: 'Calm and thoughtful',
-      icon: Icons.self_improvement_outlined,
       voiceId: 'sage',
+      gradient: <Color>[Color(0xFFA8E6B1), Color(0xFF2F9E7B)],
     ),
     (
       name: 'Echo',
       tone: 'Energetic and lively',
-      icon: Icons.graphic_eq_outlined,
       voiceId: 'coral',
+      gradient: <Color>[Color(0xFFFF9BE4), Color(0xFF8A2BE2)],
     ),
     (
       name: 'Milo',
       tone: 'Warm and friendly',
-      icon: Icons.favorite_border,
       voiceId: 'ash',
+      gradient: <Color>[Color(0xFFFFC7A8), Color(0xFFE94F6E)],
     ),
   ];
 
@@ -73,7 +70,10 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> {
   final VoicesRepository _voicesRepository = VoicesRepository();
   final AudioPlayer _player = AudioPlayer();
 
-  String? _selectedVoice;
+  late final AnimationController _idleController;
+
+  int _selectedIndex = 0;
+  bool _hasUserSelected = false;
   bool _isSaving = false;
 
   Map<String, String> _previewUrls = <String, String>{};
@@ -81,9 +81,13 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> {
   bool _playerLoading = false;
   StreamSubscription<PlayerState>? _playerSub;
 
+  _BrandedVoice get _current => _voices[_selectedIndex];
+
   @override
   void initState() {
     super.initState();
+    _idleController = AnimationController(vsync: this, duration: const Duration(seconds: 7))
+      ..repeat();
     _restoreVoice();
     _loadVoices();
     _playerSub = _player.playerStateStream.listen(_onPlayerState);
@@ -91,6 +95,7 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> {
 
   @override
   void dispose() {
+    _idleController.dispose();
     _playerSub?.cancel();
     _player.dispose();
     super.dispose();
@@ -99,7 +104,12 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> {
   Future<void> _restoreVoice() async {
     final savedVoice = await AppSetupStorageService.getSelectedVoice();
     if (!mounted || savedVoice == null || savedVoice.isEmpty) return;
-    setState(() => _selectedVoice = savedVoice);
+    final index = _voices.indexWhere((v) => v.name == savedVoice);
+    if (index < 0) return;
+    setState(() {
+      _selectedIndex = index;
+      _hasUserSelected = true;
+    });
   }
 
   Future<void> _loadVoices() async {
@@ -129,17 +139,24 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> {
     }
   }
 
-  Future<void> _onVoiceTap(_BrandedVoice voice) async {
-    setState(() => _selectedVoice = voice.name);
+  Future<void> _selectAndPreview(int index) async {
+    if (_isSaving) return;
+    final voice = _voices[index];
+    final switching = index != _selectedIndex;
 
-    final url = _previewUrls[voice.voiceId];
-    if (url == null || url.isEmpty) {
-      // No preview available — selection still works.
-      return;
+    if (switching) {
+      HapticFeedback.selectionClick();
+      setState(() {
+        _selectedIndex = index;
+        _hasUserSelected = true;
+      });
     }
 
+    final url = _previewUrls[voice.voiceId];
+    if (url == null || url.isEmpty) return;
+
     // Re-tapping the currently playing voice stops playback.
-    if (_playingVoiceId == voice.voiceId && _player.playing) {
+    if (!switching && _playingVoiceId == voice.voiceId && _player.playing) {
       await _player.stop();
       if (mounted) setState(() => _playingVoiceId = null);
       return;
@@ -166,8 +183,8 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> {
   }
 
   Future<void> _continue() async {
-    final selectedVoice = _selectedVoice;
-    if (selectedVoice == null || _isSaving) return;
+    if (_isSaving || !_hasUserSelected) return;
+    final selectedVoice = _current.name;
 
     final savedVibe = await AppSetupStorageService.getSelectedVibe();
     if (!mounted) return;
@@ -191,28 +208,33 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> {
 
     await _player.stop();
     await AppSetupStorageService.saveSelectedVoice(selectedVoice);
-    final selected = _voices.firstWhere(
-      (v) => v.name == selectedVoice,
-      orElse: () => _voices.first,
-    );
-    await AppSetupStorageService.saveSelectedVoiceId(selected.voiceId);
+    await AppSetupStorageService.saveSelectedVoiceId(_current.voiceId);
     await AppSetupStorageService.markSetupCompleted();
     if (!mounted) return;
-    context.go('/setup/welcome');
+    context.go('/home');
   }
 
   @override
   Widget build(BuildContext context) {
     final horizontalPadding = AppPadding.form.of(context);
+    final voice = _current;
+    final isPlayingCurrent = _playingVoiceId == voice.voiceId;
+    final hasPreview = _previewUrls[voice.voiceId]?.isNotEmpty == true;
+
     return Theme(
       data: AppTheme.darkTheme,
       child: Scaffold(
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[Color(0xFF16191B), Color(0xFF0A0C0D)],
+        body: AnimatedContainer(
+          duration: const Duration(milliseconds: 650),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: const Alignment(0, -0.45),
+              radius: 1.3,
+              colors: <Color>[
+                Color.lerp(voice.gradient.first, const Color(0xFF0A0C0D), 0.92)!,
+                const Color(0xFF07090A),
+              ],
             ),
           ),
           child: SafeArea(
@@ -220,21 +242,15 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: ContentWidth.form),
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    32,
-                    horizontalPadding,
-                    24,
-                  ),
+                  padding: EdgeInsets.fromLTRB(horizontalPadding, 24, horizontalPadding, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       _SetupHeader(
                         currentStep: 2,
                         totalSteps: 2,
-                        title: 'Select one of 6 voices',
-                        subtitle:
-                            'Tap a voice to hear a quick preview, then pick the one you like best.',
+                        title: 'Pick a voice for Aura',
+                        subtitle: 'Tap the orb to hear a preview.',
                         onBack: _isSaving
                             ? null
                             : () {
@@ -245,53 +261,85 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> {
                                 }
                               },
                       ),
-                      const SizedBox(height: 24),
                       Expanded(
-                        child: ListView.separated(
-                          itemCount: _voices.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final voice = _voices[index];
-                            final isSelected = voice.name == _selectedVoice;
-                            final isPlaying = _playingVoiceId == voice.voiceId;
-                            final hasPreview =
-                                _previewUrls[voice.voiceId]?.isNotEmpty == true;
-                            return _VoiceCard(
-                              name: voice.name,
-                              tone: voice.tone,
-                              icon: voice.icon,
-                              isSelected: isSelected,
-                              isPlaying: isPlaying,
-                              isLoading: isPlaying && _playerLoading,
-                              hasPreview: hasPreview,
-                              onTap: () => _onVoiceTap(voice),
-                            );
-                          },
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              _VoiceOrb(
+                                gradient: voice.gradient,
+                                idle: _idleController,
+                                isPlaying: isPlayingCurrent && _player.playing,
+                                isLoading: isPlayingCurrent && _playerLoading,
+                                hasPreview: hasPreview,
+                                onTap: () => _selectAndPreview(_selectedIndex),
+                              ),
+                              const SizedBox(height: 20),
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 280),
+                                transitionBuilder: (child, anim) => FadeTransition(
+                                  opacity: anim,
+                                  child: SlideTransition(
+                                    position: Tween<Offset>(
+                                      begin: const Offset(0, 0.15),
+                                      end: Offset.zero,
+                                    ).animate(anim),
+                                    child: child,
+                                  ),
+                                ),
+                                child: Column(
+                                  key: ValueKey<String>(voice.name),
+                                  children: <Widget>[
+                                    TypographyText(
+                                      voice.name,
+                                      variant: TypographyVariant.h2,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    TypographyText(
+                                      voice.tone,
+                                      variant: TypographyVariant.body2,
+                                      color: Colors.white.withValues(alpha: 0.72),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
+                      _VoiceStrip(
+                        voices: _voices,
+                        selectedIndex: _selectedIndex,
+                        playingVoiceId: _playingVoiceId,
+                        previewUrls: _previewUrls,
+                        onSelect: _selectAndPreview,
+                      ),
+                      const SizedBox(height: 20),
                       SizedBox(
                         width: double.infinity,
                         height: 60,
                         child: AppButton(
-                          onPressed: _selectedVoice == null ? null : _continue,
+                          onPressed: (_isSaving || !_hasUserSelected) ? null : _continue,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: Colors.black,
+                            disabledBackgroundColor: Colors.white.withValues(alpha: 0.18),
+                            disabledForegroundColor: Colors.white.withValues(alpha: 0.6),
                             shape: const StadiumBorder(),
                           ),
                           child: _isSaving
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
+                                  child: CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const TypographyText(
                                   'Continue',
                                   variant: TypographyVariant.body1,
+                                  color: Colors.black,
                                   fontWeight: FontWeight.w600,
                                 ),
                         ),
@@ -308,22 +356,18 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> {
   }
 }
 
-class _VoiceCard extends StatelessWidget {
-  const _VoiceCard({
-    required this.name,
-    required this.tone,
-    required this.icon,
-    required this.isSelected,
+class _VoiceOrb extends StatelessWidget {
+  const _VoiceOrb({
+    required this.gradient,
+    required this.idle,
     required this.isPlaying,
     required this.isLoading,
     required this.hasPreview,
     required this.onTap,
   });
 
-  final String name;
-  final String tone;
-  final IconData icon;
-  final bool isSelected;
+  final List<Color> gradient;
+  final AnimationController idle;
   final bool isPlaying;
   final bool isLoading;
   final bool hasPreview;
@@ -331,71 +375,252 @@ class _VoiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = isSelected ? Colors.black : Colors.white;
-    final fadedForeground = isSelected ? Colors.black54 : Colors.white54;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 230,
+        height: 230,
+        child: AnimatedBuilder(
+          animation: idle,
+          builder: (context, _) {
+            final t = idle.value;
+            final breathing = 1 + math.sin(t * 2 * math.pi) * 0.02;
+            final playingPulse = isPlaying ? 1 + math.sin(t * math.pi * 8) * 0.035 : 1.0;
+            return Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                if (isPlaying) ..._buildRipples(t),
+                Transform.scale(
+                  scale: breathing * playingPulse,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 550),
+                    curve: Curves.easeOut,
+                    width: 180,
+                    height: 180,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        center: Alignment(
+                          math.sin(t * 2 * math.pi) * 0.25,
+                          math.cos(t * 2 * math.pi) * 0.25 - 0.15,
+                        ),
+                        radius: 0.95,
+                        colors: <Color>[
+                          gradient.first,
+                          gradient.last,
+                          Color.lerp(gradient.last, Colors.black, 0.55)!,
+                        ],
+                        stops: const <double>[0.0, 0.6, 1.0],
+                      ),
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(
+                          color: gradient.first.withValues(alpha: 0.18),
+                          blurRadius: 38,
+                          spreadRadius: 0,
+                        ),
+                        BoxShadow(
+                          color: gradient.last.withValues(alpha: 0.12),
+                          blurRadius: 60,
+                          spreadRadius: -14,
+                        ),
+                      ],
+                    ),
+                    child: Align(
+                      alignment: const Alignment(-0.35, -0.5),
+                      child: Container(
+                        width: 60,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(40),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: <Color>[
+                              Colors.white.withValues(alpha: 0.5),
+                              Colors.white.withValues(alpha: 0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                _OrbOverlay(isPlaying: isPlaying, isLoading: isLoading, hasPreview: hasPreview),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildRipples(double t) {
+    return <Widget>[for (int i = 0; i < 3; i++) _buildRipple((t + i / 3) % 1.0)];
+  }
+
+  Widget _buildRipple(double t) {
+    final size = 180 + t * 70;
+    return IgnorePointer(
+      child: Opacity(
+        opacity: (1 - t).clamp(0.0, 1.0) * 0.45,
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: gradient.first.withValues(alpha: 0.6), width: 1.5),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OrbOverlay extends StatelessWidget {
+  const _OrbOverlay({required this.isPlaying, required this.isLoading, required this.hasPreview});
+
+  final bool isPlaying;
+  final bool isLoading;
+  final bool hasPreview;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget child;
+    if (isLoading) {
+      child = const SizedBox(
+        key: ValueKey('loading'),
+        width: 22,
+        height: 22,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+        ),
+      );
+    } else if (isPlaying) {
+      child = const Icon(Icons.stop_rounded, key: ValueKey('stop'), color: Colors.black, size: 26);
+    } else {
+      child = Icon(
+        hasPreview ? Icons.play_arrow_rounded : Icons.volume_off_rounded,
+        key: ValueKey(hasPreview ? 'play' : 'mute'),
+        color: Colors.black,
+        size: hasPreview ? 28 : 22,
+      );
+    }
+
+    return Container(
+      width: 54,
+      height: 54,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white,
+        boxShadow: <BoxShadow>[
+          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 12, spreadRadius: -2),
+        ],
+      ),
+      alignment: Alignment.center,
+      child: AnimatedSwitcher(duration: const Duration(milliseconds: 180), child: child),
+    );
+  }
+}
+
+class _VoiceStrip extends StatelessWidget {
+  const _VoiceStrip({
+    required this.voices,
+    required this.selectedIndex,
+    required this.playingVoiceId,
+    required this.previewUrls,
+    required this.onSelect,
+  });
+
+  final List<_BrandedVoice> voices;
+  final int selectedIndex;
+  final String? playingVoiceId;
+  final Map<String, String> previewUrls;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        itemCount: voices.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (context, index) {
+          final voice = voices[index];
+          return _VoicePill(
+            voice: voice,
+            isSelected: index == selectedIndex,
+            isPlaying: playingVoiceId == voice.voiceId,
+            hasPreview: previewUrls[voice.voiceId]?.isNotEmpty == true,
+            onTap: () => onSelect(index),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _VoicePill extends StatelessWidget {
+  const _VoicePill({
+    required this.voice,
+    required this.isSelected,
+    required this.isPlaying,
+    required this.hasPreview,
+    required this.onTap,
+  });
+
+  final _BrandedVoice voice;
+  final bool isSelected;
+  final bool isPlaying;
+  final bool hasPreview;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(24),
         onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
-          padding: const EdgeInsets.all(18),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.fromLTRB(6, 5, 12, 5),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.white : const Color(0xFF1B1D1F),
-            borderRadius: BorderRadius.circular(24),
+            color: isSelected
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: isSelected ? Colors.white : Colors.white10,
+              color: isSelected
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : Colors.white.withValues(alpha: 0.08),
+              width: isSelected ? 1.2 : 1,
             ),
           ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? Colors.black.withValues(alpha: 0.08)
-                      : Colors.white10,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(icon, color: foreground),
+              _PillOrb(gradient: voice.gradient, isSelected: isSelected, isPlaying: isPlaying),
+              const SizedBox(width: 10),
+              TypographyText(
+                voice.name,
+                variant: TypographyVariant.body2,
+                fontSize: 13,
+                color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.72),
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    TypographyText(
-                      name,
-                      variant: TypographyVariant.body1,
-                      color: foreground,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    const SizedBox(height: 4),
-                    TypographyText(
-                      tone,
-                      variant: TypographyVariant.body2,
-                      color: isSelected ? Colors.black87 : Colors.white70,
-                    ),
-                  ],
+              if (!hasPreview) ...<Widget>[
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.volume_off_outlined,
+                  size: 12,
+                  color: Colors.white.withValues(alpha: 0.4),
                 ),
-              ),
-              if (hasPreview) ...<Widget>[
-                _PreviewIndicator(
-                  isPlaying: isPlaying,
-                  isLoading: isLoading,
-                  color: foreground,
-                ),
-                const SizedBox(width: 10),
-              ] else ...<Widget>[
-                Icon(Icons.volume_off_outlined, size: 18, color: fadedForeground),
-                const SizedBox(width: 10),
               ],
-              Icon(
-                isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
-                color: isSelected ? Colors.black : Colors.white54,
-              ),
             ],
           ),
         ),
@@ -404,33 +629,37 @@ class _VoiceCard extends StatelessWidget {
   }
 }
 
-class _PreviewIndicator extends StatelessWidget {
-  const _PreviewIndicator({
-    required this.isPlaying,
-    required this.isLoading,
-    required this.color,
-  });
+class _PillOrb extends StatelessWidget {
+  const _PillOrb({required this.gradient, required this.isSelected, required this.isPlaying});
 
+  final List<Color> gradient;
+  final bool isSelected;
   final bool isPlaying;
-  final bool isLoading;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return SizedBox(
-        width: 22,
-        height: 22,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation<Color>(color),
+    return Container(
+      width: 26,
+      height: 26,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          center: const Alignment(-0.3, -0.4),
+          radius: 0.95,
+          colors: <Color>[gradient.first, gradient.last],
         ),
-      );
-    }
-    return Icon(
-      isPlaying ? Icons.stop_circle_outlined : Icons.play_circle_outline,
-      color: color,
-      size: 26,
+        boxShadow: isSelected
+            ? <BoxShadow>[
+                BoxShadow(
+                  color: gradient.first.withValues(alpha: 0.55),
+                  blurRadius: 12,
+                  spreadRadius: -2,
+                ),
+              ]
+            : null,
+      ),
+      alignment: Alignment.center,
+      child: isPlaying ? const Icon(Icons.graphic_eq_rounded, size: 13, color: Colors.white) : null,
     );
   }
 }
@@ -458,10 +687,7 @@ class _SetupHeader extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            if (onBack != null) ...<Widget>[
-              _BackCircle(onTap: onBack!),
-              const SizedBox(width: 12),
-            ],
+            if (onBack != null) ...<Widget>[_BackCircle(onTap: onBack!), const SizedBox(width: 12)],
             Expanded(
               child: Row(
                 children: <Widget>[
@@ -494,11 +720,7 @@ class _SetupHeader extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
         const SizedBox(height: 10),
-        TypographyText(
-          subtitle,
-          variant: TypographyVariant.body2,
-          color: Colors.white70,
-        ),
+        TypographyText(subtitle, variant: TypographyVariant.body2, color: Colors.white70),
       ],
     );
   }
@@ -520,11 +742,7 @@ class _BackCircle extends StatelessWidget {
         child: const SizedBox(
           width: 36,
           height: 36,
-          child: Icon(
-            Icons.arrow_back,
-            size: 18,
-            color: Colors.black,
-          ),
+          child: Icon(Icons.arrow_back, size: 18, color: Colors.black),
         ),
       ),
     );

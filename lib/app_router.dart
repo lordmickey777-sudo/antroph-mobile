@@ -16,7 +16,6 @@ import 'features/profile/presentation/scan_page.dart';
 import 'features/profile/presentation/subscription_page.dart';
 import 'features/setup/presentation/interest_selection_page.dart';
 import 'features/setup/presentation/voice_selection_page.dart';
-import 'features/setup/presentation/welcome_animation_page.dart';
 import 'features/support/presentation/support_page.dart';
 import 'features/splash/presentation/splash_page.dart';
 
@@ -67,11 +66,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/setup/voice',
         name: 'setup-voice',
         builder: (context, state) => const VoiceSelectionPage(),
-      ),
-      GoRoute(
-        path: '/setup/welcome',
-        name: 'setup-welcome',
-        builder: (context, state) => const WelcomeAnimationPage(),
       ),
       GoRoute(
         path: '/profile/customization',
