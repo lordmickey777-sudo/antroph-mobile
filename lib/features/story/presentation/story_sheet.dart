@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -81,7 +83,15 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
     final tags = detail?.tags ?? const <String>[];
 
     return Stack(
+      clipBehavior: Clip.none,
       children: [
+        Positioned(
+          top: -60,
+          left: 0,
+          right: 0,
+          height: size.height * 1 + 60,
+          child: IgnorePointer(child: _SoftImageBackdrop(imageAsset: widget.imageAsset)),
+        ),
         CustomScrollView(
           controller: widget.scrollController,
           slivers: [
@@ -274,6 +284,41 @@ class _HeroCard extends ConsumerWidget {
           if (tags.isNotEmpty)
             Positioned(top: 20, left: 20, right: 20, child: _TagChips(tags: tags)),
         ],
+      ),
+    );
+  }
+}
+
+class _SoftImageBackdrop extends StatelessWidget {
+  const _SoftImageBackdrop({required this.imageAsset});
+
+  final String imageAsset;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      shaderCallback: (rect) => LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.black.withValues(alpha: 1.0),
+          Colors.black.withValues(alpha: 0.82),
+          Colors.black.withValues(alpha: 0.55),
+          Colors.black.withValues(alpha: 0.32),
+          Colors.black.withValues(alpha: 0.16),
+          Colors.black.withValues(alpha: 0.06),
+          Colors.black.withValues(alpha: 0.015),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.15, 0.3, 0.45, 0.58, 0.7, 0.8, 0.9],
+      ).createShader(rect),
+      blendMode: BlendMode.dstIn,
+      child: ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 120, sigmaY: 120),
+        child: Opacity(
+          opacity: 0.38,
+          child: SizedBox.expand(child: _HeroImage(image: imageAsset)),
+        ),
       ),
     );
   }
