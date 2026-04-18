@@ -49,7 +49,6 @@ class CollectionsPage extends ConsumerWidget {
               title: 'No collections yet',
               description:
                   'Keep an eye out for curated series coming your way.',
-              assetPath: 'assets/images/antroph_smile.png',
             );
           }
           final horizontalPadding = AppPadding.horizontal.of(context);
@@ -194,7 +193,6 @@ class CollectionDetailPage extends ConsumerWidget {
               title: 'Nothing to show yet',
               description:
                   'This collection does not have stories ready for play.',
-              assetPath: 'assets/images/antroph_neutral.png',
             );
           }
           return ListView.builder(
@@ -653,7 +651,6 @@ class _PageError extends StatelessWidget {
     return EmptyState(
       title: message,
       description: 'Let\'s try again and refresh the list.',
-      assetPath: 'assets/images/antroph_frown.png',
       actionLabel: 'Retry',
       onAction: onRetry,
     );

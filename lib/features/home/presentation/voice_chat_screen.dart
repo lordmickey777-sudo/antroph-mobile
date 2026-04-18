@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/features/home/models/expression_models.dart';
@@ -20,12 +22,14 @@ class VoiceChatScreen extends ConsumerStatefulWidget {
     this.mascotConfig,
     this.expressionStream,
     this.onEnd,
+    this.showMascotFace = true,
   });
 
   final bool isStoryMode;
   final MascotConfig? mascotConfig;
   final Stream<MascotExpressionEvent>? expressionStream;
   final VoidCallback? onEnd;
+  final bool showMascotFace;
 
   @override
   ConsumerState<VoiceChatScreen> createState() => _VoiceChatScreenState();
@@ -94,35 +98,45 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen> {
         final horizontalPadding = AppPadding.horizontal.fromConstraints(
           constraints,
         );
-        final faceSize = (constraints.maxWidth * 0.75).clamp(250.0, 380.0);
+        final faceSize = math
+            .min(
+              constraints.maxWidth * 0.75,
+              constraints.maxHeight * 0.56,
+            )
+            .clamp(220.0, 380.0);
         return Column(
           children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
-                12,
-                horizontalPadding,
-                4,
-              ),
-              child: _Header(
-                voiceState: voiceState,
-                aiAudioLevelStream: voiceController.aiAudioLevelStream,
-                mascotConfig: widget.mascotConfig,
-                expressionStream: widget.expressionStream,
-                onReconnect: chatController?.forceReconnect,
-                onStartVoice: voiceController.startRecording,
-                onStopVoice: voiceController.stopRecordingAndSend,
-                onStopVoicePlayback: () {
-                  voiceController.stopPlayback(restartListening: true);
-                },
-                faceSize: faceSize,
-                hasConversation:
-                    voiceState.conversationHistory.isNotEmpty ||
-                    (voiceState.userTranscription?.isNotEmpty ?? false) ||
-                    (voiceState.aiResponse?.isNotEmpty ?? false),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    12,
+                    horizontalPadding,
+                    4,
+                  ),
+                  child: _Header(
+                    voiceState: voiceState,
+                    aiAudioLevelStream: voiceController.aiAudioLevelStream,
+                    mascotConfig: widget.mascotConfig,
+                    expressionStream: widget.expressionStream,
+                    showMascotFace: widget.showMascotFace,
+                    onReconnect: chatController?.forceReconnect,
+                    onStartVoice: voiceController.startRecording,
+                    onStopVoice: voiceController.stopRecordingAndSend,
+                    onStopVoicePlayback: () {
+                      voiceController.stopPlayback(restartListening: true);
+                    },
+                    faceSize: faceSize,
+                    hasConversation:
+                        voiceState.conversationHistory.isNotEmpty ||
+                        (voiceState.userTranscription?.isNotEmpty ?? false) ||
+                        (voiceState.aiResponse?.isNotEmpty ?? false),
+                  ),
+                ),
               ),
             ),
-            const Spacer(),
             SafeArea(
               top: false,
               child: Padding(
@@ -168,6 +182,7 @@ class _Header extends StatelessWidget {
     required this.aiAudioLevelStream,
     this.mascotConfig,
     this.expressionStream,
+    this.showMascotFace = true,
     this.onReconnect,
     required this.onStartVoice,
     required this.onStopVoice,
@@ -180,6 +195,7 @@ class _Header extends StatelessWidget {
   final Stream<double> aiAudioLevelStream;
   final MascotConfig? mascotConfig;
   final Stream<MascotExpressionEvent>? expressionStream;
+  final bool showMascotFace;
   final VoidCallback? onReconnect;
   final VoidCallback onStartVoice;
   final VoidCallback onStopVoice;
@@ -205,13 +221,29 @@ class _Header extends StatelessWidget {
                 child: SizedBox(
                   width: faceSize,
                   height: faceSize,
-                  child: VoiceActivityFace(
-                    levelStream: aiAudioLevelStream,
-                    expressionStream: expressionStream,
-                    threshold: 0.008,
-                    silenceDelay: const Duration(milliseconds: 450),
-                    mascotConfig: mascotConfig,
-                  ),
+                  child: showMascotFace
+                      ? VoiceActivityFace(
+                          levelStream: aiAudioLevelStream,
+                          expressionStream: expressionStream,
+                          threshold: 0.008,
+                          silenceDelay: const Duration(milliseconds: 450),
+                          mascotConfig: mascotConfig,
+                        )
+                      : DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: context.isDarkMode
+                                ? Colors.white.withValues(alpha: 0.06)
+                                : Colors.black.withValues(alpha: 0.04),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Icon(
+                              Icons.face_rounded,
+                              size: (faceSize * 0.22).clamp(36.0, 64.0),
+                              color: context.primaryTextColor,
+                            ),
+                          ),
+                        ),
                 ),
               ),
             ),

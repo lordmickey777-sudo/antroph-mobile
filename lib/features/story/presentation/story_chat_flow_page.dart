@@ -1,15 +1,14 @@
 import 'dart:async';
 
-import 'package:antroph_mobile/core/navigation/app_route_observer.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/features/home/models/chat_models.dart';
-import 'package:antroph_mobile/features/home/presentation/voice_chat_screen.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/home/widgets/chat_bubble.dart';
-import 'package:antroph_mobile/features/home/widgets/permission_modal.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
+import 'package:antroph_mobile/features/story/presentation/story_voice_page.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
+import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:flutter/cupertino.dart';
@@ -26,6 +25,7 @@ class StoryChatFlowPage extends ConsumerStatefulWidget {
     this.storySubtitle,
     this.storyImage,
     this.isAddedToPlaylist = false,
+    this.voicePageBuilder,
   });
 
   final String storyId;
@@ -35,29 +35,20 @@ class StoryChatFlowPage extends ConsumerStatefulWidget {
   final String? storySubtitle;
   final String? storyImage;
   final bool isAddedToPlaylist;
+  final WidgetBuilder? voicePageBuilder;
 
   @override
   ConsumerState<StoryChatFlowPage> createState() => _StoryChatFlowPageState();
 }
 
-class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
-    with WidgetsBindingObserver, RouteAware, TickerProviderStateMixin {
-  ModalRoute<void>? _modalRoute;
-  late final TabController _tabController;
-  int _lastTabIndex = 0;
+class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage> with WidgetsBindingObserver {
   bool _sessionStarted = false;
-  bool _voiceTabVisited = false;
-  bool _buildVoiceUi = false;
   VoiceChatController? _voiceController;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _tabController = TabController(length: 2, vsync: this);
-    _lastTabIndex = _tabController.index;
-    _tabController.addListener(_handleTabChange);
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _voiceController = ref.read(voiceChatControllerProvider.notifier);
       _initStorySessionAndChatMode();
@@ -75,54 +66,11 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
       unawaited(voiceController.startStorySession(widget.storyId));
     }
 
-    // Chat-first: keep this tab silent and prevent auto-listen from kicking in.
+    // Chat-first: keep this page silent and prevent auto-listen.
     unawaited(voiceController.stopPlayback());
     final voiceState = ref.read(voiceChatControllerProvider);
     if (!voiceState.isMuted) {
       voiceController.toggleMute();
-    }
-  }
-
-  void _handleTabChange() {
-    final index = _tabController.index;
-    if (index == _lastTabIndex) return;
-    _lastTabIndex = index;
-    if (index == 0) {
-      _enterChatTab();
-    } else {
-      _enterVoiceTab();
-    }
-  }
-
-  void _enterChatTab() {
-    final voiceController = ref.read(voiceChatControllerProvider.notifier);
-    final voiceState = ref.read(voiceChatControllerProvider);
-
-    if (!voiceState.isMuted) {
-      voiceController.toggleMute();
-    }
-    unawaited(voiceController.stopPlayback());
-  }
-
-  void _enterVoiceTab() {
-    if (!_voiceTabVisited) {
-      setState(() => _voiceTabVisited = true);
-    }
-    if (!_buildVoiceUi) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (_buildVoiceUi) return;
-        setState(() => _buildVoiceUi = true);
-      });
-    }
-
-    final voiceController = ref.read(voiceChatControllerProvider.notifier);
-    final voiceState = ref.read(voiceChatControllerProvider);
-
-    if (voiceState.isMuted) {
-      voiceController.toggleMute();
-    } else if (!voiceState.isBusy && voiceState.isSessionReady) {
-      unawaited(voiceController.startRecording());
     }
   }
 
@@ -131,8 +79,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
       context: context,
       builder: (_, scrollController) => StorySheetContent(
         storyId: widget.storyId,
-        title:
-            (widget.storyTitle?.isNotEmpty ?? false) ? widget.storyTitle! : 'Story',
+        title: (widget.storyTitle?.isNotEmpty ?? false) ? widget.storyTitle! : 'Story',
         subtitle: widget.storySubtitle ?? '',
         imageAsset: (widget.storyImage?.isNotEmpty ?? false)
             ? widget.storyImage!
@@ -144,39 +91,45 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     );
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final route = ModalRoute.of(context);
-    if (route != null && route != _modalRoute) {
-      if (_modalRoute != null) {
-        appRouteObserver.unsubscribe(this);
-      }
-      _modalRoute = route;
-      appRouteObserver.subscribe(this, route);
+  void _openVoicePage() {
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    final voiceState = ref.read(voiceChatControllerProvider);
+
+    // Ensure we aren't recording while transitioning.
+    if (!voiceState.isMuted) {
+      voiceController.toggleMute();
     }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            widget.voicePageBuilder ??
+            (_) => StoryVoicePage(
+              storyId: widget.storyId,
+              storyTitle: widget.storyTitle,
+              storySubtitle: widget.storySubtitle,
+              storyImage: widget.storyImage,
+              mascotConfig: widget.mascotConfig,
+              isAddedToPlaylist: widget.isAddedToPlaylist,
+            ),
+      ),
+    );
   }
 
   @override
   void dispose() {
-    if (_modalRoute != null) {
-      appRouteObserver.unsubscribe(this);
-    }
-    _tabController.removeListener(_handleTabChange);
-    _tabController.dispose();
-    if (_voiceController != null) {
-      _voiceController!.pauseStorySession();
-      _voiceController!.endStorySession();
-    }
     WidgetsBinding.instance.removeObserver(this);
+    if (_voiceController != null) {
+      _voiceController!.endStorySession();
+      _voiceController!.stopPlayback();
+    }
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       voiceController.pauseStorySession();
     } else if (state == AppLifecycleState.resumed) {
       voiceController.resumePausedSession();
@@ -184,184 +137,59 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
   }
 
   @override
-  void didPushNext() {
-    ref.read(voiceChatControllerProvider.notifier).pauseStorySession();
-  }
-
-  @override
-  void didPopNext() {
-    ref.read(voiceChatControllerProvider.notifier).resumePausedSession();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    ref.listen<VoiceChatState>(voiceChatControllerProvider, (
-      previous,
-      next,
-    ) async {
-      // When the Aura tab is selected but the voice UI isn't built yet (first
-      // open), we still need to handle microphone education/settings dialogs.
-      if (mounted && _tabController.index == 1 && !_buildVoiceUi) {
-        await _handleVoicePermissionDialogs(previous, next);
-      }
+    ref.listen<VoiceChatState>(voiceChatControllerProvider, (previous, next) {
       if (!mounted) return;
       final error = next.errorMessage;
-      if (error != null &&
-          error.isNotEmpty &&
-          error != (previous?.errorMessage ?? '')) {
+      if (error != null && error.isNotEmpty && error != (previous?.errorMessage ?? '')) {
         showToast(context, error);
       }
     });
 
-    final voiceController = ref.read(voiceChatControllerProvider.notifier);
-    final title = (widget.storyTitle?.isNotEmpty ?? false)
-        ? widget.storyTitle!
-        : 'Chat';
+    final title = (widget.storyTitle?.isNotEmpty ?? false) ? widget.storyTitle! : 'Chat';
 
-    return Scaffold(
-      backgroundColor: context.backgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        titleSpacing: 16,
-        title: TypographyText(
-          title,
-          variant: TypographyVariant.h4,
-          color: context.primaryTextColor,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          softWrap: false,
-        ),
-        actions: [
-          IconButton(
-            onPressed: () => _openStoryDetails(context),
-            icon: const Icon(CupertinoIcons.info_circle),
+    return WillPopScope(
+      onWillPop: () async {
+        final voiceController = ref.read(voiceChatControllerProvider.notifier);
+        await voiceController.endStorySession();
+        await voiceController.stopPlayback();
+        return true;
+      },
+      child: Scaffold(
+        backgroundColor: context.backgroundColor,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          titleSpacing: 16,
+          title: TypographyText(
+            title,
+            variant: TypographyVariant.h4,
             color: context.primaryTextColor,
-            tooltip: 'Story details',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            fontSize: 18,
+            softWrap: false,
           ),
-          const SizedBox(width: 4),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: context.primaryTextColor,
-          labelColor: context.primaryTextColor,
-          unselectedLabelColor: context.secondaryTextColor,
-          tabs: const [
-            Tab(text: 'Chat'),
-            Tab(text: 'Aura'),
+          actions: [
+            IconButton(
+              onPressed: () => _openStoryDetails(context),
+              icon: const Icon(CupertinoIcons.info_circle),
+              color: context.primaryTextColor,
+              tooltip: 'Story details',
+            ),
+            const SizedBox(width: 4),
           ],
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          const _StoryTextChatTab(),
-          _voiceTabVisited
-              ? (_buildVoiceUi
-                    ? SafeArea(
-                        child: VoiceChatScreen(
-                          isStoryMode: true,
-                          mascotConfig: widget.mascotConfig,
-                          expressionStream: voiceController.mascotExpressionStream,
-                          onEnd: () {
-                            voiceController.endStorySession();
-                            Navigator.of(context).pop();
-                          },
-                        ),
-                      )
-                    : const _VoiceTabPlaceholder(
-                        title: 'Loading Aura…',
-                        subtitle: 'Getting the mascot ready.',
-                      ))
-              : const _VoiceTabPlaceholder(
-                  title: 'Switch to Aura',
-                  subtitle: 'Open the Aura tab to start voice.',
-                ),
-        ],
-      ),
-    );
-  }
-}
-
-extension on _StoryChatFlowPageState {
-  Future<void> _handleVoicePermissionDialogs(
-    VoiceChatState? previous,
-    VoiceChatState next,
-  ) async {
-    if (!mounted || previous?.permissionDialog == next.permissionDialog) {
-      return;
-    }
-    final voiceController = ref.read(voiceChatControllerProvider.notifier);
-    switch (next.permissionDialog) {
-      case PermissionDialogType.education:
-        final accepted = await MicrophoneEducationDialog.show(context);
-        voiceController.handleEducationDialogResult(accepted ?? false);
-        break;
-      case PermissionDialogType.settings:
-        await MicrophonePermissionModal.show(context);
-        voiceController.dismissPermissionDialog();
-        break;
-      case PermissionDialogType.none:
-        break;
-    }
-  }
-}
-
-class _VoiceTabPlaceholder extends StatelessWidget {
-  const _VoiceTabPlaceholder({required this.title, required this.subtitle});
-
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = context.isDarkMode;
-    final surface = isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06);
-    final border = isDark ? Colors.white12 : Colors.black12;
-    final secondary = isDark ? Colors.white70 : Colors.black54;
-
-    return SafeArea(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28),
-          child: Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: surface,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: border),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(CupertinoIcons.sparkles, color: context.primaryTextColor),
-                const SizedBox(height: 12),
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: context.primaryTextColor,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  subtitle,
-                  style: TextStyle(color: secondary, fontSize: 14, height: 1.35),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
+        body: _StoryTextChatTab(onCall: _openVoicePage),
       ),
     );
   }
 }
 
 class _StoryTextChatTab extends ConsumerStatefulWidget {
-  const _StoryTextChatTab();
+  const _StoryTextChatTab({required this.onCall});
+
+  final VoidCallback onCall;
 
   @override
   ConsumerState<_StoryTextChatTab> createState() => _StoryTextChatTabState();
@@ -403,7 +231,6 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     }
     unawaited(controller.stopPlayback());
 
-    // Avoid sending before story session is ready (prevents confusing backend errors).
     if (!voiceState.isSessionReady) {
       showToast(context, 'Connecting…', variant: ToastVariant.info);
       return;
@@ -449,6 +276,16 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
           streaming: voiceState.isProcessing || voiceState.isPlaying,
         ),
       );
+    } else if (voiceState.isProcessing) {
+      messages.add(
+        ChatMessageModel(
+          id: 'story_typing_ai',
+          role: ChatRole.assistant,
+          message: '',
+          ts: DateTime.now(),
+          streaming: true,
+        ),
+      );
     }
     return messages;
   }
@@ -459,7 +296,6 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     final controller = ref.read(voiceChatControllerProvider.notifier);
     final messages = _buildMessages(voiceState);
     final isDark = context.isDarkMode;
-    final sectionDivider = isDark ? Colors.white12 : Colors.black12;
     final mutedSurface = isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF3F3F3);
     final mutedText = isDark ? Colors.white60 : Colors.black54;
     final screenWidth = MediaQuery.of(context).size.width;
@@ -481,27 +317,12 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               decoration: BoxDecoration(
                 color: mutedSurface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: sectionDivider),
+                borderRadius: BorderRadius.circular(18),
               ),
-              child: Row(
-                children: [
-                  CupertinoActivityIndicator(
-                    color: context.primaryTextColor,
-                    radius: 10,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Preparing story session…',
-                      style: TextStyle(color: mutedText, fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
+              child: const _StorySessionLoadingShimmer(),
             ),
           ),
         ],
@@ -522,83 +343,93 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                     final message = messages[index];
                     return _AnimatedBubble(
                       key: ValueKey(message.id),
-                      child: ChatBubble(
-                        message: message,
-                        onRetry: () {},
-                        maxWidth: bubbleMaxWidth,
-                      ),
+                      child: ChatBubble(message: message, onRetry: () {}, maxWidth: bubbleMaxWidth),
                     );
                   },
                 ),
         ),
-        Container(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 14,
-            bottom: 14 + keyboardHeight,
-          ),
-          decoration: BoxDecoration(
-            color: context.backgroundColor,
-            border: Border(top: BorderSide(color: sectionDivider)),
-          ),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: mutedSurface,
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: sectionDivider),
-            ),
+        AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(bottom: keyboardHeight),
+          child: SafeArea(
+            top: false,
+            minimum: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _textController,
-                    maxLines: 5,
-                    minLines: 1,
-                    textCapitalization: TextCapitalization.sentences,
-                    cursorColor: context.primaryTextColor,
-                    style: TextStyle(
-                      color: context.primaryTextColor,
-                      fontSize: 16,
-                      height: 1.35,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: mutedSurface,
+                      borderRadius: BorderRadius.circular(28),
                     ),
-                    decoration: InputDecoration(
-                      hintText: 'Message',
-                      hintStyle: TextStyle(color: mutedText, fontSize: 16),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.fromLTRB(18, 14, 10, 14),
-                      isDense: true,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _textController,
+                            maxLines: 5,
+                            minLines: 1,
+                            textCapitalization: TextCapitalization.sentences,
+                            cursorColor: context.primaryTextColor,
+                            style: TextStyle(
+                              color: context.primaryTextColor,
+                              fontSize: 16,
+                              height: 1.35,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Message',
+                              hintStyle: TextStyle(color: mutedText, fontSize: 16),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.fromLTRB(18, 14, 8, 14),
+                              isDense: true,
+                            ),
+                            onSubmitted: (_) => _onSend(controller, voiceState),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6, bottom: 6),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            curve: Curves.easeOut,
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: _canSend
+                                  ? (isDark ? Colors.white : Colors.black)
+                                  : Colors.transparent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              onPressed: _canSend ? () => _onSend(controller, voiceState) : null,
+                              splashRadius: 20,
+                              icon: Icon(
+                                CupertinoIcons.paperplane_fill,
+                                color: _canSend
+                                    ? (isDark ? Colors.black : Colors.white)
+                                    : mutedText,
+                                size: 19,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    onSubmitted: (_) => _onSend(controller, voiceState),
                   ),
                 ),
+                const SizedBox(width: 12),
                 Padding(
-                  padding: const EdgeInsets.only(right: 6, bottom: 6),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOut,
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: _canSend
-                          ? (isDark ? Colors.white : Colors.black)
-                          : Colors.transparent,
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      onPressed: _canSend
-                          ? () => _onSend(controller, voiceState)
-                          : null,
-                      splashRadius: 20,
-                      icon: Icon(
-                        Icons.arrow_upward_rounded,
-                        color: _canSend
-                            ? (isDark ? Colors.black : Colors.white)
-                            : mutedText,
-                        size: 20,
-                      ),
-                    ),
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: _CircleIconButton(
+                    icon: Icons.call_rounded,
+                    tooltip: 'Voice',
+                    background: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.06),
+                    foreground: isDark ? Colors.white : Colors.black87,
+                    onTap: widget.onCall,
                   ),
                 ),
               ],
@@ -606,6 +437,39 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _CircleIconButton extends StatelessWidget {
+  const _CircleIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.background,
+    required this.foreground,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final Color background;
+  final Color foreground;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+          alignment: Alignment.center,
+          child: Icon(icon, color: foreground, size: 20),
+        ),
+      ),
     );
   }
 }
@@ -632,21 +496,12 @@ class _EmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: mutedSurface,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.black.withValues(alpha: 0.08),
-                ),
-              ),
-              child: Icon(
-                CupertinoIcons.chat_bubble_text,
-                color: primaryTextColor,
-                size: 28,
+              width: 200,
+              height: 200,
+              decoration: BoxDecoration(),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Image.asset('assets/images/message.png', fit: BoxFit.contain),
               ),
             ),
             const SizedBox(height: 18),
@@ -661,17 +516,38 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Chat here first, then switch to Aura when you want voice.',
+              'Chat here or call Aura 🌝',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: secondaryTextColor,
-                fontSize: 14,
-                height: 1.45,
-              ),
+              style: TextStyle(color: secondaryTextColor, fontSize: 14, height: 1.45),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _StorySessionLoadingShimmer extends StatelessWidget {
+  const _StorySessionLoadingShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: const [
+        ShimmerBox(width: 36, height: 36, radius: 18),
+        SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ShimmerText(width: 150, height: 12, radius: 6),
+              SizedBox(height: 8),
+              ShimmerText(height: 10, radius: 6),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -684,8 +560,7 @@ class _AnimatedBubble extends StatefulWidget {
   State<_AnimatedBubble> createState() => _AnimatedBubbleState();
 }
 
-class _AnimatedBubbleState extends State<_AnimatedBubble>
-    with SingleTickerProviderStateMixin {
+class _AnimatedBubbleState extends State<_AnimatedBubble> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _fadeAnim;
   late final Animation<Offset> _slideAnim;
@@ -693,10 +568,7 @@ class _AnimatedBubbleState extends State<_AnimatedBubble>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
     _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(
       begin: const Offset(0, 0.15),

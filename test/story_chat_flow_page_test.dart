@@ -6,6 +6,7 @@ import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart'
 import 'package:antroph_mobile/features/home/services/pcm_audio_player.dart';
 import 'package:antroph_mobile/features/home/services/realtime_voice_client.dart';
 import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
+import 'package:antroph_mobile/features/story/presentation/story_voice_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('StoryChatFlowPage starts in Chat tab and lazily enables voice',
+  testWidgets('StoryChatFlowPage starts in chat and opens voice page',
       (tester) async {
     final fake = FakeVoiceChatController();
 
@@ -22,10 +23,11 @@ void main() {
         overrides: [
           voiceChatControllerProvider.overrideWith(() => fake),
         ],
-        child: const MaterialApp(
+        child: MaterialApp(
           home: StoryChatFlowPage(
             storyId: 'story_1',
             storyTitle: 'Test Story',
+            voicePageBuilder: _testVoicePageBuilder,
           ),
         ),
       ),
@@ -34,22 +36,32 @@ void main() {
     // Let initState post-frame run.
     await tester.pump();
 
-    expect(find.text('Chat'), findsOneWidget);
-    expect(find.text('Aura'), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
+    expect(find.byIcon(Icons.call_rounded), findsOneWidget);
 
     expect(fake.startStorySessionCalls, 1);
     expect(fake.stopPlaybackCalls, greaterThanOrEqualTo(1));
     expect(fake.state.isMuted, isTrue);
 
-    await tester.tap(find.text('Aura'));
-    await tester.pump();
-
-    // Voice UI should not build immediately (lazy build).
+    // Voice UI should not build in chat page.
     expect(find.byType(VoiceChatScreen), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.call_rounded));
+    await tester.pump(); // start route transition
+    await tester.pump(const Duration(milliseconds: 500)); // finish transition
+
+    expect(find.byType(VoiceChatScreen), findsOneWidget);
     expect(fake.toggleMuteCalls, greaterThanOrEqualTo(2));
-    expect(fake.startRecordingCalls, 1);
+    expect(fake.startRecordingCalls, greaterThanOrEqualTo(1));
   });
+}
+
+Widget _testVoicePageBuilder(BuildContext context) {
+  return const StoryVoicePage(
+    storyId: 'story_1',
+    storyTitle: 'Test Story',
+    showMascotFace: false, // avoids Rive FFI in widget tests
+  );
 }
 
 class FakeVoiceChatController extends VoiceChatController {

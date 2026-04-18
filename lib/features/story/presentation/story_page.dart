@@ -1210,7 +1210,6 @@ class _EmptyView extends StatelessWidget {
           child: EmptyState(
             title: 'No stories available yet',
             description: 'Check back later so you don\'t miss new releases.',
-            assetPath: 'assets/images/antroph_happy.png',
           ),
         ),
       ],
@@ -1236,7 +1235,6 @@ class _ErrorView extends StatelessWidget {
           child: EmptyState(
             title: message,
             description: 'Tap below to try again.',
-            assetPath: 'assets/images/antroph_surprised.png',
             actionLabel: 'Retry',
             onAction: () => onRetry(),
           ),
