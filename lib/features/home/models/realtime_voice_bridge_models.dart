@@ -267,6 +267,7 @@ class ConversationItem {
     );
   }
 
-  bool get isUser => role == 'user';
-  bool get isAssistant => role == 'assistant';
+  /// Be resilient to alternate role labels from upstream systems.
+  bool get isUser => role == 'user' || role == 'human' || role == 'client';
+  bool get isAssistant => role == 'assistant' || role == 'ai' || role == 'bot';
 }

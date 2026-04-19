@@ -1068,13 +1068,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         final text = (payload['delta'] ?? payload['text'] ?? '') as String;
         if (text.isNotEmpty) {
           _aiTextBuffer.write(text);
-          state = state.copyWith(aiResponse: _aiTextBuffer.toString());
+          state = state.copyWith(
+            aiResponse: _aiTextBuffer.toString(),
+            isProcessing: false,
+            isConnecting: false,
+            phase: state.isStoryMode ? RealtimeVoicePhase.playing : state.phase,
+          );
         }
-        state = state.copyWith(
-          isProcessing: false,
-          isConnecting: false,
-          phase: state.isStoryMode ? RealtimeVoicePhase.playing : state.phase,
-        );
         break;
       case RealtimeServerMessageType.responseAudioTranscriptDone:
       case RealtimeServerMessageType.responseTextDone:
@@ -1089,9 +1089,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         final text = payload['text'] as String? ?? '';
         if (text.isNotEmpty) {
           _aiTextBuffer.write(text);
-          state = state.copyWith(aiResponse: _aiTextBuffer.toString());
+          state = state.copyWith(
+            aiResponse: _aiTextBuffer.toString(),
+            isProcessing: false,
+            isConnecting: false,
+          );
         }
-        state = state.copyWith(isProcessing: false, isConnecting: false);
         break;
       case RealtimeServerMessageType.responseDone:
         // Save completed turn into conversation history for display
@@ -1127,9 +1130,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           final text = payload['text'] as String? ?? '';
           if (text.isNotEmpty) {
             _aiTextBuffer.write(text);
-            state = state.copyWith(aiResponse: _aiTextBuffer.toString());
+            state = state.copyWith(
+              aiResponse: _aiTextBuffer.toString(),
+              isProcessing: false,
+              isConnecting: false,
+            );
           }
-          state = state.copyWith(isProcessing: false, isConnecting: false);
         }
         break;
     }
@@ -1214,6 +1220,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     final item = ConversationItem.fromJson(payload);
     if (item.content.isEmpty) return;
     final history = [...state.conversationHistory, item];
+    _log.i(
+      '[ChatDebug] conversation.item append role=${item.role} '
+      'contentLen=${item.content.length} history.len=${history.length}',
+    );
     state = state.copyWith(conversationHistory: history);
   }
 
@@ -1235,6 +1245,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   void _handleConversationHistoryFull(Map<String, dynamic> payload) {
     final historyList = payload['history'] as List<dynamic>? ?? [];
     _log.i('Received full conversation history: ${historyList.length} turns');
+    _log.i(
+      '[ChatDebug] history.full speakers='
+      '${historyList.whereType<Map<String, dynamic>>().map((e) => e['speaker']).toList()}',
+    );
     final items = <ConversationItem>[];
     for (final entry in historyList) {
       if (entry is! Map<String, dynamic>) continue;
@@ -1245,7 +1259,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       final role = speaker == 'ai' ? 'assistant' : speaker;
       items.add(ConversationItem(role: role, content: message));
     }
-    final merged = _mergeConversationHistory(state.conversationHistory, items);
+    final before = state.conversationHistory;
+    final merged = _mergeConversationHistory(before, items);
+    _log.i(
+      '[ChatDebug] merge: local=${before.map((e) => e.role).toList()} '
+      'incoming=${items.map((e) => e.role).toList()} '
+      'merged=${merged.map((e) => e.role).toList()}',
+    );
     state = state.copyWith(conversationHistory: merged);
   }
 
@@ -1277,8 +1297,37 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       return incoming;
     }
 
+    // Histories can diverge when the backend snapshot omits some locally-known
+    // entries (e.g. text-only user prompts that don't produce a transcription
+    // event). In that case, prefer preserving local entries so sender bubbles
+    // remain visible, while still appending any truly new incoming tail.
+    final commonPrefixLen = _commonPrefixLength(local, incoming);
+    if (commonPrefixLen > 0) {
+      final tail = incoming.sublist(commonPrefixLen);
+      final tailOverlap = _maxSuffixPrefixOverlap(local, tail);
+      return [...local, ...tail.sublist(tailOverlap)];
+    }
+
+    final localHasUser = local.any((e) => e.isUser);
+    final incomingHasUser = incoming.any((e) => e.isUser);
+    if (localHasUser && !incomingHasUser) {
+      return local;
+    }
+
     // Fallback to incoming snapshot when histories diverge.
     return incoming;
+  }
+
+  int _commonPrefixLength(
+    List<ConversationItem> a,
+    List<ConversationItem> b,
+  ) {
+    final max = math.min(a.length, b.length);
+    var i = 0;
+    for (; i < max; i++) {
+      if (!_sameConversationItem(a[i], b[i])) break;
+    }
+    return i;
   }
 
   int _maxSuffixPrefixOverlap(
@@ -1695,6 +1744,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         final history = [...state.conversationHistory];
         history.add(ConversationItem(role: 'user', content: trimmed));
         state = state.copyWith(conversationHistory: history);
+        _log.i(
+          '[ChatDebug] textOnly user msg appended. history.len=${history.length} '
+          'tail=${history.map((e) => '${e.role}:${e.content.length}c').toList()}',
+        );
       }
     } catch (e, st) {
       _log.e('Failed to send text prompt', error: e, stackTrace: st);

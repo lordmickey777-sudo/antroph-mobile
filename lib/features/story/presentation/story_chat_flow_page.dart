@@ -254,6 +254,10 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
 
   List<ChatMessageModel> _buildMessages(VoiceChatState voiceState) {
     final messages = <ChatMessageModel>[];
+    debugPrint(
+      '[ChatDebug] _buildMessages history.len=${voiceState.conversationHistory.length} '
+      'roles=${voiceState.conversationHistory.map((e) => e.role).toList()}',
+    );
     for (var i = 0; i < voiceState.conversationHistory.length; i++) {
       final item = voiceState.conversationHistory[i];
       if (item.content.isEmpty) continue;
@@ -266,24 +270,16 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         ),
       );
     }
-    if (voiceState.aiResponse?.isNotEmpty ?? false) {
+    final hasAiText = voiceState.aiResponse?.isNotEmpty ?? false;
+    final awaitingAi = voiceState.isProcessing || voiceState.isConnecting;
+    if (hasAiText || awaitingAi) {
       messages.add(
         ChatMessageModel(
           id: 'story_live_ai',
           role: ChatRole.assistant,
-          message: voiceState.aiResponse!,
+          message: voiceState.aiResponse ?? '',
           ts: DateTime.now(),
-          streaming: voiceState.isProcessing || voiceState.isPlaying,
-        ),
-      );
-    } else if (voiceState.isProcessing) {
-      messages.add(
-        ChatMessageModel(
-          id: 'story_typing_ai',
-          role: ChatRole.assistant,
-          message: '',
-          ts: DateTime.now(),
-          streaming: true,
+          streaming: awaitingAi || voiceState.isPlaying || !hasAiText,
         ),
       );
     }
