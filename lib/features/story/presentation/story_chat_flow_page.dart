@@ -95,6 +95,13 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage> with Widg
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
     final voiceState = ref.read(voiceChatControllerProvider);
 
+    unawaited(
+      voiceController.ensureStorySessionConnected(
+        widget.storyId,
+        preferredSessionId: widget.storySessionId,
+      ),
+    );
+
     // Ensure we aren't recording while transitioning.
     if (!voiceState.isMuted) {
       voiceController.toggleMute();

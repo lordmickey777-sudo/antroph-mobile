@@ -414,6 +414,39 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     }
   }
 
+  /// Ensure story voice has an active connection, resuming the latest session
+  /// when possible and falling back to a fresh session if needed.
+  Future<void> ensureStorySessionConnected(
+    String storyId, {
+    String? preferredSessionId,
+  }) async {
+    final resumeId = (preferredSessionId ?? state.storySession?.sessionId ?? '')
+        .trim();
+
+    if (state.isBusy) {
+      _log.i('Skipping story reconnect: controller is busy');
+      return;
+    }
+
+    if (state.isStoryMode &&
+        _socketOpen &&
+        state.phase != RealtimeVoicePhase.closed &&
+        state.phase != RealtimeVoicePhase.error &&
+        state.phase != RealtimeVoicePhase.idle) {
+      if (state.phase == RealtimeVoicePhase.paused) {
+        await resumePausedSession();
+      }
+      return;
+    }
+
+    if (resumeId.isNotEmpty) {
+      await resumeStorySession(resumeId);
+      return;
+    }
+
+    await startStorySession(storyId);
+  }
+
   /// Pause the current story session.
   Future<void> pauseStorySession() async {
     if (!state.isStoryMode || state.storySession == null) {

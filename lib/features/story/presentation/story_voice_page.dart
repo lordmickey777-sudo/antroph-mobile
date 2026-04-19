@@ -46,8 +46,15 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _voiceController = ref.read(voiceChatControllerProvider.notifier);
       _requestedAutoStart = true;
-      _unmuteAndMaybeStart();
+      unawaited(_ensureConnectedAndMaybeStart());
     });
+  }
+
+  Future<void> _ensureConnectedAndMaybeStart() async {
+    final controller = ref.read(voiceChatControllerProvider.notifier);
+    await controller.ensureStorySessionConnected(widget.storyId);
+    if (!mounted) return;
+    _unmuteAndMaybeStart();
   }
 
   void _unmuteAndMaybeStart() {
@@ -67,9 +74,7 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
       context: context,
       builder: (_, scrollController) => StorySheetContent(
         storyId: widget.storyId,
-        title: (widget.storyTitle?.isNotEmpty ?? false)
-            ? widget.storyTitle!
-            : 'Story',
+        title: (widget.storyTitle?.isNotEmpty ?? false) ? widget.storyTitle! : 'Story',
         subtitle: widget.storySubtitle ?? '',
         imageAsset: (widget.storyImage?.isNotEmpty ?? false)
             ? widget.storyImage!
@@ -108,9 +113,7 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
       unawaited(voiceController.startRecording());
     });
 
-    final title = (widget.storyTitle?.isNotEmpty ?? false)
-        ? widget.storyTitle!
-        : 'Aura';
+    final title = (widget.storyTitle?.isNotEmpty ?? false) ? widget.storyTitle! : 'Aura';
 
     return WillPopScope(
       onWillPop: _handleBack,
@@ -127,6 +130,7 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             softWrap: false,
+            fontSize: 18,
           ),
           actions: [
             IconButton(

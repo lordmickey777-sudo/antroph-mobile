@@ -137,6 +137,25 @@ void main() {
         await _waitFor(() => fakePlayer.addedChunks.length == chunkCount + 1);
       },
     );
+
+    test('ensureStorySessionConnected resumes a closed story session', () async {
+      controller.state = container.read(voiceChatControllerProvider).copyWith(
+        isStoryMode: true,
+        phase: RealtimeVoicePhase.closed,
+        storySession: const StorySessionInfo(
+          sessionId: 'session_123',
+          storyId: 'story_1',
+        ),
+      );
+
+      await controller.ensureStorySessionConnected('story_1');
+
+      expect(fakeClient.connectCalls, 1);
+      final state = container.read(voiceChatControllerProvider);
+      expect(state.isStoryMode, isTrue);
+      expect(state.isConnecting, isTrue);
+      expect(state.phase, RealtimeVoicePhase.waitingForReady);
+    });
   });
 }
 
