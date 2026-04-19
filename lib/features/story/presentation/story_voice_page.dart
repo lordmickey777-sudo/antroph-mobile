@@ -117,46 +117,56 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
 
     return WillPopScope(
       onWillPop: _handleBack,
-      child: Scaffold(
-        backgroundColor: context.backgroundColor,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          titleSpacing: 16,
-          title: TypographyText(
-            title,
-            variant: TypographyVariant.h4,
-            color: context.primaryTextColor,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            softWrap: false,
-            fontSize: 18,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/background_2.png'),
+            fit: BoxFit.cover,
           ),
-          actions: [
-            IconButton(
-              onPressed: () => _openStoryDetails(context),
-              icon: const Icon(CupertinoIcons.info_circle),
-              color: context.primaryTextColor,
-              tooltip: 'Story details',
-            ),
-            const SizedBox(width: 4),
-          ],
         ),
-        body: SafeArea(
-          child: VoiceChatScreen(
-            isStoryMode: true,
-            mascotConfig: widget.mascotConfig,
-            expressionStream: voiceController.mascotExpressionStream,
-            showMascotFace: widget.showMascotFace,
-            onEnd: () {
-              unawaited(voiceController.endStorySession());
-              final nav = Navigator.of(context);
-              var pops = 0;
-              while (nav.canPop() && pops < 2) {
-                nav.pop();
-                pops++;
-              }
-            },
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            elevation: 0,
+            titleSpacing: 16,
+            title: TypographyText(
+              title,
+              variant: TypographyVariant.h4,
+              color: context.primaryTextColor,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              fontSize: 18,
+            ),
+            actions: [
+              IconButton(
+                onPressed: () => _openStoryDetails(context),
+                icon: const Icon(CupertinoIcons.info_circle),
+                color: context.primaryTextColor,
+                tooltip: 'Story details',
+              ),
+              const SizedBox(width: 4),
+            ],
+          ),
+          body: SafeArea(
+            child: VoiceChatScreen(
+              isStoryMode: true,
+              mascotConfig: widget.mascotConfig,
+              expressionStream: voiceController.mascotExpressionStream,
+              showMascotFace: widget.showMascotFace,
+              onEnd: () {
+                unawaited(voiceController.endStorySession());
+                final nav = Navigator.of(context);
+                var pops = 0;
+                while (nav.canPop() && pops < 2) {
+                  nav.pop();
+                  pops++;
+                }
+              },
+            ),
           ),
         ),
       ),
