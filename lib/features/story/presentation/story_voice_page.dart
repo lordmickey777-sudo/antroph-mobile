@@ -132,6 +132,18 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
             scrolledUnderElevation: 0,
             elevation: 0,
             titleSpacing: 16,
+            flexibleSpace: Container(
+              width: double.infinity,
+              height: double.infinity,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xF8000000), Color(0x90000000), Color(0x00000000)],
+                  stops: [0.0, 0.6, 1.0],
+                ),
+              ),
+            ),
             title: TypographyText(
               title,
               variant: TypographyVariant.h4,
