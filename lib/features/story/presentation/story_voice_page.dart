@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
-import 'package:antroph_mobile/features/home/presentation/chat_bottom_sheet.dart';
 import 'package:antroph_mobile/features/home/presentation/voice_chat_screen.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
@@ -73,22 +72,11 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
   void _openChatSheet(BuildContext context) {
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
     final voiceState = ref.read(voiceChatControllerProvider);
-    final wasMuted = voiceState.isMuted;
-    if (!wasMuted) {
+    if (!voiceState.isMuted) {
       voiceController.toggleMute();
     }
-    voiceController.stopPlayback();
-
-    showAppBottomSheet(
-      context: context,
-      backgroundColor: context.backgroundColor,
-      builder: (ctx, scrollController) =>
-          ChatBottomSheet(scrollController: scrollController),
-    ).then((_) {
-      if (!wasMuted && mounted) {
-        ref.read(voiceChatControllerProvider.notifier).toggleMute();
-      }
-    });
+    unawaited(voiceController.stopPlayback());
+    Navigator.of(context).pop();
   }
 
   void _openStoryDetails(BuildContext context) {

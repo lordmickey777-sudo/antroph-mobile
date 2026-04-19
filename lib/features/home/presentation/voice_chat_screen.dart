@@ -249,6 +249,7 @@ class _Header extends StatelessWidget {
                   label: status.label,
                   icon: status.icon,
                   isActive: status.isActive,
+                  variant: status.variant,
                 ),
               ],
             ),
@@ -282,10 +283,16 @@ class _Header extends StatelessWidget {
                   'Hearing you',
                   Icons.chat_bubble_rounded,
                   isActive: true,
+                  variant: _StatusVariant.soundWave,
                 )
               : const _StatusData('Mic on', Icons.mic_none_rounded);
         case RealtimeVoicePhase.processing:
-          return const _StatusData('Processing', Icons.cloud_sync);
+          return const _StatusData(
+            'hmmmmmnn',
+            Icons.cloud_sync,
+            isActive: true,
+            variant: _StatusVariant.dancingDots,
+          );
         case RealtimeVoicePhase.playing:
           return const _StatusData('Narrating', Icons.graphic_eq);
         case RealtimeVoicePhase.paused:
@@ -304,11 +311,17 @@ class _Header extends StatelessWidget {
               'Hearing you',
               Icons.chat_bubble_rounded,
               isActive: true,
+              variant: _StatusVariant.soundWave,
             )
           : const _StatusData('Mic on', Icons.mic_none_rounded);
     }
     if (voice.isProcessing) {
-      return const _StatusData('Processing', Icons.cloud_sync);
+      return const _StatusData(
+        'hmmmmmnn',
+        Icons.cloud_sync,
+        isActive: true,
+        variant: _StatusVariant.dancingDots,
+      );
     }
     if (voice.isPlaying) {
       return const _StatusData('Replying', Icons.graphic_eq);
@@ -317,11 +330,19 @@ class _Header extends StatelessWidget {
   }
 }
 
+enum _StatusVariant { iconLabel, dancingDots, soundWave }
+
 class _StatusData {
-  const _StatusData(this.label, this.icon, {this.isActive = false});
+  const _StatusData(
+    this.label,
+    this.icon, {
+    this.isActive = false,
+    this.variant = _StatusVariant.iconLabel,
+  });
   final String label;
   final IconData icon;
   final bool isActive;
+  final _StatusVariant variant;
 }
 
 class _StatusPill extends StatelessWidget {
@@ -329,11 +350,13 @@ class _StatusPill extends StatelessWidget {
     required this.label,
     required this.icon,
     this.isActive = false,
+    this.variant = _StatusVariant.iconLabel,
   });
 
   final String label;
   final IconData icon;
   final bool isActive;
+  final _StatusVariant variant;
 
   @override
   Widget build(BuildContext context) {
@@ -390,23 +413,175 @@ class _StatusPill extends StatelessWidget {
                 ),
               ],
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: labelColor, size: isActive ? 15 : 14),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: labelColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
+            child: _buildInner(labelColor),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildInner(Color labelColor) {
+    switch (variant) {
+      case _StatusVariant.dancingDots:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: labelColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 6),
+            _DancingDots(color: labelColor),
+          ],
+        );
+      case _StatusVariant.soundWave:
+        return _SoundWaveBars(color: labelColor);
+      case _StatusVariant.iconLabel:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: labelColor, size: isActive ? 15 : 14),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: labelColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        );
+    }
+  }
+}
+
+class _DancingDots extends StatefulWidget {
+  const _DancingDots({required this.color});
+
+  final Color color;
+
+  @override
+  State<_DancingDots> createState() => _DancingDotsState();
+}
+
+class _DancingDotsState extends State<_DancingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 22,
+      height: 10,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: List.generate(3, (i) {
+              final phase = (_controller.value + i * 0.18) % 1.0;
+              final bob = math.sin(phase * 2 * math.pi);
+              return Padding(
+                padding: EdgeInsets.only(left: i == 0 ? 0 : 3),
+                child: Transform.translate(
+                  offset: Offset(0, -bob * 2.5),
+                  child: Container(
+                    width: 3,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: widget.color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SoundWaveBars extends StatefulWidget {
+  const _SoundWaveBars({required this.color});
+
+  final Color color;
+
+  @override
+  State<_SoundWaveBars> createState() => _SoundWaveBarsState();
+}
+
+class _SoundWaveBarsState extends State<_SoundWaveBars>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const barCount = 5;
+    return SizedBox(
+      width: 36,
+      height: 16,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: List.generate(barCount, (i) {
+              final phase = (_controller.value + i * 0.16) % 1.0;
+              final amp = (math.sin(phase * 2 * math.pi) + 1) / 2;
+              final h = 4.0 + amp * 11.0;
+              return Padding(
+                padding: EdgeInsets.only(left: i == 0 ? 0 : 3),
+                child: Container(
+                  width: 2.5,
+                  height: h,
+                  decoration: BoxDecoration(
+                    color: widget.color,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              );
+            }),
+          );
+        },
       ),
     );
   }
