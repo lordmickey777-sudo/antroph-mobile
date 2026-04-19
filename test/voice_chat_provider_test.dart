@@ -157,6 +157,100 @@ void main() {
       expect(state.phase, RealtimeVoicePhase.waitingForReady);
     });
   });
+
+  group('VoiceChatController turn detection', () {
+    late FakeRealtimeVoiceClient fakeClient;
+    late ProviderContainer container;
+    late ProviderSubscription<VoiceChatState> subscription;
+    late TestVoiceChatController controller;
+
+    setUp(() {
+      fakeClient = FakeRealtimeVoiceClient();
+      controller = TestVoiceChatController(
+        client: fakeClient,
+        player: FakeAudioChunkPlayer(),
+      );
+      container = ProviderContainer(
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => controller),
+        ],
+      );
+      subscription = container.listen(
+        voiceChatControllerProvider,
+        (_, __) {},
+        fireImmediately: true,
+      );
+      controller = container.read(voiceChatControllerProvider.notifier)
+          as TestVoiceChatController;
+    });
+
+    tearDown(() {
+      subscription.close();
+      container.dispose();
+      fakeClient.dispose();
+    });
+
+    test('quiet valid speech commits and enters processing', () async {
+      controller.debugPrepareRecording();
+      controller.debugInjectMicRmsSamples([0.008, 0.009, 0.031, 0.033]);
+
+      await controller.stopRecordingAndSend();
+
+      expect(
+        fakeClient.sent.any(
+          (message) => message['type'] == 'input_audio_buffer.commit',
+        ),
+        isTrue,
+      );
+      final state = container.read(voiceChatControllerProvider);
+      expect(state.isProcessing, isTrue);
+      expect(state.phase, RealtimeVoicePhase.processing);
+    });
+
+    test('ambient noise is rejected and auto-listens again', () async {
+      controller.debugPrepareRecording();
+      controller.debugInjectMicRmsSamples([0.004, 0.005, 0.006]);
+
+      await controller.stopRecordingAndSend();
+
+      var state = container.read(voiceChatControllerProvider);
+      expect(state.isProcessing, isFalse);
+      expect(state.phase, RealtimeVoicePhase.ready);
+      expect(
+        fakeClient.sent.any(
+          (message) => message['type'] == 'input_audio_buffer.commit',
+        ),
+        isFalse,
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      state = container.read(voiceChatControllerProvider);
+      expect(controller.startRecordingCalls, 1);
+      expect(state.isRecording, isTrue);
+      expect(state.phase, RealtimeVoicePhase.recording);
+    });
+
+    test('insufficient speech audio does not produce a response', () async {
+      controller.debugPrepareRecording();
+      controller.debugInjectMicRmsSamples(
+        [0.005, 0.04, 0.05],
+        samplesPerChunk: 700,
+      );
+
+      await controller.stopRecordingAndSend();
+
+      final state = container.read(voiceChatControllerProvider);
+      expect(state.isProcessing, isFalse);
+      expect(state.phase, RealtimeVoicePhase.ready);
+      expect(
+        fakeClient.sent.any(
+          (message) => message['type'] == 'input_audio_buffer.commit',
+        ),
+        isFalse,
+      );
+    });
+  });
 }
 
 Future<void> _waitFor(
@@ -248,5 +342,36 @@ class FakeAudioChunkPlayer implements AudioChunkPlayer {
   @override
   Future<void> dispose() async {
     stopped = true;
+  }
+}
+
+class TestVoiceChatController extends VoiceChatController {
+  TestVoiceChatController({
+    required RealtimeVoiceClient client,
+    required AudioChunkPlayer player,
+  }) : super(
+         client: client,
+         player: player,
+         voiceUriOverride: Uri.parse('wss://example.com/ws/realtime/voice'),
+       );
+
+  int startRecordingCalls = 0;
+
+  @override
+  VoiceChatState build() {
+    return const VoiceChatState();
+  }
+
+  @override
+  Future<void> startRecording() async {
+    startRecordingCalls++;
+    state = state.copyWith(
+      isRecording: true,
+      isProcessing: false,
+      isConnecting: false,
+      phase: state.isStoryMode
+          ? RealtimeVoicePhase.recording
+          : state.phase,
+    );
   }
 }

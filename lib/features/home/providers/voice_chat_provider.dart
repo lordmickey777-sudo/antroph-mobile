@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:logger/logger.dart';
@@ -170,14 +171,18 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   DateTime? _lastAiAudioAt;
   DateTime? _lastSpeechAt;
   DateTime? _lastMicLogAt;
+  double _lastDynamicSpeechThreshold = 0.0;
   bool _hasSpeech = false;
+  int _speechChunkStreak = 0;
   double _noiseFloor = 0.0;
   bool _responseDoneForCurrentTurn = false;
   bool _receivedAiAudioForCurrentTurn = false;
   bool _ignoreIncomingAudioUntilNextResponse = false;
   final Queue<_TimedRmsSample> _pendingAiRmsSamples = Queue<_TimedRmsSample>();
+  final Queue<Uint8List> _pendingMicChunks = Queue<Uint8List>();
   final StringBuffer _aiTextBuffer = StringBuffer();
   BytesBuilder _audioBuffer = BytesBuilder(copy: false);
+  int _pendingMicBytes = 0;
   Completer<bool>? _permissionDialogCompleter;
   bool _iosPermissionDeniedOnce = false;
   bool _commitSent = false;
@@ -192,8 +197,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   static const String _deviceType = 'mobile';
   static const String _permissionError =
       'Microphone permission is required for voice chat';
-  static const double _speechThreshold = 0.02;
-  static const double _noiseFloorMargin = 0.015;
+  static const double _speechThreshold = 0.026;
+  static const double _noiseFloorMargin = 0.018;
+  static const int _minSpeechChunkStreak = 2;
+  static const Duration _preSpeechBufferDuration = Duration(milliseconds: 320);
   static const Duration _silenceDuration = Duration(seconds: 2);
   static const Duration _maxRecordingDuration = Duration(seconds: 12);
 
@@ -541,7 +548,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _aiTextBuffer.clear();
       _commitSent = false;
       _resetAudioBuffer();
+      _clearPendingMicChunks();
+      _lastDynamicSpeechThreshold = 0.0;
       _hasSpeech = false;
+      _speechChunkStreak = 0;
       _noiseFloor = 0.0;
 
       state = state.copyWith(
@@ -717,9 +727,33 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _speechThreshold,
       _noiseFloor + _noiseFloorMargin,
     );
+    _lastDynamicSpeechThreshold = dynamicThreshold;
 
-    if (rms >= dynamicThreshold) {
+    final isAboveThreshold = rms >= dynamicThreshold;
+
+    if (!_hasSpeech) {
+      _queuePendingMicChunk(bytes);
+      if (isAboveThreshold) {
+        _speechChunkStreak++;
+        if (_speechChunkStreak >= _minSpeechChunkStreak) {
+          _hasSpeech = true;
+          _lastSpeechAt = DateTime.now();
+          _cancelSilenceTimer();
+          _flushPendingMicChunks();
+          _log.i(
+            'Speech detected: rms=$rms threshold=$dynamicThreshold streak=$_speechChunkStreak',
+          );
+        }
+      } else {
+        _speechChunkStreak = 0;
+        _startSilenceTimer();
+      }
+      return;
+    }
+
+    if (isAboveThreshold) {
       _hasSpeech = true;
+      _speechChunkStreak = _minSpeechChunkStreak;
       _lastSpeechAt = DateTime.now();
       _cancelSilenceTimer();
       _log.i('Speech detected: rms=$rms threshold=$dynamicThreshold');
@@ -727,17 +761,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _startSilenceTimer();
     }
 
-    if (!_socketOpen) return;
-    _audioBuffer.add(bytes);
-
-    // Use the new audio append method for story mode
-    if (state.isStoryMode) {
-      final encoded = base64Encode(bytes);
-      _client.sendAudioAppend(encoded, sampleRate: _sampleRate);
-    } else {
-      final encoded = base64Encode(bytes);
-      _client.send({'type': 'input_audio_buffer.append', 'audio': encoded});
-    }
+    _appendMicChunk(bytes);
   }
 
   void _startSilenceTimer() {
@@ -791,15 +815,62 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         return;
       }
 
+      final detectedSpeech = _hasSpeech;
+      final bufferedBytes = _audioBuffer.length;
+      final thresholdAtStop = _lastDynamicSpeechThreshold;
+      final noiseFloorAtStop = _noiseFloor;
       _log.i('Stopping recording: committing input');
       _cancelMaxRecordingTimer();
       await _stopRecorder();
-      _commitInput();
+      if (!detectedSpeech) {
+        _log.i(
+          'Rejecting voice turn: detectedSpeech=$detectedSpeech bufferBytes=$bufferedBytes threshold=$thresholdAtStop noiseFloor=$noiseFloorAtStop',
+        );
+        _commitSent = false;
+        _resetAudioBuffer();
+        if (!ref.mounted) return;
+        state = state.copyWith(
+          isRecording: false,
+          isProcessing: false,
+          isPlaying: false,
+          isConnecting: false,
+          errorMessage: null,
+          phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
+        );
+        if (state.isStoryMode && !state.isMuted) {
+          _scheduleAutoListen();
+        }
+        return;
+      }
+
+      final committed = _commitInput();
 
       // In story mode, just commit - server handles response
       // In non-story mode, create response from audio
+      var requestedResponse = committed;
       if (!state.isStoryMode) {
-        await _createResponseFromAudio();
+        requestedResponse = await _createResponseFromAudio();
+      }
+
+      if (!committed || !requestedResponse) {
+        _log.i(
+          'Rejecting voice turn: detectedSpeech=$detectedSpeech bufferBytes=$bufferedBytes threshold=$thresholdAtStop noiseFloor=$noiseFloorAtStop committed=$committed requestedResponse=$requestedResponse',
+        );
+        _commitSent = false;
+        _resetAudioBuffer();
+        if (!ref.mounted) return;
+        state = state.copyWith(
+          isRecording: false,
+          isProcessing: false,
+          isPlaying: false,
+          isConnecting: false,
+          errorMessage: null,
+          phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
+        );
+        if (state.isStoryMode && !state.isMuted) {
+          _scheduleAutoListen();
+        }
+        return;
       }
 
       if (!ref.mounted) return;
@@ -834,7 +905,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _cancelSilenceTimer();
     _cancelMaxRecordingTimer();
     _lastSpeechAt = null;
+    _lastDynamicSpeechThreshold = 0.0;
     _hasSpeech = false;
+    _speechChunkStreak = 0;
     _noiseFloor = 0.0;
     try {
       final recorder = _recorder;
@@ -846,6 +919,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _micStreamSubscription = null;
     await _micStreamController?.close();
     _micStreamController = null;
+    _clearPendingMicChunks();
     _emitMicLevelValue(0.0);
   }
 
@@ -936,8 +1010,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     return math.sqrt(sumSquares / samples.length);
   }
 
-  void _commitInput() {
-    if (_commitSent || !_socketOpen) return;
+  bool _commitInput() {
+    if (_commitSent || !_socketOpen) return false;
 
     // Backend requires at least 100ms of audio before commit
     // At 24kHz, 16-bit mono: 100ms = 2400 samples * 2 bytes = 4800 bytes
@@ -947,7 +1021,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _log.w(
         '[CommitInput] Audio buffer too small: $bufferLength bytes (min: $minAudioBytes). Skipping commit.',
       );
-      return;
+      return false;
     }
 
     _log.i('[CommitInput] Committing audio buffer: $bufferLength bytes');
@@ -957,12 +1031,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _client.send({'type': 'input_audio_buffer.commit'});
     }
     _commitSent = true;
+    return true;
   }
 
-  Future<void> _createResponseFromAudio() async {
-    if (!_socketOpen) return;
+  Future<bool> _createResponseFromAudio() async {
+    if (!_socketOpen) return false;
     final recordedBytes = _audioBuffer.takeBytes();
-    if (recordedBytes.isEmpty) return;
+    if (recordedBytes.isEmpty) return false;
     final encoded = base64Encode(recordedBytes);
     try {
       _log.i(
@@ -986,9 +1061,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         },
       });
       _resetAudioBuffer();
+      return true;
     } catch (e, st) {
       _log.e('Failed to send audio response.create', error: e, stackTrace: st);
       state = state.copyWith(errorMessage: 'Failed to send audio: $e');
+      return false;
     }
   }
 
@@ -2081,6 +2158,87 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _resetAudioBuffer() {
     _audioBuffer = BytesBuilder(copy: false);
+  }
+
+  void _appendMicChunk(Uint8List bytes) {
+    if (!_socketOpen) return;
+    _audioBuffer.add(bytes);
+    final encoded = base64Encode(bytes);
+    if (state.isStoryMode) {
+      _client.sendAudioAppend(encoded, sampleRate: _sampleRate);
+    } else {
+      _client.send({'type': 'input_audio_buffer.append', 'audio': encoded});
+    }
+  }
+
+  void _queuePendingMicChunk(Uint8List bytes) {
+    _pendingMicChunks.add(Uint8List.fromList(bytes));
+    _pendingMicBytes += bytes.length;
+    final maxPendingBytes =
+        (_sampleRate * 2 * _preSpeechBufferDuration.inMilliseconds) ~/ 1000;
+    while (_pendingMicBytes > maxPendingBytes && _pendingMicChunks.isNotEmpty) {
+      _pendingMicBytes -= _pendingMicChunks.removeFirst().length;
+    }
+  }
+
+  void _flushPendingMicChunks() {
+    while (_pendingMicChunks.isNotEmpty) {
+      _appendMicChunk(_pendingMicChunks.removeFirst());
+    }
+    _pendingMicBytes = 0;
+  }
+
+  void _clearPendingMicChunks() {
+    _pendingMicChunks.clear();
+    _pendingMicBytes = 0;
+  }
+
+  @visibleForTesting
+  void debugPrepareRecording({
+    bool storyMode = true,
+    bool muted = false,
+  }) {
+    _socketOpen = true;
+    _commitSent = false;
+    _resetAudioBuffer();
+    _clearPendingMicChunks();
+    _lastSpeechAt = null;
+    _lastDynamicSpeechThreshold = 0.0;
+    _hasSpeech = false;
+    _speechChunkStreak = 0;
+    _noiseFloor = 0.0;
+    state = state.copyWith(
+      isStoryMode: storyMode,
+      isMuted: muted,
+      isRecording: true,
+      isProcessing: false,
+      isConnecting: false,
+      isPlaying: false,
+      errorMessage: null,
+      phase: storyMode
+          ? RealtimeVoicePhase.recording
+          : state.phase,
+    );
+  }
+
+  @visibleForTesting
+  void debugInjectMicRmsSamples(
+    List<double> rmsValues, {
+    int samplesPerChunk = 2400,
+  }) {
+    for (final rms in rmsValues) {
+      _handleMicChunk(_pcmChunkForRms(rms, samplesPerChunk));
+    }
+  }
+
+  Uint8List _pcmChunkForRms(double rms, int samplesPerChunk) {
+    final amplitude = (rms.clamp(0.0, 0.99) * 32767).round();
+    final bytes = ByteData(samplesPerChunk * 2);
+    for (var i = 0; i < samplesPerChunk; i++) {
+      final sample = i.isEven ? amplitude : -amplitude;
+      bytes.setInt16(i * 2, sample, Endian.little);
+    }
+    return bytes.buffer.asUint8List();
   }
 
   void _enableAudio() {

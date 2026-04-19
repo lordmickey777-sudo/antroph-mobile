@@ -54,6 +54,70 @@ void main() {
     expect(fake.toggleMuteCalls, greaterThanOrEqualTo(2));
     expect(fake.startRecordingCalls, 1);
   });
+
+  testWidgets('VoiceChatScreen shows Ready for armed story state',
+      (tester) async {
+    final fake = FakeVoiceChatController(
+      initialState: const VoiceChatState(
+        isStoryMode: true,
+        phase: RealtimeVoicePhase.ready,
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: VoiceChatScreen(
+              isStoryMode: true,
+              showMascotFace: false,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('Ready'), findsOneWidget);
+    expect(find.text('Listening'), findsNothing);
+    expect(find.text("Say something when you're ready"), findsNothing);
+  });
+
+  testWidgets('VoiceChatScreen shows Listening only while actively recording',
+      (tester) async {
+    final fake = FakeVoiceChatController(
+      initialState: const VoiceChatState(
+        isStoryMode: true,
+        isRecording: true,
+        phase: RealtimeVoicePhase.recording,
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: VoiceChatScreen(
+              isStoryMode: true,
+              showMascotFace: false,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('Listening'), findsOneWidget);
+    expect(find.text("Say something when you're ready"), findsOneWidget);
+  });
 }
 
 Widget _testVoicePageBuilder(BuildContext context) {
@@ -65,12 +129,16 @@ Widget _testVoicePageBuilder(BuildContext context) {
 }
 
 class FakeVoiceChatController extends VoiceChatController {
-  FakeVoiceChatController()
+  FakeVoiceChatController({
+    this.initialState = const VoiceChatState(),
+  })
       : super(
           client: _NoopRealtimeVoiceClient(),
           player: _NoopAudioChunkPlayer(),
           voiceUriOverride: Uri.parse('wss://example.com/ws/realtime/voice'),
         );
+
+  final VoiceChatState initialState;
 
   int startStorySessionCalls = 0;
   int stopPlaybackCalls = 0;
@@ -81,7 +149,7 @@ class FakeVoiceChatController extends VoiceChatController {
   @override
   VoiceChatState build() {
     // Avoid initializing platform audio/recorder in widget tests.
-    return const VoiceChatState();
+    return initialState;
   }
 
   @override
