@@ -162,32 +162,54 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage> with Widg
         await voiceController.stopPlayback();
         return true;
       },
-      child: Scaffold(
-        backgroundColor: context.backgroundColor,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          titleSpacing: 16,
-          title: TypographyText(
-            title,
-            variant: TypographyVariant.h4,
-            color: context.primaryTextColor,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            fontSize: 18,
-            softWrap: false,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/background.png'),
+            fit: BoxFit.cover,
           ),
-          actions: [
-            IconButton(
-              onPressed: () => _openStoryDetails(context),
-              icon: const Icon(CupertinoIcons.info_circle),
-              color: context.primaryTextColor,
-              tooltip: 'Story details',
-            ),
-            const SizedBox(width: 4),
-          ],
         ),
-        body: _StoryTextChatTab(onCall: _openVoicePage),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            elevation: 0,
+            titleSpacing: 16,
+            flexibleSpace: Container(
+              width: double.infinity,
+              height: double.infinity,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xF8000000), Color(0x90000000), Color(0x00000000)],
+                  stops: [0.0, 0.6, 1.0],
+                ),
+              ),
+            ),
+            title: TypographyText(
+              title,
+              variant: TypographyVariant.h4,
+              color: context.primaryTextColor,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              fontSize: 18,
+              softWrap: false,
+            ),
+            actions: [
+              IconButton(
+                onPressed: () => _openStoryDetails(context),
+                icon: const Icon(CupertinoIcons.info_circle),
+                color: context.primaryTextColor,
+                tooltip: 'Story details',
+              ),
+              const SizedBox(width: 4),
+            ],
+          ),
+          body: _StoryTextChatTab(onCall: _openVoicePage),
+        ),
       ),
     );
   }
@@ -428,10 +450,8 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                   child: _CircleIconButton(
                     icon: Icons.call_rounded,
                     tooltip: 'Voice',
-                    background: isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.06),
-                    foreground: isDark ? Colors.white : Colors.black87,
+                    background: const Color(0xFF22C55E),
+                    foreground: Colors.white,
                     onTap: widget.onCall,
                   ),
                 ),

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
@@ -12,8 +13,6 @@ import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/voice_activity_face.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-const _accent = Color(0xFF9CC6FF);
 
 class VoiceChatScreen extends ConsumerStatefulWidget {
   const VoiceChatScreen({
@@ -123,11 +122,6 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen> {
                     expressionStream: widget.expressionStream,
                     showMascotFace: widget.showMascotFace,
                     onReconnect: chatController?.forceReconnect,
-                    onStartVoice: voiceController.startRecording,
-                    onStopVoice: voiceController.stopRecordingAndSend,
-                    onStopVoicePlayback: () {
-                      voiceController.stopPlayback(restartListening: true);
-                    },
                     faceSize: faceSize,
                     hasConversation:
                         voiceState.conversationHistory.isNotEmpty ||
@@ -184,9 +178,6 @@ class _Header extends StatelessWidget {
     this.expressionStream,
     this.showMascotFace = true,
     this.onReconnect,
-    required this.onStartVoice,
-    required this.onStopVoice,
-    required this.onStopVoicePlayback,
     required this.faceSize,
     this.hasConversation = false,
   });
@@ -197,9 +188,6 @@ class _Header extends StatelessWidget {
   final Stream<MascotExpressionEvent>? expressionStream;
   final bool showMascotFace;
   final VoidCallback? onReconnect;
-  final VoidCallback onStartVoice;
-  final VoidCallback onStopVoice;
-  final VoidCallback onStopVoicePlayback;
   final double faceSize;
   final bool hasConversation;
 
@@ -261,13 +249,6 @@ class _Header extends StatelessWidget {
               const SizedBox(height: 16),
               _ReadyPrompt(isListening: voiceState.isRecording),
             ],
-            const SizedBox(height: 22),
-            _HeroMicButton(
-              voiceState: voiceState,
-              onStart: onStartVoice,
-              onStop: onStopVoice,
-              onStopPlayback: onStopVoicePlayback,
-            ),
           ],
         ),
       ),
@@ -330,29 +311,55 @@ class _StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
-    final bgColor = isDark ? const Color(0xFF1E2631) : const Color(0xFFE6EBF1);
     final labelColor = isDark ? Colors.white : Colors.black87;
-    final iconColor = labelColor;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: iconColor, size: 14),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: labelColor,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+    final highlight = isDark
+        ? Colors.white.withValues(alpha: 0.18)
+        : Colors.white.withValues(alpha: 0.55);
+    final tint = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.white.withValues(alpha: 0.25);
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.18)
+        : Colors.white.withValues(alpha: 0.6);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [highlight, tint],
             ),
+            border: Border.all(color: borderColor, width: 0.6),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: labelColor, size: 14),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: labelColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -405,79 +412,6 @@ class _ReadyPromptState extends State<_ReadyPrompt>
           color: textColor,
           fontSize: 14,
           fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
-}
-
-class _HeroMicButton extends StatelessWidget {
-  const _HeroMicButton({
-    required this.voiceState,
-    required this.onStart,
-    required this.onStop,
-    required this.onStopPlayback,
-  });
-
-  final VoiceChatState voiceState;
-  final VoidCallback onStart;
-  final VoidCallback onStop;
-  final VoidCallback onStopPlayback;
-
-  @override
-  Widget build(BuildContext context) {
-    final recording = voiceState.isRecording;
-    final waiting = voiceState.isProcessing || voiceState.isConnecting;
-    final playing = voiceState.isPlaying;
-    final canRecord = !recording && !waiting && !playing;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final gradient = LinearGradient(
-      colors: recording
-          ? [isDark ? Colors.white : Colors.black87, _accent]
-          : [
-              _accent.withValues(alpha: 0.8),
-              isDark
-                  ? Colors.white.withValues(alpha: 0.2)
-                  : Colors.black.withValues(alpha: 0.08),
-            ],
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-    );
-
-    return GestureDetector(
-      onTap: () {
-        if (canRecord) {
-          onStart();
-        } else if (recording) {
-          onStop();
-        } else if (waiting || playing) {
-          onStopPlayback();
-        }
-      },
-      child: Container(
-        width: 76,
-        height: 76,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: gradient,
-          boxShadow: [
-            BoxShadow(
-              color: _accent.withValues(alpha: 0.22),
-              blurRadius: 22,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Icon(
-          recording
-              ? Icons.stop_rounded
-              : (waiting || playing)
-                  ? Icons.close_rounded
-                  : Icons.mic_rounded,
-          color: recording
-              ? Colors.black
-              : (isDark ? Colors.white : Colors.black),
-          size: 34,
         ),
       ),
     );
