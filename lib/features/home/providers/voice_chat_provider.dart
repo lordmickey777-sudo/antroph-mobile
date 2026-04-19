@@ -52,6 +52,7 @@ class VoiceChatState {
 
   // Mute state for continuous listening mode
   final bool isMuted;
+  final bool isUserSpeaking;
 
   const VoiceChatState({
     this.currentExpression = RobotExpression.neutral,
@@ -74,6 +75,7 @@ class VoiceChatState {
     this.isStoryMode = false,
     this.conversationHistory = const [],
     this.isMuted = false,
+    this.isUserSpeaking = false,
   });
 
   VoiceChatState copyWith({
@@ -102,6 +104,7 @@ class VoiceChatState {
     List<ConversationItem>? conversationHistory,
     bool clearStorySession = false,
     bool? isMuted,
+    bool? isUserSpeaking,
   }) {
     return VoiceChatState(
       currentExpression: currentExpression ?? this.currentExpression,
@@ -132,6 +135,7 @@ class VoiceChatState {
       isStoryMode: isStoryMode ?? this.isStoryMode,
       conversationHistory: conversationHistory ?? this.conversationHistory,
       isMuted: isMuted ?? this.isMuted,
+      isUserSpeaking: isUserSpeaking ?? this.isUserSpeaking,
     );
   }
 
@@ -167,6 +171,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Timer? _autoListenTimer;
   Timer? _maxRecordingTimer;
   Timer? _playbackIdleTimer;
+  Timer? _speechIndicatorTimer;
   DateTime? _playbackExpectedEndAt;
   DateTime? _lastAiAudioAt;
   DateTime? _lastSpeechAt;
@@ -178,6 +183,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   bool _responseDoneForCurrentTurn = false;
   bool _receivedAiAudioForCurrentTurn = false;
   bool _ignoreIncomingAudioUntilNextResponse = false;
+  bool _isBargeInMonitoring = false;
+  bool _suppressNextPlaybackComplete = false;
   final Queue<_TimedRmsSample> _pendingAiRmsSamples = Queue<_TimedRmsSample>();
   final Queue<Uint8List> _pendingMicChunks = Queue<Uint8List>();
   final StringBuffer _aiTextBuffer = StringBuffer();
@@ -197,12 +204,17 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   static const String _deviceType = 'mobile';
   static const String _permissionError =
       'Microphone permission is required for voice chat';
-  static const double _speechThreshold = 0.026;
-  static const double _noiseFloorMargin = 0.018;
-  static const int _minSpeechChunkStreak = 2;
-  static const Duration _preSpeechBufferDuration = Duration(milliseconds: 320);
+  static const double _speechThreshold = 0.02;
+  static const double _noiseFloorMargin = 0.012;
+  static const int _minSpeechChunkStreak = 1;
+  static const Duration _preSpeechBufferDuration = Duration(milliseconds: 520);
   static const Duration _silenceDuration = Duration(seconds: 2);
   static const Duration _maxRecordingDuration = Duration(seconds: 12);
+  static const Duration _speechIndicatorHoldDuration = Duration(
+    milliseconds: 220,
+  );
+  static const double _bargeInThresholdFloor = 0.055;
+  static const double _bargeInThresholdMultiplier = 2.2;
 
   VoiceChatController({
     RealtimeVoiceClient? client,
@@ -246,6 +258,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _cancelMaxRecordingTimer();
       _cancelAutoListenTimer();
       _cancelPlaybackIdleTimer();
+      _cancelSpeechIndicatorTimer();
       _stopAiAudioLevelTimer();
       await _stopRecorder();
       await _teardownSocket();
@@ -553,12 +566,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _hasSpeech = false;
       _speechChunkStreak = 0;
       _noiseFloor = 0.0;
+      _setUserSpeaking(false);
 
       state = state.copyWith(
         isRecording: false,
         isConnecting: !state.isStoryMode,
         isProcessing: false,
         isPlaying: false,
+        isUserSpeaking: false,
         clearAiResponse: true,
         clearUserTranscription: true,
         clearAiAudio: true,
@@ -583,6 +598,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isProcessing: false,
         isConnecting: false,
         isPlaying: false,
+        isUserSpeaking: false,
         phase: state.isStoryMode ? RealtimeVoicePhase.error : state.phase,
         errorMessage: '$e',
       );
@@ -645,29 +661,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   Future<void> _startRecorder() async {
     try {
-      await _configureAudioSession(_VoiceAudioSessionMode.recording);
-      await _stopRecorder();
-      _recorder ??= FlutterSoundRecorder();
-      if (!_recorder!.isRecording) {
-        await _recorder!.openRecorder();
-      }
-
-      await _micStreamSubscription?.cancel();
-      await _micStreamController?.close();
-      _micStreamController = StreamController<Uint8List>();
-      _micStreamSubscription = _micStreamController!.stream.listen(
-        _handleMicChunk,
-        onError: (err, st) =>
-            unawaited(_handleSocketError(err, st is StackTrace ? st : null)),
-      );
-
-      await _recorder!.startRecorder(
-        toStream: _micStreamController!.sink,
-        codec: Codec.pcm16,
-        numChannels: 1,
-        sampleRate: _sampleRate,
-        bitRate: _sampleRate * 16,
-      );
+      await _startMicCapture();
 
       _log.i(
         'Recorder started: codec=pcm16 sampleRate=$_sampleRate channels=1',
@@ -678,6 +672,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isConnecting: false,
         isProcessing: false,
         isPlaying: false,
+        isUserSpeaking: false,
         errorMessage: null,
         phase: state.isStoryMode ? RealtimeVoicePhase.recording : state.phase,
       );
@@ -689,6 +684,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isProcessing: false,
         isConnecting: false,
         isPlaying: false,
+        isUserSpeaking: false,
         clearFace: true,
         phase: state.isStoryMode ? RealtimeVoicePhase.error : state.phase,
         errorMessage: 'Failed to start recording: $e',
@@ -696,6 +692,52 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       if (!state.isStoryMode) {
         await _teardownSocket();
       }
+    }
+  }
+
+  Future<void> _startMicCapture() async {
+    await _configureAudioSession(_VoiceAudioSessionMode.recording);
+    await _stopRecorder();
+    _recorder ??= FlutterSoundRecorder();
+    if (!_recorder!.isRecording) {
+      await _recorder!.openRecorder();
+    }
+
+    await _micStreamSubscription?.cancel();
+    await _micStreamController?.close();
+    _micStreamController = StreamController<Uint8List>();
+    _micStreamSubscription = _micStreamController!.stream.listen(
+      _handleMicChunk,
+      onError: (err, st) =>
+          unawaited(_handleSocketError(err, st is StackTrace ? st : null)),
+    );
+
+    await _recorder!.startRecorder(
+      toStream: _micStreamController!.sink,
+      codec: Codec.pcm16,
+      numChannels: 1,
+      sampleRate: _sampleRate,
+      bitRate: _sampleRate * 16,
+    );
+  }
+
+  Future<void> _startBargeInMonitoring() async {
+    if (_isBargeInMonitoring || state.isRecording || state.isMuted) return;
+    try {
+      _resetAudioBuffer();
+      _clearPendingMicChunks();
+      _lastDynamicSpeechThreshold = 0.0;
+      _hasSpeech = false;
+      _speechChunkStreak = 0;
+      _noiseFloor = 0.0;
+      _setUserSpeaking(false);
+      await _startMicCapture();
+      _isBargeInMonitoring = true;
+      _suppressNextPlaybackComplete = false;
+      _log.i('Barge-in monitoring started');
+    } catch (e, st) {
+      _log.w('Failed to start barge-in monitoring', error: e, stackTrace: st);
+      await _stopRecorder();
     }
   }
 
@@ -714,34 +756,51 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       );
     }
 
-    // Adapt to ambient noise so silence detection still works on noisy devices.
-    if (!_hasSpeech) {
-      if (_noiseFloor == 0.0) {
-        _noiseFloor = rms;
-      } else {
-        _noiseFloor = (_noiseFloor * 0.95) + (rms * 0.05);
-      }
-    }
-
     final dynamicThreshold = math.max(
       _speechThreshold,
       _noiseFloor + _noiseFloorMargin,
     );
-    _lastDynamicSpeechThreshold = dynamicThreshold;
+    final effectiveThreshold =
+        _isBargeInMonitoring && (state.isPlaying || state.isProcessing)
+        ? math.max(
+            dynamicThreshold * _bargeInThresholdMultiplier,
+            _bargeInThresholdFloor,
+          )
+        : dynamicThreshold;
+    _lastDynamicSpeechThreshold = effectiveThreshold;
 
-    final isAboveThreshold = rms >= dynamicThreshold;
+    final isAboveThreshold = rms >= effectiveThreshold;
+
+    // Learn ambient noise only from chunks that are still below the speech gate.
+    // This avoids the first syllable of real speech inflating the threshold.
+    if (!_hasSpeech && !isAboveThreshold) {
+      if (_noiseFloor == 0.0) {
+        _noiseFloor = rms;
+      } else {
+        _noiseFloor = (_noiseFloor * 0.97) + (rms * 0.03);
+      }
+    }
+
+    if (isAboveThreshold) {
+      _markUserSpeakingActive();
+    } else {
+      _scheduleUserSpeakingInactive();
+    }
 
     if (!_hasSpeech) {
       _queuePendingMicChunk(bytes);
       if (isAboveThreshold) {
         _speechChunkStreak++;
         if (_speechChunkStreak >= _minSpeechChunkStreak) {
+          if (_isBargeInMonitoring && (state.isPlaying || state.isProcessing)) {
+            _triggerBargeIn();
+          }
           _hasSpeech = true;
           _lastSpeechAt = DateTime.now();
           _cancelSilenceTimer();
           _flushPendingMicChunks();
           _log.i(
-            'Speech detected: rms=$rms threshold=$dynamicThreshold streak=$_speechChunkStreak',
+            'Speech detected: rms=$rms threshold=$effectiveThreshold streak=$_speechChunkStreak',
           );
         }
       } else {
@@ -756,7 +815,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _speechChunkStreak = _minSpeechChunkStreak;
       _lastSpeechAt = DateTime.now();
       _cancelSilenceTimer();
-      _log.i('Speech detected: rms=$rms threshold=$dynamicThreshold');
+      _log.i('Speech detected: rms=$rms threshold=$effectiveThreshold');
     } else {
       _startSilenceTimer();
     }
@@ -806,6 +865,33 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _maxRecordingTimer = null;
   }
 
+  void _triggerBargeIn() {
+    if (_suppressNextPlaybackComplete) return;
+    _log.i('Barge-in detected: cancelling active response');
+    _suppressNextPlaybackComplete = true;
+    _isBargeInMonitoring = false;
+    _ignoreIncomingAudioUntilNextResponse = true;
+    _cancelAutoListenTimer();
+    _cancelPlaybackIdleTimer();
+    _stopAiAudioLevelTimer();
+    _emitAiAudioLevelValue(0.0);
+    if (_socketOpen &&
+        !_responseDoneForCurrentTurn &&
+        (state.isProcessing || state.isPlaying || state.isConnecting)) {
+      _client.send({'type': 'response.cancel'});
+    }
+    unawaited(_player.stop());
+    state = state.copyWith(
+      isRecording: true,
+      isPlaying: false,
+      isProcessing: false,
+      isConnecting: false,
+      isUserSpeaking: true,
+      errorMessage: null,
+      phase: state.isStoryMode ? RealtimeVoicePhase.recording : state.phase,
+    );
+  }
+
   /// Stop recording and tell backend the input is finished.
   Future<void> stopRecordingAndSend() async {
     try {
@@ -834,6 +920,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           isProcessing: false,
           isPlaying: false,
           isConnecting: false,
+          isUserSpeaking: false,
           errorMessage: null,
           phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
         );
@@ -864,6 +951,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           isProcessing: false,
           isPlaying: false,
           isConnecting: false,
+          isUserSpeaking: false,
           errorMessage: null,
           phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
         );
@@ -879,6 +967,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isProcessing: true,
         isPlaying: false,
         isConnecting: false,
+        isUserSpeaking: false,
         errorMessage: null,
         phase: state.isStoryMode ? RealtimeVoicePhase.processing : state.phase,
       );
@@ -890,6 +979,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isProcessing: false,
         isConnecting: false,
         isPlaying: false,
+        isUserSpeaking: false,
         clearAiAudio: true,
         clearFace: true,
         phase: state.isStoryMode ? RealtimeVoicePhase.error : state.phase,
@@ -904,6 +994,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Future<void> _stopRecorder() async {
     _cancelSilenceTimer();
     _cancelMaxRecordingTimer();
+    _cancelSpeechIndicatorTimer();
+    _setUserSpeaking(false);
+    _isBargeInMonitoring = false;
     _lastSpeechAt = null;
     _lastDynamicSpeechThreshold = 0.0;
     _hasSpeech = false;
@@ -1157,7 +1250,18 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         _responseDoneForCurrentTurn = false;
         _receivedAiAudioForCurrentTurn = false;
         _lastAiAudioAt = null;
-        state = state.copyWith(isProcessing: true, isConnecting: false);
+        _suppressNextPlaybackComplete = false;
+        state = state.copyWith(
+          isRecording: false,
+          isPlaying: false,
+          isProcessing: true,
+          isConnecting: false,
+          isUserSpeaking: false,
+          phase: state.isStoryMode
+              ? RealtimeVoicePhase.processing
+              : state.phase,
+        );
+        unawaited(_startBargeInMonitoring());
         break;
       case RealtimeServerMessageType.responseAudio:
       case RealtimeServerMessageType.responseAudioDelta:
@@ -1178,44 +1282,70 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         }
         break;
       case RealtimeServerMessageType.responseAudioTranscriptDelta:
+        if (_ignoreIncomingAudioUntilNextResponse) {
+          break;
+        }
         final text = (payload['delta'] ?? payload['text'] ?? '') as String;
         if (text.isNotEmpty) {
           _aiTextBuffer.write(text);
           state = state.copyWith(
+            isRecording: false,
             aiResponse: _aiTextBuffer.toString(),
             isProcessing: false,
             isConnecting: false,
+            isUserSpeaking: false,
             phase: state.isStoryMode ? RealtimeVoicePhase.playing : state.phase,
           );
         }
         break;
       case RealtimeServerMessageType.responseAudioTranscriptDone:
       case RealtimeServerMessageType.responseTextDone:
+        if (_ignoreIncomingAudioUntilNextResponse) {
+          break;
+        }
         final text = (payload['text'] ?? payload['transcript'] ?? '') as String;
         if (text.isNotEmpty) {
           _aiTextBuffer.clear();
           _aiTextBuffer.write(text);
-          state = state.copyWith(aiResponse: text);
+          state = state.copyWith(
+            isRecording: false,
+            aiResponse: text,
+            isUserSpeaking: false,
+          );
         }
         break;
       case RealtimeServerMessageType.responseTextDelta:
+        if (_ignoreIncomingAudioUntilNextResponse) {
+          break;
+        }
         final text = payload['text'] as String? ?? '';
         if (text.isNotEmpty) {
           _aiTextBuffer.write(text);
           state = state.copyWith(
+            isRecording: false,
             aiResponse: _aiTextBuffer.toString(),
             isProcessing: false,
             isConnecting: false,
+            isUserSpeaking: false,
+            phase: state.isStoryMode
+                ? RealtimeVoicePhase.processing
+                : state.phase,
           );
         }
         break;
       case RealtimeServerMessageType.responseDone:
+        if (_ignoreIncomingAudioUntilNextResponse) {
+          _commitSent = false;
+          break;
+        }
         // Save completed turn into conversation history for display
         _saveCompletedTurn();
         _responseDoneForCurrentTurn = true;
         state = state.copyWith(
+          isRecording: false,
           isProcessing: false,
           isConnecting: false,
+          isUserSpeaking: false,
           phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
         );
         _commitSent = false;
@@ -1240,6 +1370,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         }
         // Also check for output_text.delta backward compatibility
         if (typeStr == 'response.output_text.delta') {
+          if (_ignoreIncomingAudioUntilNextResponse) {
+            break;
+          }
           final text = payload['text'] as String? ?? '';
           if (text.isNotEmpty) {
             _aiTextBuffer.write(text);
@@ -1247,6 +1380,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
               aiResponse: _aiTextBuffer.toString(),
               isProcessing: false,
               isConnecting: false,
+              isUserSpeaking: false,
             );
           }
         }
@@ -1261,6 +1395,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       phase: RealtimeVoicePhase.ready,
       isConnecting: false,
       isProcessing: false,
+      isUserSpeaking: false,
       storySession: sessionInfo.isValid ? sessionInfo : state.storySession,
       errorMessage: null,
     );
@@ -1298,6 +1433,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (granted) {
       state = state.copyWith(
         phase: RealtimeVoicePhase.ready,
+        isUserSpeaking: false,
         errorMessage: null,
       );
     } else {
@@ -1431,10 +1567,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     return incoming;
   }
 
-  int _commonPrefixLength(
-    List<ConversationItem> a,
-    List<ConversationItem> b,
-  ) {
+  int _commonPrefixLength(List<ConversationItem> a, List<ConversationItem> b) {
     final max = math.min(a.length, b.length);
     var i = 0;
     for (; i < max; i++) {
@@ -1523,7 +1656,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     final transcript = payload['transcript'] as String? ?? '';
     _log.i('[UserTranscription] User said: $transcript');
     if (transcript.isNotEmpty) {
-      state = state.copyWith(userTranscription: transcript);
+      state = state.copyWith(
+        userTranscription: transcript,
+        isUserSpeaking: false,
+      );
     }
   }
 
@@ -1547,6 +1683,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isConnecting: false,
         isPlaying: false,
         isRecording: false,
+        isUserSpeaking: false,
         clearFace: true,
         phase: RealtimeVoicePhase.error,
         errorMessage: 'Story session required. Please start a story first.',
@@ -1559,6 +1696,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isConnecting: false,
       isPlaying: false,
       isRecording: false,
+      isUserSpeaking: false,
       clearFace: true,
       phase: state.isStoryMode ? RealtimeVoicePhase.error : state.phase,
       errorMessage: error.message,
@@ -1581,7 +1719,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       _queueAiAudioLevel(bytes);
 
-      await _configureAudioSession(_VoiceAudioSessionMode.playback);
+      if (!_isBargeInMonitoring) {
+        await _configureAudioSession(_VoiceAudioSessionMode.playback);
+      }
       await _player.addChunk(
         bytes,
         sampleRate: _sampleRate,
@@ -1589,9 +1729,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       );
       if (!ref.mounted) return;
       state = state.copyWith(
+        isRecording: false,
         isPlaying: true,
         isProcessing: false,
         isConnecting: false,
+        isUserSpeaking: false,
         errorMessage: null,
         phase: state.isStoryMode ? RealtimeVoicePhase.playing : state.phase,
       );
@@ -1606,6 +1748,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isConnecting: false,
         currentExpression: RobotExpression.neutral,
         clearFace: true,
+        isUserSpeaking: false,
         errorMessage: 'Failed to play audio: $e',
       );
     }
@@ -1625,7 +1768,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       _queueAiAudioLevel(bytes);
 
-      await _configureAudioSession(_VoiceAudioSessionMode.playback);
+      if (!_isBargeInMonitoring) {
+        await _configureAudioSession(_VoiceAudioSessionMode.playback);
+      }
       await _player.addChunk(
         bytes,
         sampleRate: _sampleRate,
@@ -1633,9 +1778,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       );
       if (!ref.mounted) return;
       state = state.copyWith(
+        isRecording: false,
         isPlaying: true,
         isProcessing: false,
         isConnecting: false,
+        isUserSpeaking: false,
         errorMessage: null,
         phase: state.isStoryMode ? RealtimeVoicePhase.playing : state.phase,
       );
@@ -1650,14 +1797,20 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isConnecting: false,
         currentExpression: RobotExpression.neutral,
         clearFace: true,
+        isUserSpeaking: false,
         errorMessage: 'Failed to play audio: $e',
       );
     }
   }
 
   void _handlePlaybackComplete() {
+    if (_suppressNextPlaybackComplete) {
+      _suppressNextPlaybackComplete = false;
+      return;
+    }
     unawaited(_player.stop());
     _cancelPlaybackIdleTimer();
+    _cancelSpeechIndicatorTimer();
     if (!ref.mounted) return;
     _responseDoneForCurrentTurn = false;
     _receivedAiAudioForCurrentTurn = false;
@@ -1668,6 +1821,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     state = state.copyWith(
       isPlaying: false,
       isProcessing: false,
+      isUserSpeaking: false,
       currentExpression: RobotExpression.neutral,
       clearFace: true,
       phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
@@ -1825,6 +1979,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isConnecting: false,
         isRecording: false,
         isPlaying: false,
+        isUserSpeaking: false,
         clearAiResponse: true,
         errorMessage: null,
         clearFace: true,
@@ -1867,6 +2022,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       state = state.copyWith(
         isProcessing: false,
         isConnecting: false,
+        isUserSpeaking: false,
         phase: state.isStoryMode ? RealtimeVoicePhase.error : state.phase,
         errorMessage: 'Failed to send prompt: $e',
       );
@@ -1882,11 +2038,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _disableAudio();
     _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
+    _cancelSpeechIndicatorTimer();
     state = state.copyWith(
       isProcessing: false,
       isConnecting: false,
       isPlaying: false,
       isRecording: false,
+      isUserSpeaking: false,
       clearFace: true,
       phase: RealtimeVoicePhase.error,
       errorMessage: '$err',
@@ -1904,12 +2062,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _disableAudio();
     _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
+    _cancelSpeechIndicatorTimer();
     _socketSub = null;
     state = state.copyWith(
       isConnecting: false,
       isProcessing: false,
       isPlaying: false,
       isRecording: false,
+      isUserSpeaking: false,
       phase: RealtimeVoicePhase.closed,
     );
     _commitSent = false;
@@ -1923,6 +2083,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _disableAudio();
     _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
+    _cancelSpeechIndicatorTimer();
     await _stopRecorder();
     await _player.stop();
     await _teardownSocket();
@@ -1936,6 +2097,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isProcessing: false,
       isConnecting: false,
       isPlaying: false,
+      isUserSpeaking: false,
       clearAiResponse: true,
       clearUserTranscription: true,
       clearAiAudio: true,
@@ -1962,6 +2124,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _disableAudio();
     _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
+    _cancelSpeechIndicatorTimer();
     await _player.stop();
 
     // In story mode, don't tear down socket
@@ -1978,6 +2141,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isPlaying: false,
       isProcessing: false,
       isConnecting: false,
+      isUserSpeaking: false,
       currentExpression: RobotExpression.neutral,
       clearFace: true,
       phase: nextPhase,
@@ -2008,10 +2172,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         state = state.copyWith(
           isMuted: true,
           isRecording: false,
+          isUserSpeaking: false,
           phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
         );
       } else {
-        state = state.copyWith(isMuted: true);
+        state = state.copyWith(isMuted: true, isUserSpeaking: false);
       }
     } else {
       // Unmuting: start listening if ready
@@ -2027,6 +2192,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   /// Stop recorder without sending (for mute)
   Future<void> _stopRecorderOnly() async {
     _cancelSilenceTimer();
+    _cancelSpeechIndicatorTimer();
+    _setUserSpeaking(false);
+    _isBargeInMonitoring = false;
     _lastSpeechAt = null;
     try {
       if (_recorder?.isRecording ?? false) {
@@ -2160,6 +2328,32 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _audioBuffer = BytesBuilder(copy: false);
   }
 
+  void _markUserSpeakingActive() {
+    _cancelSpeechIndicatorTimer();
+    _setUserSpeaking(true);
+  }
+
+  void _scheduleUserSpeakingInactive() {
+    if (!state.isUserSpeaking) return;
+    if (_speechIndicatorTimer != null && _speechIndicatorTimer!.isActive) {
+      return;
+    }
+    _speechIndicatorTimer = Timer(_speechIndicatorHoldDuration, () {
+      _speechIndicatorTimer = null;
+      _setUserSpeaking(false);
+    });
+  }
+
+  void _cancelSpeechIndicatorTimer() {
+    _speechIndicatorTimer?.cancel();
+    _speechIndicatorTimer = null;
+  }
+
+  void _setUserSpeaking(bool value) {
+    if (!ref.mounted || state.isUserSpeaking == value) return;
+    state = state.copyWith(isUserSpeaking: value);
+  }
+
   void _appendMicChunk(Uint8List bytes) {
     if (!_socketOpen) return;
     _audioBuffer.add(bytes);
@@ -2194,10 +2388,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   @visibleForTesting
-  void debugPrepareRecording({
-    bool storyMode = true,
-    bool muted = false,
-  }) {
+  void debugPrepareRecording({bool storyMode = true, bool muted = false}) {
     _socketOpen = true;
     _commitSent = false;
     _resetAudioBuffer();
@@ -2214,10 +2405,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isProcessing: false,
       isConnecting: false,
       isPlaying: false,
+      isUserSpeaking: false,
       errorMessage: null,
-      phase: storyMode
-          ? RealtimeVoicePhase.recording
-          : state.phase,
+      phase: storyMode ? RealtimeVoicePhase.recording : state.phase,
     );
   }
 

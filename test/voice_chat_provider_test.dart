@@ -92,6 +92,36 @@ void main() {
       expect(state.isProcessing, isFalse);
     });
 
+    test('incoming response events clear stale listening state', () async {
+      await controller.sendTextPrompt('prime');
+      controller.state = container
+          .read(voiceChatControllerProvider)
+          .copyWith(
+            isStoryMode: true,
+            isRecording: true,
+            isProcessing: false,
+            isPlaying: false,
+            phase: RealtimeVoicePhase.recording,
+          );
+
+      fakeClient.emitJson({'type': 'response.created'});
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      var state = container.read(voiceChatControllerProvider);
+      expect(state.isRecording, isFalse);
+      expect(state.isProcessing, isTrue);
+      expect(state.phase, RealtimeVoicePhase.processing);
+
+      fakeClient.emitJson({
+        'type': 'response.audio.delta',
+        'audio': base64Encode([1, 2, 3, 4]),
+      });
+      await _waitFor(() => fakePlayer.addedChunks.isNotEmpty);
+
+      state = container.read(voiceChatControllerProvider);
+      expect(state.isRecording, isFalse);
+    });
+
     test('handles binary audio frames', () async {
       await controller.sendTextPrompt('binary');
       fakeClient.emitBinary(Uint8List.fromList(const [9, 8]));
@@ -138,24 +168,29 @@ void main() {
       },
     );
 
-    test('ensureStorySessionConnected resumes a closed story session', () async {
-      controller.state = container.read(voiceChatControllerProvider).copyWith(
-        isStoryMode: true,
-        phase: RealtimeVoicePhase.closed,
-        storySession: const StorySessionInfo(
-          sessionId: 'session_123',
-          storyId: 'story_1',
-        ),
-      );
+    test(
+      'ensureStorySessionConnected resumes a closed story session',
+      () async {
+        controller.state = container
+            .read(voiceChatControllerProvider)
+            .copyWith(
+              isStoryMode: true,
+              phase: RealtimeVoicePhase.closed,
+              storySession: const StorySessionInfo(
+                sessionId: 'session_123',
+                storyId: 'story_1',
+              ),
+            );
 
-      await controller.ensureStorySessionConnected('story_1');
+        await controller.ensureStorySessionConnected('story_1');
 
-      expect(fakeClient.connectCalls, 1);
-      final state = container.read(voiceChatControllerProvider);
-      expect(state.isStoryMode, isTrue);
-      expect(state.isConnecting, isTrue);
-      expect(state.phase, RealtimeVoicePhase.waitingForReady);
-    });
+        expect(fakeClient.connectCalls, 1);
+        final state = container.read(voiceChatControllerProvider);
+        expect(state.isStoryMode, isTrue);
+        expect(state.isConnecting, isTrue);
+        expect(state.phase, RealtimeVoicePhase.waitingForReady);
+      },
+    );
   });
 
   group('VoiceChatController turn detection', () {
@@ -171,17 +206,16 @@ void main() {
         player: FakeAudioChunkPlayer(),
       );
       container = ProviderContainer(
-        overrides: [
-          voiceChatControllerProvider.overrideWith(() => controller),
-        ],
+        overrides: [voiceChatControllerProvider.overrideWith(() => controller)],
       );
       subscription = container.listen(
         voiceChatControllerProvider,
         (_, __) {},
         fireImmediately: true,
       );
-      controller = container.read(voiceChatControllerProvider.notifier)
-          as TestVoiceChatController;
+      controller =
+          container.read(voiceChatControllerProvider.notifier)
+              as TestVoiceChatController;
     });
 
     tearDown(() {
@@ -233,10 +267,11 @@ void main() {
 
     test('insufficient speech audio does not produce a response', () async {
       controller.debugPrepareRecording();
-      controller.debugInjectMicRmsSamples(
-        [0.005, 0.04, 0.05],
-        samplesPerChunk: 700,
-      );
+      controller.debugInjectMicRmsSamples([
+        0.005,
+        0.04,
+        0.05,
+      ], samplesPerChunk: 700);
 
       await controller.stopRecordingAndSend();
 
@@ -250,6 +285,36 @@ void main() {
         isFalse,
       );
     });
+
+    test(
+      'speech activity flag tracks live sound instead of armed mic',
+      () async {
+        controller.debugPrepareRecording();
+
+        expect(
+          container.read(voiceChatControllerProvider).isUserSpeaking,
+          isFalse,
+        );
+
+        controller.debugInjectMicRmsSamples([0.008, 0.031]);
+        expect(
+          container.read(voiceChatControllerProvider).isUserSpeaking,
+          isTrue,
+        );
+
+        controller.debugInjectMicRmsSamples([0.004]);
+        expect(
+          container.read(voiceChatControllerProvider).isUserSpeaking,
+          isTrue,
+        );
+
+        await Future<void>.delayed(const Duration(milliseconds: 260));
+        expect(
+          container.read(voiceChatControllerProvider).isUserSpeaking,
+          isFalse,
+        );
+      },
+    );
   });
 }
 
@@ -369,9 +434,7 @@ class TestVoiceChatController extends VoiceChatController {
       isRecording: true,
       isProcessing: false,
       isConnecting: false,
-      phase: state.isStoryMode
-          ? RealtimeVoicePhase.recording
-          : state.phase,
+      phase: state.isStoryMode ? RealtimeVoicePhase.recording : state.phase,
     );
   }
 }

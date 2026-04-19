@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
+import 'package:antroph_mobile/features/home/presentation/chat_bottom_sheet.dart';
 import 'package:antroph_mobile/features/home/presentation/voice_chat_screen.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
@@ -67,6 +68,27 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
     if (state.isSessionReady && !state.isBusy && !state.isRecording) {
       unawaited(controller.startRecording());
     }
+  }
+
+  void _openChatSheet(BuildContext context) {
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    final voiceState = ref.read(voiceChatControllerProvider);
+    final wasMuted = voiceState.isMuted;
+    if (!wasMuted) {
+      voiceController.toggleMute();
+    }
+    voiceController.stopPlayback();
+
+    showAppBottomSheet(
+      context: context,
+      backgroundColor: context.backgroundColor,
+      builder: (ctx, scrollController) =>
+          ChatBottomSheet(scrollController: scrollController),
+    ).then((_) {
+      if (!wasMuted && mounted) {
+        ref.read(voiceChatControllerProvider.notifier).toggleMute();
+      }
+    });
   }
 
   void _openStoryDetails(BuildContext context) {
@@ -169,6 +191,7 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
               mascotConfig: widget.mascotConfig,
               expressionStream: voiceController.mascotExpressionStream,
               showMascotFace: widget.showMascotFace,
+              onOpenChat: () => _openChatSheet(context),
               onEnd: () {
                 unawaited(voiceController.endStorySession());
                 final nav = Navigator.of(context);

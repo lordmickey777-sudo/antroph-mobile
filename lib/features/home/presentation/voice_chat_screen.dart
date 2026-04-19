@@ -21,6 +21,7 @@ class VoiceChatScreen extends ConsumerStatefulWidget {
     this.mascotConfig,
     this.expressionStream,
     this.onEnd,
+    this.onOpenChat,
     this.showMascotFace = true,
   });
 
@@ -28,6 +29,7 @@ class VoiceChatScreen extends ConsumerStatefulWidget {
   final MascotConfig? mascotConfig;
   final Stream<MascotExpressionEvent>? expressionStream;
   final VoidCallback? onEnd;
+  final VoidCallback? onOpenChat;
   final bool showMascotFace;
 
   @override
@@ -87,8 +89,9 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen> {
       });
     }
 
-    final ChatController? chatController =
-        widget.isStoryMode ? null : ref.read(chatControllerProvider.notifier);
+    final ChatController? chatController = widget.isStoryMode
+        ? null
+        : ref.read(chatControllerProvider.notifier);
     final voiceState = ref.watch(voiceChatControllerProvider);
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
 
@@ -98,10 +101,7 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen> {
           constraints,
         );
         final faceSize = math
-            .min(
-              constraints.maxWidth * 0.75,
-              constraints.maxHeight * 0.56,
-            )
+            .min(constraints.maxWidth * 0.75, constraints.maxHeight * 0.56)
             .clamp(220.0, 380.0);
         return Column(
           children: [
@@ -149,7 +149,8 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen> {
                     ),
                     const SizedBox(width: 24),
                     _EndButton(
-                      onEnd: widget.onEnd ??
+                      onEnd:
+                          widget.onEnd ??
                           () {
                             if (widget.isStoryMode) {
                               voiceController.endStorySession();
@@ -159,6 +160,10 @@ class _VoiceChatScreenState extends ConsumerState<VoiceChatScreen> {
                             Navigator.of(context).pop();
                           },
                     ),
+                    if (widget.onOpenChat != null) ...[
+                      const SizedBox(width: 24),
+                      _ChatCircleButton(onTap: widget.onOpenChat!),
+                    ],
                   ],
                 ),
               ),
@@ -240,7 +245,11 @@ class _Header extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const SizedBox(width: 12),
-                _StatusPill(label: status.label, icon: status.icon),
+                _StatusPill(
+                  label: status.label,
+                  icon: status.icon,
+                  isActive: status.isActive,
+                ),
               ],
             ),
             if (!hasConversation &&
@@ -268,7 +277,13 @@ class _Header extends StatelessWidget {
         case RealtimeVoicePhase.ready:
           return const _StatusData('Ready', Icons.bolt);
         case RealtimeVoicePhase.recording:
-          return const _StatusData('Listening', Icons.mic);
+          return voice.isUserSpeaking
+              ? const _StatusData(
+                  'Hearing you',
+                  Icons.chat_bubble_rounded,
+                  isActive: true,
+                )
+              : const _StatusData('Mic on', Icons.mic_none_rounded);
         case RealtimeVoicePhase.processing:
           return const _StatusData('Processing', Icons.cloud_sync);
         case RealtimeVoicePhase.playing:
@@ -284,7 +299,13 @@ class _Header extends StatelessWidget {
     }
 
     if (voice.isRecording) {
-      return const _StatusData('Listening', Icons.mic);
+      return voice.isUserSpeaking
+          ? const _StatusData(
+              'Hearing you',
+              Icons.chat_bubble_rounded,
+              isActive: true,
+            )
+          : const _StatusData('Mic on', Icons.mic_none_rounded);
     }
     if (voice.isProcessing) {
       return const _StatusData('Processing', Icons.cloud_sync);
@@ -297,67 +318,93 @@ class _Header extends StatelessWidget {
 }
 
 class _StatusData {
-  const _StatusData(this.label, this.icon);
+  const _StatusData(this.label, this.icon, {this.isActive = false});
   final String label;
   final IconData icon;
+  final bool isActive;
 }
 
 class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.label, required this.icon});
+  const _StatusPill({
+    required this.label,
+    required this.icon,
+    this.isActive = false,
+  });
 
   final String label;
   final IconData icon;
+  final bool isActive;
 
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
     final labelColor = isDark ? Colors.white : Colors.black87;
-    final highlight = isDark
-        ? Colors.white.withValues(alpha: 0.18)
-        : Colors.white.withValues(alpha: 0.55);
-    final tint = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.white.withValues(alpha: 0.25);
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.18)
-        : Colors.white.withValues(alpha: 0.6);
+    final highlight = isActive
+        ? (isDark
+              ? const Color(0xFF42D6A4).withValues(alpha: 0.42)
+              : const Color(0xFFCCF6E8))
+        : (isDark
+              ? Colors.white.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.55));
+    final tint = isActive
+        ? (isDark
+              ? const Color(0xFF0E5A46).withValues(alpha: 0.82)
+              : const Color(0xFFA9EFD8))
+        : (isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.white.withValues(alpha: 0.25));
+    final borderColor = isActive
+        ? const Color(0xFF42D6A4).withValues(alpha: isDark ? 0.72 : 0.9)
+        : (isDark
+              ? Colors.white.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.6));
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(999),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [highlight, tint],
+    return AnimatedScale(
+      scale: isActive ? 1.04 : 1,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.symmetric(
+              horizontal: isActive ? 16 : 14,
+              vertical: 8,
             ),
-            border: Border.all(color: borderColor, width: 0.6),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.08),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [highlight, tint],
               ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: labelColor, size: 14),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: labelColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+              border: Border.all(color: borderColor, width: isActive ? 1 : 0.6),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.08),
+                  blurRadius: isActive ? 16 : 12,
+                  offset: const Offset(0, 4),
                 ),
-              ),
-            ],
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: labelColor, size: isActive ? 15 : 14),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -427,7 +474,9 @@ class _MuteButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
-    final bgColor = isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06);
+    final bgColor = isDark
+        ? Colors.white10
+        : Colors.black.withValues(alpha: 0.06);
     final borderColor = isDark ? Colors.white12 : Colors.black12;
     final labelColor = isDark ? Colors.white : Colors.black87;
     return GestureDetector(
@@ -470,6 +519,39 @@ class _EndButton extends StatelessWidget {
           Icons.call_end_rounded,
           color: Colors.white,
           size: 28,
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatCircleButton extends StatelessWidget {
+  const _ChatCircleButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final bgColor = isDark
+        ? Colors.white10
+        : Colors.black.withValues(alpha: 0.06);
+    final borderColor = isDark ? Colors.white12 : Colors.black12;
+    final labelColor = isDark ? Colors.white : Colors.black87;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: bgColor,
+          border: Border.all(color: borderColor),
+        ),
+        child: Icon(
+          Icons.chat_bubble_rounded,
+          size: 26,
+          color: labelColor,
         ),
       ),
     );

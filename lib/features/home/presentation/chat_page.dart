@@ -299,6 +299,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
             isStoryMode: widget.isStoryMode,
             mascotConfig: mascotConfig,
             expressionStream: voiceController.mascotExpressionStream,
+            onOpenChat: () =>
+                _openChatSheet(context, voiceController, voiceState),
           ),
         ),
       ),
