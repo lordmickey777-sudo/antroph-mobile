@@ -78,7 +78,7 @@ class StoryPage extends ConsumerWidget {
                           Image.asset('assets/images/app_logo.png', width: 38, height: 38),
                           const SizedBox(width: 2),
                           TypographyText(
-                            'Stories',
+                            'Explore',
                             variant: TypographyVariant.h3,
                             color: isDark ? Colors.white : Colors.black,
                           ),
