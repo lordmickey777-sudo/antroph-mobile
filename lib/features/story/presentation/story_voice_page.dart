@@ -141,6 +141,7 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
             surfaceTintColor: Colors.transparent,
             scrolledUnderElevation: 0,
             elevation: 0,
+            automaticallyImplyLeading: false,
             titleSpacing: 16,
             flexibleSpace: Container(
               width: double.infinity,

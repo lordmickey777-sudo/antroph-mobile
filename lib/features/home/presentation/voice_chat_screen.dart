@@ -724,7 +724,7 @@ class _ChatCircleButton extends StatelessWidget {
           border: Border.all(color: borderColor),
         ),
         child: Icon(
-          Icons.chat_bubble_rounded,
+          Icons.chat_bubble_outline_rounded,
           size: 26,
           color: labelColor,
         ),
