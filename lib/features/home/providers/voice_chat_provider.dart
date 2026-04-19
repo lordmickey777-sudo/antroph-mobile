@@ -804,7 +804,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _hasSpeech = false;
     _noiseFloor = 0.0;
     try {
-      await _recorder?.stopRecorder();
+      final recorder = _recorder;
+      if (recorder != null && recorder.isRecording) {
+        await recorder.stopRecorder();
+      }
     } catch (_) {}
     await _micStreamSubscription?.cancel();
     _micStreamSubscription = null;

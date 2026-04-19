@@ -498,30 +498,17 @@ class _MuteButton extends StatelessWidget {
     return GestureDetector(
       onTap: onToggle,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        width: 64,
+        height: 64,
         decoration: BoxDecoration(
+          shape: BoxShape.circle,
           color: bgColor,
-          borderRadius: BorderRadius.circular(999),
           border: Border.all(color: borderColor),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isMuted ? Icons.mic_off_rounded : Icons.mic_none_rounded,
-              size: 18,
-              color: labelColor,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              isMuted ? 'Muted' : 'Mute',
-              style: TextStyle(
-                color: labelColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+        child: Icon(
+          isMuted ? Icons.mic_off_rounded : Icons.mic_none_rounded,
+          size: 28,
+          color: labelColor,
         ),
       ),
     );

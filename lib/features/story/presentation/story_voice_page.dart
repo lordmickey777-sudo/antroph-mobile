@@ -54,9 +54,10 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
     final controller = ref.read(voiceChatControllerProvider.notifier);
     final state = ref.read(voiceChatControllerProvider);
     if (state.isMuted) {
-      controller.toggleMute(); // will auto-start if ready
+      controller.toggleMute();
+      return;
     }
-    if (!state.isMuted && state.isSessionReady && !state.isBusy) {
+    if (state.isSessionReady && !state.isBusy && !state.isRecording) {
       unawaited(controller.startRecording());
     }
   }
@@ -101,6 +102,9 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
       if (next.isMuted) return;
       if (next.isBusy) return;
       if (!next.isSessionReady) return;
+      if (next.isRecording) return;
+      final becameReady = !(prev?.isSessionReady ?? false) && next.isSessionReady;
+      if (!becameReady) return;
       unawaited(voiceController.startRecording());
     });
 

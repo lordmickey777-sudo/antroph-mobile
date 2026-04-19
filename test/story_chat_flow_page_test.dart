@@ -52,7 +52,7 @@ void main() {
 
     expect(find.byType(VoiceChatScreen), findsOneWidget);
     expect(fake.toggleMuteCalls, greaterThanOrEqualTo(2));
-    expect(fake.startRecordingCalls, greaterThanOrEqualTo(1));
+    expect(fake.startRecordingCalls, 1);
   });
 }
 
