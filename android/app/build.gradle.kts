@@ -46,6 +46,21 @@ val isReleaseSigningConfigured = listOf(
     }
 }
 
+fun releaseSigningConfigHint(): String = when {
+    releaseStoreFilePath.isNullOrBlank() ->
+        "Missing storeFile in android/key.properties or ANDROID_KEYSTORE_PATH."
+    releaseStoreFile?.exists() != true ->
+        "Keystore not found at ${releaseStoreFile?.absolutePath}."
+    releaseStorePassword.isNullOrBlank() ->
+        "Missing storePassword in android/key.properties or ANDROID_KEYSTORE_PASSWORD."
+    releaseKeyAlias.isNullOrBlank() ->
+        "Missing keyAlias in android/key.properties or ANDROID_KEY_ALIAS."
+    releaseKeyPassword.isNullOrBlank() ->
+        "Missing keyPassword in android/key.properties or ANDROID_KEY_PASSWORD."
+    else ->
+        "Release signing is not configured."
+}
+
 android {
     namespace = "com.antroph.aura"
     compileSdk = 36
@@ -84,28 +99,21 @@ android {
 
     buildTypes {
         release {
-            if (!isReleaseSigningConfigured) {
-                val configHint = when {
-                    releaseStoreFilePath.isNullOrBlank() ->
-                        "Missing storeFile in android/key.properties or ANDROID_KEYSTORE_PATH."
-                    releaseStoreFile?.exists() != true ->
-                        "Keystore not found at ${releaseStoreFile?.absolutePath}."
-                    releaseStorePassword.isNullOrBlank() ->
-                        "Missing storePassword in android/key.properties or ANDROID_KEYSTORE_PASSWORD."
-                    releaseKeyAlias.isNullOrBlank() ->
-                        "Missing keyAlias in android/key.properties or ANDROID_KEY_ALIAS."
-                    releaseKeyPassword.isNullOrBlank() ->
-                        "Missing keyPassword in android/key.properties or ANDROID_KEY_PASSWORD."
-                    else ->
-                        "Release signing is not configured."
-                }
-                throw GradleException(
-                    "$configHint Add android/key.properties or set ANDROID_* env vars.",
-                )
+            if (isReleaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
             }
-
-            signingConfig = signingConfigs.getByName("release")
         }
+    }
+}
+
+gradle.taskGraph.whenReady {
+    val releaseTaskRequested = allTasks.any { task ->
+        task.name.contains("Release", ignoreCase = true)
+    }
+    if (releaseTaskRequested && !isReleaseSigningConfigured) {
+        throw GradleException(
+            "${releaseSigningConfigHint()} Add android/key.properties or set ANDROID_* env vars.",
+        )
     }
 }
 
