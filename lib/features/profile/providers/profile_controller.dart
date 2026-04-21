@@ -44,14 +44,21 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
         timezone: null,
         language: null,
         isCompleted: false,
+        personalizationCompleted: false,
       );
     }
   }
 
   /// Upload a new avatar picked from gallery or camera.
-  Future<void> pickAndUploadAvatar({ImageSource source = ImageSource.gallery}) async {
+  Future<void> pickAndUploadAvatar({
+    ImageSource source = ImageSource.gallery,
+  }) async {
     try {
-      final file = await _picker.pickImage(source: source, maxWidth: 512, imageQuality: 75);
+      final file = await _picker.pickImage(
+        source: source,
+        maxWidth: 512,
+        imageQuality: 75,
+      );
       if (file == null) return; // user canceled
 
       final url = await _repo.uploadAvatar(
@@ -73,6 +80,7 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
           timezone: current.timezone,
           language: current.language,
           isCompleted: current.isCompleted,
+          personalizationCompleted: current.personalizationCompleted,
         );
         state = AsyncValue.data(updated);
       }
@@ -136,7 +144,10 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
 
     () async {
       try {
-        final result = await _repo.checkUsernameAvailability(username, cancelToken: token);
+        final result = await _repo.checkUsernameAvailability(
+          username,
+          cancelToken: token,
+        );
         // If another request has started since, ignore this result
         if (_usernameCancelToken != token) return;
         _usernameAvailability = result;
@@ -153,15 +164,31 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
 
   List<String> missingFields(UserProfile? profile) {
     final p = profile;
-    if (p?.isCompleted == true) return [];
-    if (p == null) return ['profile'];
+    if (p?.isCompleted == true) {
+      return [];
+    }
+    if (p == null) {
+      return ['profile'];
+    }
     final missing = <String>[];
-    if (p.avatarUrl == null || p.avatarUrl!.isEmpty) missing.add('avatar');
-    if (p.username == null || p.username!.isEmpty) missing.add('username');
-    if (p.displayName == null || p.displayName!.isEmpty) missing.add('display name');
-    if (p.dateOfBirth == null) missing.add('date of birth');
-    if (p.language == null || p.language!.isEmpty) missing.add('language');
-    if (p.timezone == null || p.timezone!.isEmpty) missing.add('timezone');
+    if (p.avatarUrl == null || p.avatarUrl!.isEmpty) {
+      missing.add('avatar');
+    }
+    if (p.username == null || p.username!.isEmpty) {
+      missing.add('username');
+    }
+    if (p.displayName == null || p.displayName!.isEmpty) {
+      missing.add('display name');
+    }
+    if (p.dateOfBirth == null) {
+      missing.add('date of birth');
+    }
+    if (p.language == null || p.language!.isEmpty) {
+      missing.add('language');
+    }
+    if (p.timezone == null || p.timezone!.isEmpty) {
+      missing.add('timezone');
+    }
     return missing;
   }
 
@@ -173,14 +200,15 @@ class ProfileController extends AsyncNotifier<UserProfile?> {
       state = const AsyncValue.data(null);
       await ref.read(authControllerProvider.notifier).logout();
       return message;
-    } on ApiError catch (e) {
-      throw e;
+    } on ApiError {
+      rethrow;
     } catch (e) {
       throw ApiError(message: e.toString());
     }
   }
 }
 
-final profileControllerProvider = AsyncNotifierProvider<ProfileController, UserProfile?>(
-  ProfileController.new,
-);
+final profileControllerProvider =
+    AsyncNotifierProvider<ProfileController, UserProfile?>(
+      ProfileController.new,
+    );

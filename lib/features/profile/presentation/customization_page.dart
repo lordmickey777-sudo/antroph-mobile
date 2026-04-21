@@ -419,7 +419,7 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
             top: false,
             child: Material(
               elevation: 12,
-              borderRadius: BorderRadius.circular(40),
+              borderRadius: BorderRadius.circular(999),
               color: Colors.transparent,
               child: SizedBox(
                 height: 56,

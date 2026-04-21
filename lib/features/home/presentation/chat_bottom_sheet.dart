@@ -307,10 +307,12 @@ class _EmptyState extends StatelessWidget {
                       : Colors.black.withValues(alpha: 0.08),
                 ),
               ),
-              child: Icon(
-                CupertinoIcons.chat_bubble_text,
-                color: primaryTextColor,
-                size: 28,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Image.asset(
+                  'assets/images/message.png',
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
             const SizedBox(height: 18),

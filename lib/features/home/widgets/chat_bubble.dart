@@ -36,68 +36,44 @@ class ChatBubble extends StatelessWidget {
         ? (isDark ? Colors.black54 : Colors.white70)
         : (isDark ? Colors.white60 : Colors.black45);
     final isStreaming = !message.isUser && message.isStreaming;
-    final borderColor = message.isUser
-        ? Colors.transparent
-        : (isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.06));
     final borderRadius = message.isUser
         ? const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
-            bottomLeft: Radius.circular(24),
-            bottomRight: Radius.circular(10),
+            topLeft: Radius.circular(26),
+            topRight: Radius.circular(26),
+            bottomLeft: Radius.circular(26),
+            bottomRight: Radius.circular(12),
           )
         : const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
-            bottomLeft: Radius.circular(10),
-            bottomRight: Radius.circular(24),
+            topLeft: Radius.circular(26),
+            topRight: Radius.circular(26),
+            bottomLeft: Radius.circular(12),
+            bottomRight: Radius.circular(26),
           );
+    final showsTypingOnly = isStreaming && message.message.trim().isEmpty;
 
     return Align(
       alignment: alignment,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: Container(
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: borderRadius,
-            border: Border.all(color: borderColor),
-          ),
+          decoration: BoxDecoration(color: bgColor, borderRadius: borderRadius),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                message.message,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 15,
-                  height: 1.45,
-                  fontWeight: FontWeight.w400,
+              if (!showsTypingOnly)
+                Text(
+                  message.message,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 15,
+                    height: 1.45,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
-              ),
               if (isStreaming) ...[
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: statusColor,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Streaming...',
-                      style: TextStyle(color: statusColor, fontSize: 11),
-                    ),
-                  ],
-                ),
+                SizedBox(height: showsTypingOnly ? 0 : 8),
+                _TypingDots(color: statusColor),
               ] else if (message.isPending || message.isFailed) ...[
                 const SizedBox(height: 8),
                 ChatStatusRow(message: message, onRetry: onRetry),
@@ -106,6 +82,64 @@ class ChatBubble extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TypingDots extends StatefulWidget {
+  const _TypingDots({required this.color});
+
+  final Color color;
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (index) {
+            final progress = (_controller.value - (index * 0.18)) % 1.0;
+            final opacity = 0.3 + ((1 - ((progress - 0.5).abs() * 2)) * 0.7);
+            return Padding(
+              padding: EdgeInsets.only(right: index == 2 ? 0 : 6),
+              child: Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: widget.color.withValues(
+                    alpha: opacity.clamp(0.2, 1.0),
+                  ),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            );
+          }),
+        );
+      },
     );
   }
 }

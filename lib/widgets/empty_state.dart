@@ -8,7 +8,7 @@ class EmptyState extends StatelessWidget {
     super.key,
     required this.title,
     this.description,
-    this.assetPath = 'assets/images/antroph_smile.png',
+    this.assetPath = 'assets/images/empty.png',
     this.actionLabel,
     this.onAction,
     this.margin = const EdgeInsets.symmetric(horizontal: 32),

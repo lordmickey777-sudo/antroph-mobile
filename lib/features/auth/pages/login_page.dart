@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:antroph_mobile/core/onboarding/app_setup_route_service.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import '../../../widgets/typography_text.dart';
 import '../widgets/auth_input.dart';
@@ -66,7 +67,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       return;
     }
     final controller = ref.read(authControllerProvider.notifier);
-    await controller.login(email: _emailCtrl.text.trim(), password: _passwordCtrl.text);
+    await controller.login(
+      email: _emailCtrl.text.trim(),
+      password: _passwordCtrl.text,
+    );
+  }
+
+  Future<void> _handleAuthenticatedUser() async {
+    final nextRoute = await AppSetupRouteService.resolveAuthenticatedRoute();
+    if (!mounted) return;
+    context.go(nextRoute);
   }
 
   @override
@@ -84,8 +94,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       if (mounted && user != null && user != prevUser) {
         // Remember last successful email for next time
         EmailStorageService.saveLastEmail(user.email);
-        // showToast(context, 'Welcome back!', success: true);
-        context.go('/home');
+        _handleAuthenticatedUser();
       }
     });
     final loading = authState.isLoading;
@@ -97,97 +106,100 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: ContentWidth.form),
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(horizontalPadding, 96, horizontalPadding, 24),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                96,
+                horizontalPadding,
+                24,
+              ),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                const TypographyText(
-                  'Login Your',
-                  variant: TypographyVariant.h2,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-                const SizedBox(height: 4),
-                const TypographyText(
-                  'Account',
-                  variant: TypographyVariant.h2,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-                const SizedBox(height: 36),
-                AppInput(
-                  controller: _emailCtrl,
-                  hint: 'Enter Your Email',
-                  icon: Icons.email_outlined,
-                  keyboardType: TextInputType.emailAddress,
-                  validator: _validateEmail,
-                ),
-                const SizedBox(height: 20),
-                AppInput(
-                  controller: _passwordCtrl,
-                  hint: 'Password',
-                  icon: Icons.lock_outline,
-                  obscure: _obscure,
-                  onToggleObscure: () => setState(() => _obscure = !_obscure),
-                  validator: _validatePassword,
-                ),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: GestureDetector(
-                    onTap: () => context.goNamed('forgot-password'),
-                    child: const TypographyText(
-                      'Forgot Password ?',
-                      variant: TypographyVariant.body2,
-                      color: Colors.white70,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                AuthButton(label: 'Login', onTap: _submit, loading: loading),
-                const SizedBox(height: 20),
-                const OrDivider(),
-                const SizedBox(height: 20),
-                const SocialSignInButtons(),
-                const SizedBox(height: 28),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
                     const TypographyText(
-                      'Create New Account? ',
-                      variant: TypographyVariant.body2,
-                      color: Colors.white70,
+                      'Login to Your Account',
+                      variant: TypographyVariant.h2,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        if (widget.onSwitchSignup != null) {
-                          widget.onSwitchSignup!();
-                        } else {
-                          // Fallback to routing when not embedded in _AuthGated
-                          context.go('/auth/signup');
-                        }
-                      },
-                      child: const TypographyText(
-                        'Sign up',
-                        variant: TypographyVariant.body2,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
+                    const SizedBox(height: 36),
+                    AppInput(
+                      controller: _emailCtrl,
+                      hint: 'Enter Your Email',
+                      icon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: _validateEmail,
+                    ),
+                    const SizedBox(height: 20),
+                    AppInput(
+                      controller: _passwordCtrl,
+                      hint: 'Password',
+                      icon: Icons.lock_outline,
+                      obscure: _obscure,
+                      onToggleObscure: () =>
+                          setState(() => _obscure = !_obscure),
+                      validator: _validatePassword,
+                    ),
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: GestureDetector(
+                        onTap: () => context.goNamed('forgot-password'),
+                        child: const TypographyText(
+                          'Forgot Password ?',
+                          variant: TypographyVariant.body2,
+                          color: Colors.white70,
+                        ),
                       ),
                     ),
+                    const SizedBox(height: 24),
+                    AuthButton(
+                      label: 'Login',
+                      onTap: _submit,
+                      loading: loading,
+                    ),
+                    const SizedBox(height: 20),
+                    const OrDivider(),
+                    const SizedBox(height: 20),
+                    const SocialSignInButtons(),
+                    const SizedBox(height: 28),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const TypographyText(
+                          'Create New Account? ',
+                          variant: TypographyVariant.body2,
+                          color: Colors.white70,
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            if (widget.onSwitchSignup != null) {
+                              widget.onSwitchSignup!();
+                            } else {
+                              // Fallback to routing when not embedded in _AuthGated
+                              context.go('/auth/signup');
+                            }
+                          },
+                          child: const TypographyText(
+                            'Sign up',
+                            variant: TypographyVariant.body2,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // if (authState.hasError)
+                    //   Padding(
+                    //     padding: const EdgeInsets.only(top: 16),
+                    //     child: TypographyText(
+                    //       'Error: ${authState.error}',
+                    //       variant: TypographyVariant.body2,
+                    //       color: Colors.redAccent,
+                    //     ),
+                    //   ),
                   ],
-                ),
-                // if (authState.hasError)
-                //   Padding(
-                //     padding: const EdgeInsets.only(top: 16),
-                //     child: TypographyText(
-                //       'Error: ${authState.error}',
-                //       variant: TypographyVariant.body2,
-                //       color: Colors.redAccent,
-                //     ),
-                //   ),
-              ],
                 ),
               ),
             ),

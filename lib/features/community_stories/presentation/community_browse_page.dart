@@ -7,7 +7,7 @@ import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
-import 'package:antroph_mobile/features/home/presentation/chat_page.dart';
+import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
 
 import '../providers/community_stories_providers.dart';
 import '../models/community_story_model.dart';
@@ -295,7 +295,7 @@ class _CommunityStoryDetail extends StatelessWidget {
                         if (!ctx.mounted) return;
                         Navigator.of(ctx).push(
                           MaterialPageRoute(
-                            builder: (_) => ChatPage(
+                            builder: (_) => StoryChatFlowPage(
                               storyTitle: story.title.isNotEmpty
                                   ? story.title
                                   : 'Chat',

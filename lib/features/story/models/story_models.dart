@@ -30,6 +30,7 @@ class StoryCardDto {
     required this.users,
     required this.views,
     required this.isAdded,
+    this.isPremium = false,
     this.riveElementId,
     this.riveElement,
   });
@@ -43,6 +44,7 @@ class StoryCardDto {
   final int users;
   final int views;
   final bool isAdded;
+  final bool isPremium;
   final String? riveElementId;
   final RiveElementDto? riveElement;
 
@@ -60,6 +62,7 @@ class StoryCardDto {
     users: (json['users'] as num?)?.toInt() ?? 0,
     views: (json['views'] as num?)?.toInt() ?? 0,
     isAdded: json['is_added'] as bool? ?? false,
+    isPremium: json['is_premium'] as bool? ?? false,
     riveElementId: (json['rive_element_id'] as String?)?.trim(),
     riveElement: _parseRiveElement(json['rive_element']),
   );
@@ -73,6 +76,7 @@ class StoryCardDto {
     'users': users,
     'views': views,
     'is_added': isAdded,
+    'is_premium': isPremium,
     if (riveElementId != null) 'rive_element_id': riveElementId,
     if (riveElement != null) 'rive_element': riveElement!.toJson(),
   };
@@ -86,6 +90,7 @@ class FeaturedStoryDto {
     required this.coverImageUrl,
     required this.author,
     required this.isAdded,
+    this.isPremium = false,
     this.riveElementId,
     this.riveElement,
   });
@@ -96,6 +101,7 @@ class FeaturedStoryDto {
   final String coverImageUrl;
   final String author;
   final bool isAdded;
+  final bool isPremium;
   final String? riveElementId;
   final RiveElementDto? riveElement;
 
@@ -109,6 +115,7 @@ class FeaturedStoryDto {
         coverImageUrl: (json['cover_image_url'] as String?)?.trim() ?? '',
         author: (json['author'] as String?)?.trim() ?? '',
         isAdded: json['is_added'] as bool? ?? false,
+        isPremium: json['is_premium'] as bool? ?? false,
         riveElementId: (json['rive_element_id'] as String?)?.trim(),
         riveElement: _parseRiveElement(json['rive_element']),
       );
@@ -120,6 +127,7 @@ class FeaturedStoryDto {
     'cover_image_url': coverImageUrl,
     'author': author,
     'is_added': isAdded,
+    'is_premium': isPremium,
     if (riveElementId != null) 'rive_element_id': riveElementId,
     if (riveElement != null) 'rive_element': riveElement!.toJson(),
   };

@@ -142,9 +142,7 @@ class _ScanPageState extends State<ScanPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: context.actionButtonBackground,
                   foregroundColor: context.actionButtonForeground,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(60),
-                  ),
+                  shape: const StadiumBorder(),
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                 ),
                 onPressed: () async {
@@ -152,7 +150,8 @@ class _ScanPageState extends State<ScanPage> {
                   // Restart scan if previously stopped after a detection
                   // Restart scanning (start is idempotent for MobileScannerController)
                   await _controller.start();
-                  showToast(context, 'Scanning…', success: true);
+                  if (!mounted) return;
+                  showToast(this.context, 'Scanning…', success: true);
                 },
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,

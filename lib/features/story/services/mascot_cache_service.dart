@@ -26,7 +26,7 @@ class MascotCacheService {
     Dio? dio,
     RiveCryptoService? cryptoService,
     FutureOr<void> Function(List<String> deletedPaths)? onFilesDeleted,
-  }) : _dio = dio ?? ApiClient.I.dio,
+  }) : _dio = dio ?? _defaultDio(),
        _cryptoService = cryptoService ?? RiveCryptoService(),
        _onFilesDeleted = onFilesDeleted;
   final Dio _dio;
@@ -36,6 +36,22 @@ class MascotCacheService {
   static const int _defaultConcurrentDownloads = 3;
   static const int _maxCacheFiles = 24;
   static const Duration _maxAge = Duration(days: 60);
+
+  static Dio _defaultDio() {
+    final base = AppEnv.apiBaseUrl.trim();
+    if (base.isNotEmpty) {
+      return ApiClient.I.dio;
+    }
+    // In widget tests (or when running with only local assets), API_BASE_URL is
+    // often unset; downloading absolute URLs should still work with a bare Dio.
+    return Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 20),
+        headers: {'Accept': 'application/octet-stream'},
+      ),
+    );
+  }
 
   Future<File> cacheMascot(
     MascotConfig mascot, {

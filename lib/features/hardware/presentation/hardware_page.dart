@@ -33,19 +33,24 @@ class _HardwarePageState extends State<HardwarePage> {
       initialPage: _kMiddlePage + 1, // start on middle real item
     );
     _pageController.addListener(() {
-      setState(() => _currentPage = _pageController.page ?? (_kMiddlePage + 1.0));
+      setState(
+        () => _currentPage = _pageController.page ?? (_kMiddlePage + 1.0),
+      );
     });
 
     _videoControllers = _items.map((item) {
       final controller = VideoPlayerController.asset(item.video);
-      controller.initialize().then((_) {
-        controller.setLooping(true);
-        controller.setVolume(0);
-        controller.play();
-        if (mounted) setState(() {});
-      }).catchError((e) {
-        debugPrint('Video init error for ${item.video}: $e');
-      });
+      controller
+          .initialize()
+          .then((_) {
+            controller.setLooping(true);
+            controller.setVolume(0);
+            controller.play();
+            if (mounted) setState(() {});
+          })
+          .catchError((e) {
+            debugPrint('Video init error for ${item.video}: $e');
+          });
       return controller;
     }).toList();
   }
@@ -148,9 +153,7 @@ class _HardwarePageState extends State<HardwarePage> {
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(9999),
-                      ),
+                      shape: const StadiumBorder(),
                     ),
                   ),
                 ),
@@ -218,9 +221,7 @@ class _HardwarePageState extends State<HardwarePage> {
                       child: VideoPlayer(controller),
                     ),
                   )
-                : const Center(
-                    child: CircularProgressIndicator.adaptive(),
-                  ),
+                : const Center(child: CircularProgressIndicator.adaptive()),
           ),
         ),
       ),

@@ -48,7 +48,7 @@ class SocialSignInButtons extends ConsumerWidget {
   }
 
   Widget _socialIcon(String assetPath) {
-    return SizedBox(width: 20, height: 20, child: SvgPicture.asset(assetPath));
+    return SizedBox(width: 25, height: 25, child: SvgPicture.asset(assetPath));
   }
 }
 
@@ -95,7 +95,7 @@ class _SocialButton extends StatelessWidget {
       height: 56,
       child: Material(
         color: buttonBackground,
-        borderRadius: BorderRadius.circular(40),
+        borderRadius: BorderRadius.circular(999),
         child: InkWell(
           onTap: onTap == null
               ? null
@@ -103,7 +103,7 @@ class _SocialButton extends StatelessWidget {
                   HapticFeedback.lightImpact();
                   onTap!();
                 },
-          borderRadius: BorderRadius.circular(40),
+          borderRadius: BorderRadius.circular(999),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
