@@ -12,6 +12,7 @@ import '../auth/models/user.dart';
 import '../logging/logger.dart';
 import '../network/api_client.dart';
 import '../network/error_formatter.dart';
+import '../services/device_id_service.dart';
 
 final pushNotificationServiceProvider = Provider<PushNotificationService>((
   ref,
@@ -177,7 +178,13 @@ class PushNotificationService {
         return;
       }
 
-      await _dio.post('/users/me/fcm-token', data: {'fcm_token': token});
+      final deviceId = await DeviceIdService.getDeviceId();
+      final platform = kIsWeb ? 'web' : defaultTargetPlatform.name.toLowerCase();
+
+      await _dio.post(
+        '/users/me/fcm-token',
+        data: {'fcm_token': token, 'device_id': deviceId, 'platform': platform},
+      );
       await prefs.setString(_prefsRegisteredToken, token);
       await prefs.setString(_prefsRegisteredUserId, userId);
       Log.i.i('[Push] Registered FCM token for user $userId.');
