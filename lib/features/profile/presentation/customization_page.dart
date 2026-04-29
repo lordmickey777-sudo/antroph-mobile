@@ -110,13 +110,13 @@ const Map<String, String> _ttsVoiceOptions = {
   'alloy': 'Alloy',
   'ash': 'Ash',
   'ballad': 'Ballad',
+  'cedar': 'Cedar',
   'coral': 'Coral',
   'echo': 'Echo',
+  'marin': 'Marin',
   'sage': 'Sage',
   'shimmer': 'Shimmer',
   'verse': 'Verse',
-  'marin': 'Marin',
-  'cedar': 'Cedar',
 };
 
 const Map<String, String> _filterLevelOptions = {
