@@ -842,6 +842,8 @@ class _CommunityStoriesSliver extends ConsumerWidget {
         builder: (_) => StoryChatFlowPage(
           storyTitle: story.title.isNotEmpty ? story.title : 'Chat',
           storyId: story.id,
+          storySubtitle: story.description,
+          storyImage: story.coverImageUrl,
         ),
       ),
     );

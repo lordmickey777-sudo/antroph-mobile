@@ -13,18 +13,26 @@ class AppSetupRouteService {
   }) async {
     final repo = profileRepository ?? ProfileRepository();
 
+    // 1. Check if interests/preferences are completed (Backend + Local check)
+    final savedVibe = await AppSetupStorageService.getSelectedVibe();
     try {
       final profile = await repo.getMyProfile();
-      if (!profile.personalizationCompleted) {
+      if (!profile.personalizationCompleted || savedVibe == null || savedVibe.isEmpty) {
         return personalizationRoute;
       }
     } catch (_) {
-      final hasCompletedSetup =
-          await AppSetupStorageService.hasCompletedSetup();
-      return hasCompletedSetup ? homeRoute : personalizationRoute;
+      final hasCompletedSetup = await AppSetupStorageService.hasCompletedSetup();
+      if (!hasCompletedSetup && (savedVibe == null || savedVibe.isEmpty)) {
+        return personalizationRoute;
+      }
     }
 
+    // 2. Check if setup is fully completed (Voice selection)
     final hasCompletedSetup = await AppSetupStorageService.hasCompletedSetup();
-    return hasCompletedSetup ? homeRoute : voiceRoute;
+    if (!hasCompletedSetup) {
+      return voiceRoute;
+    }
+
+    return homeRoute;
   }
 }
