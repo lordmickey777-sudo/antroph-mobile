@@ -108,14 +108,14 @@ const Map<String, String> _languageComplexityOptions = {
 
 const Map<String, String> _ttsVoiceOptions = {
   'alloy': 'Alloy',
-  'ash': 'Ash',
+  'cedar': 'Atlas',
   'ballad': 'Ballad',
-  'cedar': 'Cedar',
-  'coral': 'Coral',
-  'echo': 'Echo',
-  'marin': 'Marin',
+  'coral': 'Echo',
+  'marin': 'Luna',
+  'ash': 'Milo',
+  'shimmer': 'Nova',
+  'echo': 'Resonance',
   'sage': 'Sage',
-  'shimmer': 'Shimmer',
   'verse': 'Verse',
 };
 
