@@ -14,11 +14,35 @@
       },
       "oauth_client": [
         {
-          "client_id": "760875540633-cjr0ej81d6ivtq221d53v2nocch1mjie.apps.googleusercontent.com",
+          "client_id": "760875540633-3punr8bn00fbtm1hcsk3n2btejucnfrn.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.antroph.aura",
-            "certificate_hash": "75388a185c8b4ebe611738b943feb3aeacbff9fc"
+            "certificate_hash": "7f9afb3f31c4c95000164a00bdbabf7df15fa462"
+          }
+        },
+        {
+          "client_id": "760875540633-3ugu4lmgvh1r55rbeflmbvcsuema3l9i.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.antroph.aura",
+            "certificate_hash": "c2c12908ab27ca2feb3cf1fe70f0825533533afd"
+          }
+        },
+        {
+          "client_id": "760875540633-mlsfj04dt9db397qcmtlqu4j4ro014h0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.antroph.aura",
+            "certificate_hash": "007a7307431da602cee45f17b9c9bc19043bafe3"
+          }
+        },
+        {
+          "client_id": "760875540633-q136fm7vg922ct97sno42880dpot7or0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.antroph.aura",
+            "certificate_hash": "f96b5bdb89464bfd33d27cc4d7f1c39ae8214ead"
           }
         },
         {
