@@ -12,6 +12,11 @@ import '../../analytics/posthog_service.dart';
 import '../../network/error_formatter.dart';
 import '../../network/api_client.dart';
 import '../../notifications/push_notification_service.dart';
+import '../../onboarding/app_setup_storage_service.dart';
+import '../../../features/story/data/stories_cache.dart';
+import '../../../features/story/providers/story_providers.dart';
+import '../../../features/profile/providers/profile_controller.dart';
+import '../../../features/profile/providers/customization_controller.dart';
 
 class AuthTokens {
   final String accessToken;
@@ -406,11 +411,15 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       state = AsyncValue.error(e.toString(), st);
     } finally {
       _tokens = null;
-      ApiClient.I.clearAuthTokens();
+      ApiClient.I.reset();
       await _clearTokens();
       // Clear the stored email for privacy
       await EmailStorageService.clearLastEmail();
-      // Clear the authenticated user
+      // Clear story and setup caches
+      await StoriesCacheService.clear();
+      await AppSetupStorageService.clear();
+      
+      // Set state to null; this automatically refreshes all providers that use ref.watch(authControllerProvider)
       state = const AsyncValue.data(null);
       _resetTrackedUser(source: 'logout');
     }

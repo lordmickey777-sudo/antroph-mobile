@@ -123,6 +123,14 @@ extension ApiClientAuth on ApiClient {
     }
   }
 
+  /// Reset the entire client state, including the Dio instance and tokens.
+  void reset() {
+    clearAuthTokens();
+    _dio = null;
+    _onRefresh = null;
+    _refreshing = null;
+  }
+
   /// Clear auth tokens (e.g., on logout).
   void clearAuthTokens() {
     _accessToken = null;
