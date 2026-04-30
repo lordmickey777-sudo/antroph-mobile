@@ -200,7 +200,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   static const int _sampleRate = 24000;
   static const String _outputAudioFormat = 'pcm16';
-  static const String _defaultVoice = 'alloy';
+  static const String _defaultVoice = 'cedar';
   static const String _deviceType = 'mobile';
   static const String _permissionError =
       'Microphone permission is required for voice chat';

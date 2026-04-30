@@ -64,6 +64,30 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProv
       voiceId: 'ash',
       gradient: <Color>[Color(0xFFFFC7A8), Color(0xFFE94F6E)],
     ),
+    (
+      name: 'Alloy',
+      tone: 'Versatile and clear',
+      voiceId: 'alloy',
+      gradient: <Color>[Color(0xFFE0E0E0), Color(0xFF757575)],
+    ),
+    (
+      name: 'Ballad',
+      tone: 'Melodic and engaging',
+      voiceId: 'ballad',
+      gradient: <Color>[Color(0xFFFFD700), Color(0xFFFFA000)],
+    ),
+    (
+      name: 'Resonance',
+      tone: 'Rich and resonant',
+      voiceId: 'echo',
+      gradient: <Color>[Color(0xFF303F9F), Color(0xFF1A237E)],
+    ),
+    (
+      name: 'Verse',
+      tone: 'Confident and expressive',
+      voiceId: 'verse',
+      gradient: <Color>[Color(0xFFFF8A65), Color(0xFFD84315)],
+    ),
   ];
 
   final ProfileRepository _profileRepository = ProfileRepository();
