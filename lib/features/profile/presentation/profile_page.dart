@@ -9,6 +9,7 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/features/profile/providers/profile_controller.dart';
+import 'package:antroph_mobile/widgets/restart_widget.dart';
 import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 
@@ -343,6 +344,8 @@ class _ProfileMenu extends ConsumerWidget {
                   await controller.logout();
                   if (context.mounted) {
                     showToast(context, 'Logged out', success: true);
+                    // Perform a hard refresh to reset all providers and UI state
+                    RestartWidget.restartApp(context);
                   }
                   break;
                 default:

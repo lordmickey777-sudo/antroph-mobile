@@ -58,4 +58,13 @@ class AppSetupStorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_setupCompletedKey, true);
   }
+
+  static Future<void> clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_setupCompletedKey);
+    await prefs.remove(_selectedInterestsKey);
+    await prefs.remove(_selectedVibeKey);
+    await prefs.remove(_selectedVoiceKey);
+    await prefs.remove(_selectedVoiceIdKey);
+  }
 }

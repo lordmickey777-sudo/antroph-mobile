@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../data/ai_settings_repository.dart';
 import '../models/ai_settings.dart';
+import '../../../core/auth/state/auth_state.dart';
 
 class CustomizationController extends AsyncNotifier<AiSettings> {
   late final AiSettingsRepository _repo;
@@ -12,6 +12,8 @@ class CustomizationController extends AsyncNotifier<AiSettings> {
   @override
   Future<AiSettings> build() async {
     _repo = AiSettingsRepository();
+    // Watch auth state so this provider resets on logout
+    ref.watch(authControllerProvider);
     return _repo.fetchSettings();
   }
 
