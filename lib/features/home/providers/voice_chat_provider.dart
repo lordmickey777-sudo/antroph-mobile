@@ -197,6 +197,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   bool _audioEnabled = true;
   String? _pendingStorySessionId;
   final Set<String> _syncedStorySessionIds = <String>{};
+  Future<bool>? _microphonePermissionFuture;
 
   static const int _sampleRate = 24000;
   static const String _outputAudioFormat = 'pcm16';
@@ -555,7 +556,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       }
 
       final hasPermission = await _ensureMicrophonePermission();
-      if (!hasPermission) return;
+      if (!hasPermission || !ref.mounted || state.isBusy) return;
 
       _enableAudio();
       _aiTextBuffer.clear();
@@ -2211,6 +2212,20 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   Future<bool> _ensureMicrophonePermission() async {
+    if (_microphonePermissionFuture != null) {
+      _log.i('Microphone permission request already in progress, waiting...');
+      return _microphonePermissionFuture!;
+    }
+
+    _microphonePermissionFuture = _ensureMicrophonePermissionInternal();
+    try {
+      return await _microphonePermissionFuture!;
+    } finally {
+      _microphonePermissionFuture = null;
+    }
+  }
+
+  Future<bool> _ensureMicrophonePermissionInternal() async {
     var status = await Permission.microphone.status;
     _log.i('Current microphone permission status: $status');
 
