@@ -32,8 +32,23 @@ class AiSettings {
     'parental_controls': parentalControls.toJson(),
     'tts_voice': ttsVoice,
     'language': language,
-    'auto_listen_after_response': autoListenAfterResponse,
   };
+
+  AiSettings copyWith({
+    Personality? personality,
+    ParentalControls? parentalControls,
+    String? ttsVoice,
+    String? language,
+    bool? autoListenAfterResponse,
+  }) {
+    return AiSettings(
+      personality: personality ?? this.personality,
+      parentalControls: parentalControls ?? this.parentalControls,
+      ttsVoice: ttsVoice ?? this.ttsVoice,
+      language: language ?? this.language,
+      autoListenAfterResponse: autoListenAfterResponse ?? this.autoListenAfterResponse,
+    );
+  }
 }
 
 class Personality {
