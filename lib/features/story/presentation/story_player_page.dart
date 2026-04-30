@@ -50,6 +50,8 @@ class _StoryPlayerPageState extends ConsumerState<StoryPlayerPage> {
           storyTitle: widget.story.title,
           storyId: widget.story.storyId,
           mascotConfig: widget.story.mascot,
+          storySubtitle: widget.story.subtitle,
+          storyImage: widget.story.imageUrl,
         ),
       ),
     );

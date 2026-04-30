@@ -137,6 +137,7 @@ class StoryPreviewPage extends ConsumerWidget {
             child: ChatPage(
               storyId: storyId,
               storyTitle: storyTitle,
+              storyImage: riveElement?.thumbnailUrl,
               mascotConfig: riveElement?.toMascotConfig(),
             ),
           ),

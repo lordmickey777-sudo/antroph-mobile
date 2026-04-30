@@ -116,6 +116,7 @@ class CollectionsPage extends ConsumerWidget {
           storyTitle: collection.name.isNotEmpty ? collection.name : 'Chat',
           storyId: storyId,
           mascotConfig: collection.mascot,
+          storyImage: collection.coverImageUrl,
         ),
       ),
     );
@@ -263,6 +264,8 @@ class CollectionDetailPage extends ConsumerWidget {
           storyTitle: story.title.isNotEmpty ? story.title : 'Chat',
           storyId: story.storyId,
           mascotConfig: story.mascot,
+          storySubtitle: story.subtitle,
+          storyImage: story.imageUrl,
         ),
       ),
     );

@@ -300,6 +300,8 @@ class _CommunityStoryDetail extends StatelessWidget {
                                   ? story.title
                                   : 'Chat',
                               storyId: story.id,
+                              storySubtitle: story.description,
+                              storyImage: story.coverImageUrl,
                             ),
                           ),
                         );

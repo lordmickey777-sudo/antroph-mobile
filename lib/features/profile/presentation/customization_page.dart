@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
+import 'package:antroph_mobile/features/setup/data/voices_repository.dart';
+import 'package:just_audio/just_audio.dart';
 
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/app_dropdown.dart';
@@ -145,6 +147,9 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   final _allowedTopicsController = TextEditingController();
   final _blockedTopicsController = TextEditingController();
   final _approvalController = TextEditingController();
+  final _player = AudioPlayer();
+  final _voicesRepository = VoicesRepository();
+  Map<String, String> _previewUrls = {};
 
   String _personalityType = _personalityTypeKeys.first;
   String _tone = _toneOptions.keys.first;
@@ -161,11 +166,46 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   AiSettings? _boundSettings;
 
   @override
+  void initState() {
+    super.initState();
+    _loadVoicePreviews();
+  }
+
+  Future<void> _loadVoicePreviews() async {
+    try {
+      final result = await _voicesRepository.fetchVoices();
+      if (!mounted) return;
+      final map = <String, String>{};
+      for (final v in result.voices) {
+        if (v.previewAudioUrl?.isNotEmpty == true) {
+          map[v.voiceId] = v.previewAudioUrl!;
+        }
+      }
+      setState(() => _previewUrls = map);
+    } catch (_) {
+      // Ignore failures
+    }
+  }
+
+  Future<void> _playVoicePreview(String voiceId) async {
+    final url = _previewUrls[voiceId];
+    if (url == null || url.isEmpty) return;
+    try {
+      await _player.stop();
+      await _player.setUrl(url);
+      await _player.play();
+    } catch (_) {
+      // Ignore playback errors
+    }
+  }
+
+  @override
   void dispose() {
     _companionNameController.dispose();
     _allowedTopicsController.dispose();
     _blockedTopicsController.dispose();
     _approvalController.dispose();
+    _player.dispose();
     super.dispose();
   }
 
@@ -354,6 +394,7 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
                     onChanged: (value) {
                       if (value == null) return;
                       setState(() => _ttsVoice = value);
+                      _playVoicePreview(value);
                     },
                   ),
                   const SizedBox(height: 12),
