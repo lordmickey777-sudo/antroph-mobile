@@ -151,7 +151,7 @@ class PushNotificationService {
         alert: true,
         badge: true,
         sound: true,
-        provisional: true,
+        provisional: false,
       );
       final authorized =
           settings.authorizationStatus == AuthorizationStatus.authorized ||
