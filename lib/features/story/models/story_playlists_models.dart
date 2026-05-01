@@ -74,6 +74,21 @@ class PlaylistDto {
       riveElement: _parseRiveElement(json['rive_element']),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'user_id': userId,
+        'name': name,
+        'description': description,
+        'cover_image_url': coverImageUrl,
+        'story_ids': storyIds,
+        'story_count': storyCount,
+        'is_public': isPublic,
+        'created_at': createdAt.toIso8601String(),
+        'updated_at': updatedAt.toIso8601String(),
+        if (riveElementId != null) 'rive_element_id': riveElementId,
+        if (riveElement != null) 'rive_element': riveElement!.toJson(),
+      };
 }
 
 class PlaylistDetailDto {
@@ -87,6 +102,10 @@ class PlaylistDetailDto {
             .map((e) => PlaylistStoryDto.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
+
+  Map<String, dynamic> toJson() => {
+        'stories': stories.map((e) => e.toJson()).toList(),
+      };
 }
 
 class PlaylistStoryDto {
@@ -136,6 +155,18 @@ class PlaylistStoryDto {
       riveElement: _parseRiveElement(json['rive_element']),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'story_id': storyId,
+        'title': title,
+        'subtitle': subtitle,
+        'cover_image_url': imageUrl,
+        'users': users,
+        'views': views,
+        if (riveElementId != null) 'rive_element_id': riveElementId,
+        if (riveElement != null) 'rive_element': riveElement!.toJson(),
+      };
 }
 
 RiveElementDto? _parseRiveElement(dynamic value) {

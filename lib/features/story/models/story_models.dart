@@ -190,6 +190,17 @@ class ContinuePlayingDto {
         pathLength: (json['path_length'] as num?)?.toInt() ?? 0,
         milestonesReached: (json['milestones_reached'] as num?)?.toInt() ?? 0,
       );
+
+  Map<String, dynamic> toJson() => {
+        'story_id': storyId,
+        'title': title,
+        'description': description,
+        'cover_image_url': coverImageUrl,
+        'session_id': sessionId,
+        'progress_percentage': progressPercentage,
+        'path_length': pathLength,
+        'milestones_reached': milestonesReached,
+      };
 }
 
 RiveElementDto? _parseRiveElement(dynamic value) {

@@ -25,8 +25,6 @@ class StoriesCacheService {
     final prefs = await SharedPreferences.getInstance();
     final ts = prefs.getInt(_timestampKey);
     if (ts == null) return null;
-    final age = DateTime.now().millisecondsSinceEpoch - ts;
-    if (age > maxAge.inMilliseconds) return null; // stale
     // Invalidate cache if auth context changed (e.g. guest data after login)
     final cachedAuth = prefs.getBool(_authKey) ?? false;
     if (cachedAuth != isAuthenticated) return null;
