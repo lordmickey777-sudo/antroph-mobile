@@ -1,4 +1,4 @@
-storeFile=app/y.jks
+storeFile=antroph-mobile/android/app/antroph-release-key.jks
 storePassword=storePassword
 keyAlias=your-keyAlias
 keyPassword=keyPassword
