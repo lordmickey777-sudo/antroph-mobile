@@ -13,11 +13,20 @@ import 'package:antroph_mobile/widgets/restart_widget.dart';
 import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
 
   @override
+  ConsumerState<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends ConsumerState<ProfilePage> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(

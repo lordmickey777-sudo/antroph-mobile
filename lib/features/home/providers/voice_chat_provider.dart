@@ -195,6 +195,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   bool _commitSent = false;
   bool _socketOpen = false;
   bool _audioEnabled = true;
+  bool _isRecorderInitialized = false;
   String? _pendingStorySessionId;
   final Set<String> _syncedStorySessionIds = <String>{};
   Future<bool>? _microphonePermissionFuture;
@@ -262,6 +263,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _cancelSpeechIndicatorTimer();
       _stopAiAudioLevelTimer();
       await _stopRecorder();
+      if (_recorder != null) {
+        await _recorder!.closeRecorder();
+        _recorder = null;
+        _isRecorderInitialized = false;
+      }
       await _teardownSocket();
       await _player.dispose();
       await _micLevelController?.close();
@@ -700,8 +706,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     await _configureAudioSession(_VoiceAudioSessionMode.recording);
     await _stopRecorder();
     _recorder ??= FlutterSoundRecorder();
-    if (!_recorder!.isRecording) {
+    
+    // Use our own flag to track initialization to avoid version-specific enum errors
+    if (!_isRecorderInitialized) {
       await _recorder!.openRecorder();
+      _isRecorderInitialized = true;
     }
 
     await _micStreamSubscription?.cancel();
