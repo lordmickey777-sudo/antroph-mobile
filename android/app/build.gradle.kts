@@ -71,41 +71,32 @@ android {
         versionName = flutter.versionName
     }
 
-    signingConfigs {
-        if (isReleaseSigningConfigured) {
-            create("release") {
-                storeFile = releaseStoreFile!!
-                storePassword = releaseStorePassword!!
-                keyAlias = releaseKeyAlias!!
-                keyPassword = releaseKeyPassword!!
-            }
-        }
+signingConfigs {
+    create("release") {
+        val storePath = System.getenv("CM_KEYSTORE_PATH")
+            ?: throw GradleException("CM_KEYSTORE_PATH not set")
+
+        val storePassword = System.getenv("CM_KEYSTORE_PASSWORD")
+            ?: throw GradleException("CM_KEYSTORE_PASSWORD not set")
+
+        val keyAlias = System.getenv("CM_KEY_ALIAS")
+            ?: throw GradleException("CM_KEY_ALIAS not set")
+
+        val keyPassword = System.getenv("CM_KEY_PASSWORD")
+            ?: throw GradleException("CM_KEY_PASSWORD not set")
+
+        storeFile = file(storePath)
+        this.storePassword = storePassword
+        this.keyAlias = keyAlias
+        this.keyPassword = keyPassword
+
+        println("✅ Using Codemagic keystore at: $storePath")
     }
+}
 
-    buildTypes {
-        release {
-            if (!isReleaseSigningConfigured) {
-                val configHint = when {
-                    releaseStoreFilePath.isNullOrBlank() ->
-                        "Missing storeFile in android/key.properties or ANDROID_KEYSTORE_PATH."
-                    releaseStoreFile?.exists() != true ->
-                        "Keystore not found at ${releaseStoreFile?.absolutePath}."
-                    releaseStorePassword.isNullOrBlank() ->
-                        "Missing storePassword in android/key.properties or ANDROID_KEYSTORE_PASSWORD."
-                    releaseKeyAlias.isNullOrBlank() ->
-                        "Missing keyAlias in android/key.properties or ANDROID_KEY_ALIAS."
-                    releaseKeyPassword.isNullOrBlank() ->
-                        "Missing keyPassword in android/key.properties or ANDROID_KEY_PASSWORD."
-                    else ->
-                        "Release signing is not configured."
-                }
-                throw GradleException(
-                    "$configHint Add android/key.properties or set ANDROID_* env vars.",
-                )
-            }
-
-            signingConfig = signingConfigs.getByName("release")
-        }
+buildTypes {
+    release {
+        signingConfig = signingConfigs.getByName("release")
     }
 }
 
