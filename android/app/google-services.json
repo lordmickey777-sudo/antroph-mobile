@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "760875540633-2dsacve30anpa4tnirvj1b6q4q2ipodu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.antroph.aura",
+            "certificate_hash": "363723ba6e1b3a470486a986fb30caf320840429"
+          }
+        },
+        {
           "client_id": "760875540633-3punr8bn00fbtm1hcsk3n2btejucnfrn.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
