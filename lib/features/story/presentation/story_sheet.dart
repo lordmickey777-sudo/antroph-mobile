@@ -210,6 +210,9 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
           storyTitle: widget.title.isNotEmpty ? widget.title : 'Chat',
           storyId: widget.storyId,
           mascotConfig: widget.mascotConfig,
+          storySubtitle: widget.subtitle,
+          storyImage: widget.imageAsset,
+          isAddedToPlaylist: _isAdded,
         ),
       ),
     );

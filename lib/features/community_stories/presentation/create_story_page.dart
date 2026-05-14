@@ -12,11 +12,20 @@ import 'story_form_page.dart';
 import 'my_stories_page.dart';
 import 'standard_story_guide_page.dart';
 
-class CreateStoryPage extends ConsumerWidget {
+class CreateStoryPage extends ConsumerStatefulWidget {
   const CreateStoryPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CreateStoryPage> createState() => _CreateStoryPageState();
+}
+
+class _CreateStoryPageState extends ConsumerState<CreateStoryPage> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final horizontalPadding = AppPadding.horizontal.of(context);
 

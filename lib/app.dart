@@ -25,6 +25,12 @@ class App extends ConsumerWidget {
         themeMode: themeMode,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
+        builder: (context, child) {
+          return GestureDetector(
+            onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+            child: child,
+          );
+        },
       ),
     );
   }

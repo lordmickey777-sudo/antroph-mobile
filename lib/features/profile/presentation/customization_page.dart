@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
+import 'package:antroph_mobile/features/setup/data/voices_repository.dart';
+import 'package:just_audio/just_audio.dart';
 
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/app_dropdown.dart';
@@ -74,6 +77,19 @@ const Map<String, String> _defaultLanguageOptions = {
   'zh': 'Chinese',
 };
 
+const Map<String, List<Color>> _voiceGradients = {
+  'shimmer': [Color(0xFFFFD36E), Color(0xFFFF6A88)],
+  'cedar': [Color(0xFF7FD8FF), Color(0xFF2E5BFF)],
+  'marin': [Color(0xFFC7B8FF), Color(0xFF5B5AD6)],
+  'sage': [Color(0xFFA8E6B1), Color(0xFF2F9E7B)],
+  'coral': [Color(0xFFFF9BE4), Color(0xFF8A2BE2)],
+  'ash': [Color(0xFFFFC7A8), Color(0xFFE94F6E)],
+  'alloy': [Color(0xFFE0E0E0), Color(0xFF757575)],
+  'ballad': [Color(0xFFFFD700), Color(0xFFFFA000)],
+  'echo': [Color(0xFF303F9F), Color(0xFF1A237E)],
+  'verse': [Color(0xFFFF8A65), Color(0xFFD84315)],
+};
+
 const List<String> _personalityTypeKeys = [
   'friendly_guide',
   'wise_storyteller',
@@ -106,17 +122,17 @@ const Map<String, String> _languageComplexityOptions = {
   'advanced': 'Advanced',
 };
 
-const Map<String, String> _ttsVoiceOptions = {
+const Map<String, String> _defaultTtsVoiceOptions = {
   'alloy': 'Alloy',
-  'ash': 'Ash',
+  'cedar': 'Atlas',
   'ballad': 'Ballad',
-  'coral': 'Coral',
-  'echo': 'Echo',
+  'coral': 'Echo',
+  'marin': 'Luna',
+  'ash': 'Milo',
+  'shimmer': 'Nova',
+  'echo': 'Resonance',
   'sage': 'Sage',
-  'shimmer': 'Shimmer',
   'verse': 'Verse',
-  'marin': 'Marin',
-  'cedar': 'Cedar',
 };
 
 const Map<String, String> _filterLevelOptions = {
@@ -145,12 +161,19 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   final _allowedTopicsController = TextEditingController();
   final _blockedTopicsController = TextEditingController();
   final _approvalController = TextEditingController();
+  final _player = AudioPlayer();
+  final _voicesRepository = VoicesRepository();
+  Map<String, String> _previewUrls = {};
+  String? _playingVoiceId;
+  bool _playerLoading = false;
+  StreamSubscription<PlayerState>? _playerSub;
 
   String _personalityType = _personalityTypeKeys.first;
   String _tone = _toneOptions.keys.first;
   String _verbosity = _verbosityOptions.keys.first;
   String _languageComplexity = _languageComplexityOptions.keys.first;
-  String _ttsVoice = _ttsVoiceOptions.keys.first;
+  Map<String, String> _ttsVoiceOptions = Map.of(_defaultTtsVoiceOptions);
+  late String _ttsVoice = _ttsVoiceOptions.keys.first;
   String _selectedLanguage = _defaultLanguageOptions.keys.first;
   String _contentFilterLevel = _filterLevelOptions.keys.first;
   double _maxAgeRating = 0;
@@ -161,11 +184,86 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
   AiSettings? _boundSettings;
 
   @override
+  void initState() {
+    super.initState();
+    _loadVoicePreviews();
+    _playerSub = _player.playerStateStream.listen(_onPlayerState);
+  }
+
+  void _onPlayerState(PlayerState state) {
+    if (!mounted) return;
+    if (state.processingState == ProcessingState.completed) {
+      setState(() {
+        _playingVoiceId = null;
+        _playerLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadVoicePreviews() async {
+    try {
+      final result = await _voicesRepository.fetchVoices();
+      if (!mounted) return;
+      final previewMap = <String, String>{};
+      final optionsMap = <String, String>{};
+      for (final v in result.voices) {
+        if (v.isActive) {
+          optionsMap[v.voiceId] = v.displayName;
+        }
+        if (v.previewAudioUrl?.isNotEmpty == true) {
+          previewMap[v.voiceId] = v.previewAudioUrl!;
+        }
+      }
+      setState(() {
+        _previewUrls = previewMap;
+        if (optionsMap.isNotEmpty) {
+          _ttsVoiceOptions = optionsMap;
+          _ttsVoice = _normalizeOption(_ttsVoiceOptions, _ttsVoice);
+        }
+      });
+    } catch (_) {
+      // Ignore failures
+    }
+  }
+
+  Future<void> _playVoicePreview(String voiceId) async {
+    final url = _previewUrls[voiceId];
+    if (url == null || url.isEmpty) return;
+    
+    if (_playingVoiceId == voiceId && _player.playing) {
+      await _player.stop();
+      if (mounted) setState(() => _playingVoiceId = null);
+      return;
+    }
+
+    setState(() {
+      _playingVoiceId = voiceId;
+      _playerLoading = true;
+    });
+
+    try {
+      await _player.stop();
+      await _player.setUrl(url);
+      if (!mounted) return;
+      setState(() => _playerLoading = false);
+      await _player.play();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _playingVoiceId = null;
+        _playerLoading = false;
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _companionNameController.dispose();
     _allowedTopicsController.dispose();
     _blockedTopicsController.dispose();
     _approvalController.dispose();
+    _playerSub?.cancel();
+    _player.dispose();
     super.dispose();
   }
 
@@ -347,15 +445,7 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
                   const SizedBox(height: 24),
                   _sectionTitle('Voice & language'),
                   const SizedBox(height: 12),
-                  AppDropdown(
-                    label: 'Voice',
-                    value: _ttsVoice,
-                    options: _ttsVoiceOptions,
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _ttsVoice = value);
-                    },
-                  ),
+                  _buildVoiceSelector(),
                   const SizedBox(height: 12),
                   AppDropdown(
                     label: 'Language',
@@ -611,6 +701,88 @@ class _CustomizationPageState extends ConsumerState<CustomizationPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildVoiceSelector() {
+    final entries = _ttsVoiceOptions.entries.toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: TypographyText(
+            'Voice',
+            color: context.secondaryTextColor,
+            variant: TypographyVariant.body2,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 90,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: entries.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 16),
+            itemBuilder: (context, index) {
+              final entry = entries[index];
+              final voiceId = entry.key;
+              final name = entry.value;
+              final isSelected = _ttsVoice == voiceId;
+              final isPlaying = _playingVoiceId == voiceId && _player.playing;
+              final isLoading = _playingVoiceId == voiceId && _playerLoading;
+              final gradient = _voiceGradients[voiceId] ?? _voiceGradients['alloy']!;
+
+              return GestureDetector(
+                onTap: () {
+                  setState(() => _ttsVoice = voiceId);
+                  _playVoicePreview(voiceId);
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: gradient,
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        border: isSelected
+                            ? Border.all(color: Colors.white, width: 3)
+                            : null,
+                      ),
+                      child: Center(
+                        child: isLoading 
+                          ? const SizedBox(
+                              width: 24, height: 24, 
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                            )
+                          : Icon(
+                              isPlaying ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 26,
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TypographyText(
+                      name,
+                      color: isSelected ? context.primaryTextColor : context.secondaryTextColor,
+                      variant: TypographyVariant.body2,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 

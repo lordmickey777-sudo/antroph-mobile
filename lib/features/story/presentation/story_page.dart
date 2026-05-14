@@ -26,11 +26,20 @@ import 'package:antroph_mobile/features/community_stories/providers/community_st
 import 'package:antroph_mobile/features/community_stories/models/community_story_model.dart';
 import 'package:antroph_mobile/features/community_stories/presentation/community_browse_page.dart';
 
-class StoryPage extends ConsumerWidget {
+class StoryPage extends ConsumerStatefulWidget {
   const StoryPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<StoryPage> createState() => _StoryPageState();
+}
+
+class _StoryPageState extends ConsumerState<StoryPage> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
     final asyncHome = ref.watch(storiesHomeSectionsProvider);
     final asyncContinue = ref.watch(continuePlayingProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -741,7 +750,9 @@ class _StoryImageShimmer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(fit: StackFit.expand, children: [const ShimmerBox(radius: 0), child]);
+    // Removed ShimmerBox to prevent "double shimmer" or flickers when navigating.
+    // The image itself handles its own fade-in via frameBuilder.
+    return child;
   }
 }
 
@@ -842,6 +853,8 @@ class _CommunityStoriesSliver extends ConsumerWidget {
         builder: (_) => StoryChatFlowPage(
           storyTitle: story.title.isNotEmpty ? story.title : 'Chat',
           storyId: story.id,
+          storySubtitle: story.description,
+          storyImage: story.coverImageUrl,
         ),
       ),
     );

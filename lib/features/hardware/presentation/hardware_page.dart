@@ -12,10 +12,13 @@ class HardwarePage extends StatefulWidget {
   State<HardwarePage> createState() => _HardwarePageState();
 }
 
-class _HardwarePageState extends State<HardwarePage> {
+class _HardwarePageState extends State<HardwarePage> with AutomaticKeepAliveClientMixin {
   static const _kMiddlePage = 50; // large offset for infinite scroll
   late final PageController _pageController;
   double _currentPage = _kMiddlePage + 1.0;
+
+  @override
+  bool get wantKeepAlive => true;
 
   static const _items = [
     _CarouselItem('assets/videos/h1.mp4', 'Brio Penguin'),
@@ -66,6 +69,7 @@ class _HardwarePageState extends State<HardwarePage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final isDark = context.isDarkMode;
 
     final screenHeight = MediaQuery.of(context).size.height;

@@ -195,12 +195,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   bool _commitSent = false;
   bool _socketOpen = false;
   bool _audioEnabled = true;
+  bool _isRecorderInitialized = false;
   String? _pendingStorySessionId;
   final Set<String> _syncedStorySessionIds = <String>{};
+  Future<bool>? _microphonePermissionFuture;
 
   static const int _sampleRate = 24000;
   static const String _outputAudioFormat = 'pcm16';
-  static const String _defaultVoice = 'alloy';
+  static const String _defaultVoice = 'cedar';
   static const String _deviceType = 'mobile';
   static const String _permissionError =
       'Microphone permission is required for voice chat';
@@ -261,6 +263,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _cancelSpeechIndicatorTimer();
       _stopAiAudioLevelTimer();
       await _stopRecorder();
+      if (_recorder != null) {
+        await _recorder!.closeRecorder();
+        _recorder = null;
+        _isRecorderInitialized = false;
+      }
       await _teardownSocket();
       await _player.dispose();
       await _micLevelController?.close();
@@ -555,7 +562,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       }
 
       final hasPermission = await _ensureMicrophonePermission();
-      if (!hasPermission) return;
+      if (!hasPermission || !ref.mounted || state.isBusy) return;
 
       _enableAudio();
       _aiTextBuffer.clear();
@@ -699,8 +706,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     await _configureAudioSession(_VoiceAudioSessionMode.recording);
     await _stopRecorder();
     _recorder ??= FlutterSoundRecorder();
-    if (!_recorder!.isRecording) {
+    
+    // Use our own flag to track initialization to avoid version-specific enum errors
+    if (!_isRecorderInitialized) {
       await _recorder!.openRecorder();
+      _isRecorderInitialized = true;
     }
 
     await _micStreamSubscription?.cancel();
@@ -2211,6 +2221,20 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   Future<bool> _ensureMicrophonePermission() async {
+    if (_microphonePermissionFuture != null) {
+      _log.i('Microphone permission request already in progress, waiting...');
+      return _microphonePermissionFuture!;
+    }
+
+    _microphonePermissionFuture = _ensureMicrophonePermissionInternal();
+    try {
+      return await _microphonePermissionFuture!;
+    } finally {
+      _microphonePermissionFuture = null;
+    }
+  }
+
+  Future<bool> _ensureMicrophonePermissionInternal() async {
     var status = await Permission.microphone.status;
     _log.i('Current microphone permission status: $status');
 
