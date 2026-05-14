@@ -809,6 +809,45 @@ class _VoiceActivityFaceState extends State<VoiceActivityFace> {
       _headTiltInput = controller.findInput<double>('headTilt') as SMINumber?;
       _headBobInput = controller.findInput<double>('headBob') as SMINumber?;
 
+      final availableInputs = controller.inputs
+          .map((i) => '${i.name}:${i.runtimeType}')
+          .join(', ');
+      final missingInputs = <String>[
+        if (_mouthOpenInput == null) 'mouthOpen',
+        if (_eyeOpenInput == null) 'eyeOpen',
+        if (_blinkInput == null) 'blink',
+        if (_eyeExpressionInput == null) 'eyeExpression',
+        if (_headTiltInput == null) 'headTilt',
+        if (_headBobInput == null) 'headBob',
+      ];
+      if (missingInputs.isNotEmpty) {
+        Log.i.w(
+          '[VoiceActivityFace] missing Rive inputs '
+          'element=${widget.mascotConfig?.id ?? 'fallback'} '
+          'artboard=${artboard.name} '
+          'stateMachine=$configuredStateMachine '
+          'missing=${missingInputs.join(',')} '
+          'available=[$availableInputs]',
+        );
+        unawaited(
+          PostHogService.capture(
+            'rive_face_missing_inputs',
+            properties: {
+              'element_id': widget.mascotConfig?.id ?? 'fallback',
+              'artboard': artboard.name,
+              'state_machine': configuredStateMachine,
+              'missing': missingInputs.join(','),
+            },
+          ),
+        );
+      } else {
+        Log.i.d(
+          '[VoiceActivityFace] all inputs resolved '
+          'element=${widget.mascotConfig?.id ?? 'fallback'} '
+          'artboard=${artboard.name}',
+        );
+      }
+
       // Initialize default values and immediately advance once to catch
       // broken backend state machines before the frame render loop does.
       _setEyeOpen(100.0); // Eyes open
