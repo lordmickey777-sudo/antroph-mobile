@@ -6,6 +6,7 @@ import '../models/story_models.dart';
 import '../models/story_playlists_models.dart';
 import '../models/story_detail.dart';
 import '../models/story_session.dart';
+import '../models/interactive_story_models.dart';
 
 class StoriesRepository {
   StoriesRepository({Dio? dio}) : _dio = dio ?? ApiClient.I.dio;
@@ -146,6 +147,101 @@ class StoriesRepository {
       );
       final data = res.data as Map<String, dynamic>;
       return StorySession.fromJson(data);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<InteractiveSessionState> startInteractiveSession({
+    required String storyId,
+    String deviceType = 'mobile',
+    String? deviceId,
+    String? sessionType,
+    String? hostDisplayName,
+    int? maxParticipants,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/stories/$storyId/sessions',
+        data: {
+          'device_type': deviceType,
+          if (deviceId != null) 'device_id': deviceId,
+          if (sessionType != null) 'session_type': sessionType,
+          if (hostDisplayName != null) 'host_display_name': hostDisplayName,
+          if (maxParticipants != null) 'max_participants': maxParticipants,
+        },
+      );
+      return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<InteractiveSessionState> joinInteractiveSession({
+    required String sessionId,
+    String deviceType = 'mobile',
+    String? deviceId,
+    String? displayName,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/story-sessions/$sessionId/join',
+        data: {
+          'device_type': deviceType,
+          if (deviceId != null) 'device_id': deviceId,
+          if (displayName != null) 'display_name': displayName,
+        },
+      );
+      return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<InteractiveSessionState> joinInteractiveSessionByCode({
+    required String joinCode,
+    String deviceType = 'mobile',
+    String? deviceId,
+    String? displayName,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/story-sessions/join-code/${joinCode.trim()}',
+        data: {
+          'device_type': deviceType,
+          if (deviceId != null) 'device_id': deviceId,
+          if (displayName != null) 'display_name': displayName,
+        },
+      );
+      return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<InteractiveSessionState> fetchInteractiveSession(
+    String sessionId,
+  ) async {
+    try {
+      final res = await _dio.get('/story-sessions/$sessionId');
+      return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<InteractiveInputResponse> submitInteractiveInput({
+    required String sessionId,
+    required InteractiveInput input,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/story-sessions/$sessionId/input',
+        data: input.toJson(),
+      );
+      return InteractiveInputResponse.fromJson(
+        res.data as Map<String, dynamic>,
+      );
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }

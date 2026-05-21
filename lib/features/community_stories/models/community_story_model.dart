@@ -18,6 +18,9 @@ class CommunityStoryDto {
     this.characters = const [],
     this.tone,
     this.targetLength,
+    this.interactionMode = 'narrative',
+    this.aiRole = 'narrator',
+    this.interactiveConfig = const <String, dynamic>{},
     this.isPremium = false,
     this.isPublished = false,
     this.publishedAt,
@@ -51,6 +54,9 @@ class CommunityStoryDto {
   final List<String> characters;
   final String? tone;
   final int? targetLength;
+  final String interactionMode;
+  final String aiRole;
+  final Map<String, dynamic> interactiveConfig;
   final bool isPremium;
   final bool isPublished;
   final DateTime? publishedAt;
@@ -85,6 +91,12 @@ class CommunityStoryDto {
       characters: _parseStringList(json['characters']),
       tone: (json['tone'] as String?)?.trim(),
       targetLength: (json['target_length'] as num?)?.toInt(),
+      interactionMode:
+          (json['interaction_mode'] as String?)?.trim() ?? 'narrative',
+      aiRole: (json['ai_role'] as String?)?.trim() ?? 'narrator',
+      interactiveConfig:
+          (json['interactive_config'] as Map?)?.cast<String, dynamic>() ??
+          <String, dynamic>{},
       isPremium: json['is_premium'] as bool? ?? false,
       isPublished: json['is_published'] as bool? ?? false,
       publishedAt: _parseDateTime(json['published_at']),
@@ -99,48 +111,51 @@ class CommunityStoryDto {
       moderatedAt: _parseDateTime(json['moderated_at']),
       riveElementId: (json['rive_element_id'] as String?)?.trim(),
       riveElement: json['rive_element'] is Map<String, dynamic>
-          ? RiveElementDto.fromJson(json['rive_element'] as Map<String, dynamic>)
+          ? RiveElementDto.fromJson(
+              json['rive_element'] as Map<String, dynamic>,
+            )
           : null,
-      createdAt:
-          _parseDateTime(json['created_at']) ?? DateTime.now(),
-      updatedAt:
-          _parseDateTime(json['updated_at']) ?? DateTime.now(),
+      createdAt: _parseDateTime(json['created_at']) ?? DateTime.now(),
+      updatedAt: _parseDateTime(json['updated_at']) ?? DateTime.now(),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        if (categoryId != null) 'category_id': categoryId,
-        'title': title,
-        if (description != null) 'description': description,
-        if (author != null) 'author': author,
-        'age_rating': ageRating,
-        'tags': tags,
-        'duration_minutes': durationMinutes,
-        'difficulty': difficulty,
-        if (coverImageUrl != null) 'cover_image_url': coverImageUrl,
-        if (coverImageFileId != null) 'cover_image_file_id': coverImageFileId,
-        if (context != null) 'context': context,
-        'themes': themes,
-        'characters': characters,
-        if (tone != null) 'tone': tone,
-        if (targetLength != null) 'target_length': targetLength,
-        'is_premium': isPremium,
-        'is_published': isPublished,
-        if (publishedAt != null) 'published_at': publishedAt!.toIso8601String(),
-        'story_type': storyType,
-        if (createdByUserId != null) 'created_by_user_id': createdByUserId,
-        if (creatorName != null) 'creator_name': creatorName,
-        if (creatorAvatarUrl != null) 'creator_avatar_url': creatorAvatarUrl,
-        'moderation_status': moderationStatus,
-        if (moderationNote != null) 'moderation_note': moderationNote,
-        if (moderatedByAdminId != null) 'moderated_by_admin_id': moderatedByAdminId,
-        if (moderatedAt != null) 'moderated_at': moderatedAt!.toIso8601String(),
-        if (riveElementId != null) 'rive_element_id': riveElementId,
-        if (riveElement != null) 'rive_element': riveElement!.toJson(),
-        'created_at': createdAt.toIso8601String(),
-        'updated_at': updatedAt.toIso8601String(),
-      };
+    'id': id,
+    if (categoryId != null) 'category_id': categoryId,
+    'title': title,
+    if (description != null) 'description': description,
+    if (author != null) 'author': author,
+    'age_rating': ageRating,
+    'tags': tags,
+    'duration_minutes': durationMinutes,
+    'difficulty': difficulty,
+    if (coverImageUrl != null) 'cover_image_url': coverImageUrl,
+    if (coverImageFileId != null) 'cover_image_file_id': coverImageFileId,
+    if (context != null) 'context': context,
+    'themes': themes,
+    'characters': characters,
+    if (tone != null) 'tone': tone,
+    if (targetLength != null) 'target_length': targetLength,
+    'interaction_mode': interactionMode,
+    'ai_role': aiRole,
+    'interactive_config': interactiveConfig,
+    'is_premium': isPremium,
+    'is_published': isPublished,
+    if (publishedAt != null) 'published_at': publishedAt!.toIso8601String(),
+    'story_type': storyType,
+    if (createdByUserId != null) 'created_by_user_id': createdByUserId,
+    if (creatorName != null) 'creator_name': creatorName,
+    if (creatorAvatarUrl != null) 'creator_avatar_url': creatorAvatarUrl,
+    'moderation_status': moderationStatus,
+    if (moderationNote != null) 'moderation_note': moderationNote,
+    if (moderatedByAdminId != null) 'moderated_by_admin_id': moderatedByAdminId,
+    if (moderatedAt != null) 'moderated_at': moderatedAt!.toIso8601String(),
+    if (riveElementId != null) 'rive_element_id': riveElementId,
+    if (riveElement != null) 'rive_element': riveElement!.toJson(),
+    'created_at': createdAt.toIso8601String(),
+    'updated_at': updatedAt.toIso8601String(),
+  };
 
   static List<String> _parseStringList(dynamic value) {
     if (value is List) {
@@ -171,6 +186,9 @@ class CommunityStoryCreateDto {
     this.tone = 'neutral',
     this.targetLength = 10,
     this.tags = const [],
+    this.interactionMode = 'narrative',
+    this.aiRole = 'narrator',
+    this.interactiveConfig = const <String, dynamic>{},
     this.riveElementId,
   });
 
@@ -182,20 +200,26 @@ class CommunityStoryCreateDto {
   final String tone;
   final int targetLength;
   final List<String> tags;
+  final String interactionMode;
+  final String aiRole;
+  final Map<String, dynamic> interactiveConfig;
   final String? riveElementId;
 
   Map<String, dynamic> toJson() => {
-        'title': title,
-        if (description != null && description!.isNotEmpty)
-          'description': description,
-        'context': context,
-        'themes': themes,
-        'characters': characters,
-        'tone': tone,
-        'target_length': targetLength,
-        'tags': tags,
-        if (riveElementId != null) 'rive_element_id': riveElementId,
-      };
+    'title': title,
+    if (description != null && description!.isNotEmpty)
+      'description': description,
+    'context': context,
+    'themes': themes,
+    'characters': characters,
+    'tone': tone,
+    'target_length': targetLength,
+    'tags': tags,
+    'interaction_mode': interactionMode,
+    'ai_role': aiRole,
+    'interactive_config': interactiveConfig,
+    if (riveElementId != null) 'rive_element_id': riveElementId,
+  };
 }
 
 class CommunityStoryUpdateDto {
@@ -208,6 +232,9 @@ class CommunityStoryUpdateDto {
     this.tone,
     this.targetLength,
     this.tags,
+    this.interactionMode,
+    this.aiRole,
+    this.interactiveConfig,
     this.riveElementId,
   });
 
@@ -219,6 +246,9 @@ class CommunityStoryUpdateDto {
   final String? tone;
   final int? targetLength;
   final List<String>? tags;
+  final String? interactionMode;
+  final String? aiRole;
+  final Map<String, dynamic>? interactiveConfig;
   final String? riveElementId;
 
   Map<String, dynamic> toJson() {
@@ -231,6 +261,11 @@ class CommunityStoryUpdateDto {
     if (tone != null) map['tone'] = tone;
     if (targetLength != null) map['target_length'] = targetLength;
     if (tags != null) map['tags'] = tags;
+    if (interactionMode != null) map['interaction_mode'] = interactionMode;
+    if (aiRole != null) map['ai_role'] = aiRole;
+    if (interactiveConfig != null) {
+      map['interactive_config'] = interactiveConfig;
+    }
     if (riveElementId != null) map['rive_element_id'] = riveElementId;
     return map;
   }
