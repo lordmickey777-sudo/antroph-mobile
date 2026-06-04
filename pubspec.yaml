@@ -61,6 +61,7 @@ dependencies:
   rive: ^0.13.13
   smooth_corner: ^1.1.1
   shimmer_animation: ^2.2.2+1
+  purchases_flutter: ^10.1.1
   device_info_plus: ^11.0.0
   package_info_plus: ^8.0.0
   firebase_core: ^4.4.0
@@ -73,6 +74,7 @@ dependencies:
   glass_kit: ^4.0.2
   posthog_flutter: ^5.0.0
   video_player: ^2.9.2
+  purchases_ui_flutter: ^10.1.1
 
 dev_dependencies:
   flutter_test:
@@ -106,6 +108,7 @@ flutter:
     - assets/antroph_face.riv
     - assets/icons/
     - assets/videos/
+    - assets/svg/subscription/
     - .env
 
   fonts:
