@@ -4,14 +4,14 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import kotlin.math.max
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private val channelName = "com.antroph.aura/pcm_player"
     private var audioTrack: AudioTrack? = null
     private val gain = 4.0f // software gain to make PCM louder

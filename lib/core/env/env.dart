@@ -19,6 +19,14 @@ class AppEnv {
   static String get posthogHost =>
       _string('POSTHOG_HOST', 'https://us.i.posthog.com');
   static String get robotSerial => _string('ROBOT_SERIAL', '');
+  static bool get revenueCatUseTestStore =>
+      _bool('REVENUECAT_USE_TEST_STORE', false);
+  static String get revenueCatTestApiKey =>
+      _string('REVENUECAT_TEST_API_KEY', 'test_HSuFXrcgoDIhGaDMeEFIQOBnhqo');
+  static String get revenueCatAppleApiKey =>
+      _string('REVENUECAT_APPLE_API_KEY', '');
+  static String get revenueCatGoogleApiKey =>
+      _string('REVENUECAT_GOOGLE_API_KEY', '');
   static String get chatWsUrl {
     final direct = _string('CHAT_WS_URL', '');
     if (direct.isNotEmpty) {
@@ -69,6 +77,11 @@ class AppEnv {
     }
     // Fallback to dart-define or provided default
     return String.fromEnvironment(key, defaultValue: fallback);
+  }
+
+  static bool _bool(String key, bool fallback) {
+    final value = _string(key, fallback ? 'true' : 'false').toLowerCase();
+    return value == 'true' || value == '1' || value == 'yes';
   }
 
   static String _normalizeWsUrl(String input) {

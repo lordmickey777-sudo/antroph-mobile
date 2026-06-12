@@ -67,7 +67,7 @@ class AppPillButton extends StatelessWidget {
     final content = Padding(
       padding: padding,
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (isLoading)
             SizedBox(

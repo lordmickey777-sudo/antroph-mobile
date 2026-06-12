@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:antroph_mobile/app.dart';
 import 'package:antroph_mobile/core/notifications/push_notification_bootstrap.dart';
 import 'package:antroph_mobile/features/story/providers/rive_sync_bootstrap_provider.dart';
+import 'package:antroph_mobile/features/subscription/providers/subscription_provider.dart';
 
 void main() {
   setUpAll(() {
@@ -53,6 +54,7 @@ void main() {
         overrides: [
           pushNotificationBootstrapProvider.overrideWith((ref) {}),
           riveSyncBootstrapProvider.overrideWith((ref) {}),
+          subscriptionIdentitySyncProvider.overrideWith((ref) async {}),
         ],
         child: const App(),
       ),

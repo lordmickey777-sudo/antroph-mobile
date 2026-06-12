@@ -18,6 +18,8 @@ import 'package:antroph_mobile/features/story/providers/story_session_provider.d
 import 'package:antroph_mobile/features/story/data/stories_cache.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
+import 'package:antroph_mobile/features/subscription/providers/subscription_provider.dart';
+import 'package:antroph_mobile/features/subscription/presentation/revenuecat_actions.dart';
 
 /// Content widget for the story bottom sheet.
 /// Used with [showAppBottomSheet] for consistent sheet styling.
@@ -54,6 +56,14 @@ class StorySheetContent extends ConsumerStatefulWidget {
 class _StorySheetContentState extends ConsumerState<StorySheetContent> {
   late bool _isAdded = widget.isAdded;
   bool _isAddingToPlaylist = false;
+  bool _didPresentPremiumPrompt = false;
+  late final StorySessionNotifier _storySessionNotifier;
+
+  @override
+  void initState() {
+    super.initState();
+    _storySessionNotifier = ref.read(storySessionProvider.notifier);
+  }
 
   @override
   void didUpdateWidget(covariant StorySheetContent oldWidget) {
@@ -66,7 +76,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
   @override
   void dispose() {
     // Clear session when sheet is closed
-    ref.read(storySessionProvider.notifier).clearSession();
+    _storySessionNotifier.clearSession();
     super.dispose();
   }
 
@@ -82,6 +92,17 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
     final isPremium = widget.isPremium || (detail?.isPremium ?? false);
     final tags = detail?.tags ?? const <String>[];
 
+    final isSubscribedAsync = ref.watch(isSubscribedProvider);
+    final isSubscribed = isSubscribedAsync.asData?.value ?? false;
+
+    final isLocked = isPremium && !isSubscribed;
+    if (!_didPresentPremiumPrompt && isSubscribedAsync.hasValue && isLocked) {
+      _didPresentPremiumPrompt = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _handlePremiumUnlock();
+      });
+    }
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -90,7 +111,9 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
           left: 0,
           right: 0,
           height: size.height * 1 + 60,
-          child: IgnorePointer(child: _SoftImageBackdrop(imageAsset: widget.imageAsset)),
+          child: IgnorePointer(
+            child: _SoftImageBackdrop(imageAsset: widget.imageAsset),
+          ),
         ),
         CustomScrollView(
           controller: widget.scrollController,
@@ -110,7 +133,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                       isPremium: isPremium,
                       tags: tags,
                       onAddToPlaylist: _handleAddToPlaylist,
-                      onPlayPressed: _navigateToChat,
+                      onPlayPressed: () => _handlePlayOrUnlock(isLocked),
                     ),
                     const SizedBox(height: 20),
                     TypographyText(
@@ -150,7 +173,8 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
             right: 16,
             child: _ErrorBanner(
               message: sessionState.error!,
-              onDismiss: () => ref.read(storySessionProvider.notifier).clearError(),
+              onDismiss: () =>
+                  ref.read(storySessionProvider.notifier).clearError(),
             ),
           ),
       ],
@@ -174,7 +198,9 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
 
     setState(() => _isAddingToPlaylist = true);
     try {
-      await ref.read(storiesRepositoryProvider).addStoriesToPlaylist(storyIds: [widget.storyId]);
+      await ref
+          .read(storiesRepositoryProvider)
+          .addStoriesToPlaylist(storyIds: [widget.storyId]);
       if (!mounted) return;
       setState(() => _isAdded = true);
       showToast(context, 'Story added to playlist', success: true);
@@ -189,6 +215,30 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
         setState(() => _isAddingToPlaylist = false);
       }
     }
+  }
+
+  Future<void> _handlePlayOrUnlock(bool isLocked) async {
+    if (isLocked) {
+      await _handlePremiumUnlock();
+      return;
+    }
+    await _navigateToChat();
+  }
+
+  Future<void> _handlePremiumUnlock() async {
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Unlock premium stories',
+    );
+    if (!mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
+    final openStory = await presentAuraProPaywall(context, ref);
+    if (openStory && mounted) await _navigateToChat();
   }
 
   Future<void> _navigateToChat() async {
@@ -283,9 +333,19 @@ class _HeroCard extends ConsumerWidget {
                     ),
             ),
           ),
-          if (isPremium) const Positioned(right: 20, bottom: 34, child: PremiumStar(size: 24)),
+          if (isPremium)
+            const Positioned(
+              right: 20,
+              bottom: 34,
+              child: PremiumStar(size: 24),
+            ),
           if (tags.isNotEmpty)
-            Positioned(top: 20, left: 20, right: 20, child: _TagChips(tags: tags)),
+            Positioned(
+              top: 20,
+              left: 20,
+              right: 20,
+              child: _TagChips(tags: tags),
+            ),
         ],
       ),
     );
@@ -381,7 +441,11 @@ class _ActionButton extends StatelessWidget {
           fontWeight: FontWeight.w600,
         ),
         const SizedBox(width: 10),
-        _AddToListIconButton(isAdded: isAdded, isLoading: isLoading, onPressed: onAddPressed),
+        _AddToListIconButton(
+          isAdded: isAdded,
+          isLoading: isLoading,
+          onPressed: onAddPressed,
+        ),
       ],
     );
   }
@@ -500,7 +564,12 @@ class _StoryDetailShimmer extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        const ShimmerParagraph(lines: 3, lineHeight: 14, lineSpacing: 10, lastLineWidth: 0.7),
+        const ShimmerParagraph(
+          lines: 3,
+          lineHeight: 14,
+          lineSpacing: 10,
+          lastLineWidth: 0.7,
+        ),
         const SizedBox(height: 16),
         Wrap(
           spacing: 8,
@@ -540,15 +609,27 @@ class _ErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(CupertinoIcons.exclamationmark_circle_fill, color: Colors.white, size: 20),
+          const Icon(
+            CupertinoIcons.exclamationmark_circle_fill,
+            color: Colors.white,
+            size: 20,
+          ),
           const SizedBox(width: 12),
           Expanded(
-            child: TypographyText(message, variant: TypographyVariant.body2, color: Colors.white),
+            child: TypographyText(
+              message,
+              variant: TypographyVariant.body2,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(width: 8),
           GestureDetector(
             onTap: onDismiss,
-            child: const Icon(CupertinoIcons.xmark, color: Colors.white, size: 18),
+            child: const Icon(
+              CupertinoIcons.xmark,
+              color: Colors.white,
+              size: 18,
+            ),
           ),
         ],
       ),

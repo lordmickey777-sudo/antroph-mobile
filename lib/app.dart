@@ -6,6 +6,7 @@ import 'app_router.dart';
 import 'core/notifications/push_notification_bootstrap.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/story/providers/rive_sync_bootstrap_provider.dart';
+import 'features/subscription/providers/subscription_provider.dart';
 
 class App extends ConsumerWidget {
   const App({super.key});
@@ -14,6 +15,7 @@ class App extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(pushNotificationBootstrapProvider);
     ref.watch(riveSyncBootstrapProvider);
+    ref.watch(subscriptionIdentitySyncProvider);
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
 
