@@ -33,6 +33,7 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
   late final TextEditingController _tagInputCtrl;
   late final TextEditingController _themeInputCtrl;
   late final TextEditingController _charInputCtrl;
+  late final TextEditingController _rulesCtrl;
 
   @override
   void initState() {
@@ -43,6 +44,7 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
     _tagInputCtrl = TextEditingController();
     _themeInputCtrl = TextEditingController();
     _charInputCtrl = TextEditingController();
+    _rulesCtrl = TextEditingController();
   }
 
   @override
@@ -53,6 +55,7 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
     _tagInputCtrl.dispose();
     _themeInputCtrl.dispose();
     _charInputCtrl.dispose();
+    _rulesCtrl.dispose();
     super.dispose();
   }
 
@@ -255,7 +258,115 @@ class _StoryFormPageState extends ConsumerState<StoryFormPage> {
 
             const SizedBox(height: 28),
 
-            // Section 4: Cover & Mascot
+            // Section 4: Interaction
+            _FormSection(
+              title: 'Interaction',
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                  child: AppDropdown(
+                    label: 'Mode',
+                    value: creation.interactionMode,
+                    options: const {
+                      'narrative': 'Narrative',
+                      'interactive': 'Solo Interactive',
+                      'group': 'Group Interactive',
+                    },
+                    onChanged: (v) {
+                      if (v != null) notifier.updateInteractionMode(v);
+                    },
+                  ),
+                ),
+                if (creation.interactionMode != 'narrative') ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: AppDropdown(
+                            label: 'Template',
+                            value: creation.interactiveTemplate,
+                            options: const {
+                              'open_story': 'Open Story',
+                              'quiz': 'Quiz',
+                              'charades': 'Charades',
+                              'co_op_adventure': 'Co-op Adventure',
+                              'custom': 'Custom',
+                            },
+                            onChanged: (v) {
+                              if (v != null) {
+                                notifier.updateInteractiveTemplate(v);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: AppDropdown(
+                            label: 'AI Role',
+                            value: creation.aiRole,
+                            options: const {
+                              'narrator': 'Narrator',
+                              'host': 'Host',
+                              'judge': 'Judge',
+                              'participant': 'Participant',
+                              'silent': 'Silent',
+                            },
+                            onChanged: (v) {
+                              if (v != null) notifier.updateAiRole(v);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (creation.interactionMode == 'group')
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                      child: AppDropdown(
+                        label: 'Players',
+                        value: creation.maxPlayers.toString(),
+                        options: const {
+                          '2': '2 players',
+                          '4': '4 players',
+                          '6': '6 players',
+                          '8': '8 players',
+                          '12': '12 players',
+                        },
+                        onChanged: (v) {
+                          if (v != null) {
+                            notifier.updateMaxPlayers(int.parse(v));
+                          }
+                        },
+                      ),
+                    ),
+                  _InteractionSwitch(
+                    title: 'Timer',
+                    value: creation.timerEnabled,
+                    onChanged: notifier.updateTimerEnabled,
+                  ),
+                  _InteractionSwitch(
+                    title: 'Scoring',
+                    value: creation.scoringEnabled,
+                    onChanged: notifier.updateScoringEnabled,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    child: AppInput(
+                      controller: _rulesCtrl,
+                      hint: 'Rules or instructions',
+                      icon: Icons.rule_rounded,
+                      maxLines: 4,
+                      onChanged: notifier.updateInteractionRules,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+
+            const SizedBox(height: 28),
+
+            // Section 5: Cover & Mascot
             _FormSection(
               title: 'Cover & Mascot',
               children: [
@@ -398,6 +509,36 @@ class _FormSection extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _InteractionSwitch extends StatelessWidget {
+  const _InteractionSwitch({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String title;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile.adaptive(
+      value: value,
+      onChanged: onChanged,
+      title: Text(
+        title,
+        style: TextStyle(
+          color: context.primaryTextColor,
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      activeColor: context.actionButtonBackground,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
     );
   }
 }

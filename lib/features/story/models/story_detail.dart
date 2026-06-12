@@ -22,6 +22,9 @@ class StoryDetailDto {
     required this.updatedAt,
     required this.tree,
     required this.previewNodeIds,
+    this.interactionMode = 'narrative',
+    this.aiRole = 'narrator',
+    this.interactiveConfig = const <String, dynamic>{},
     this.riveElement,
     this.resolvedMascotConfig,
   });
@@ -46,6 +49,9 @@ class StoryDetailDto {
   final DateTime? updatedAt;
   final Map<String, dynamic> tree;
   final List<String> previewNodeIds;
+  final String interactionMode;
+  final String aiRole;
+  final Map<String, dynamic> interactiveConfig;
   final MascotConfig? resolvedMascotConfig;
 
   factory StoryDetailDto.fromJson(Map<String, dynamic> json) => StoryDetailDto(
@@ -72,6 +78,12 @@ class StoryDetailDto {
     previewNodeIds: ((json['preview_node_ids'] as List?) ?? const [])
         .whereType<String>()
         .toList(),
+    interactionMode:
+        (json['interaction_mode'] as String?)?.trim() ?? 'narrative',
+    aiRole: (json['ai_role'] as String?)?.trim() ?? 'narrator',
+    interactiveConfig:
+        (json['interactive_config'] as Map?)?.cast<String, dynamic>() ??
+        <String, dynamic>{},
   );
 
   static RiveElementDto? _parseRiveElement(dynamic value) {
@@ -115,6 +127,9 @@ class StoryDetailDto {
     'updated_at': updatedAt?.toIso8601String(),
     'tree': tree,
     'preview_node_ids': previewNodeIds,
+    'interaction_mode': interactionMode,
+    'ai_role': aiRole,
+    'interactive_config': interactiveConfig,
   };
 
   StoryDetailDto copyWith({
@@ -138,6 +153,9 @@ class StoryDetailDto {
     Object? updatedAt = _copyUnset,
     Map<String, dynamic>? tree,
     List<String>? previewNodeIds,
+    String? interactionMode,
+    String? aiRole,
+    Map<String, dynamic>? interactiveConfig,
     Object? resolvedMascotConfig = _copyUnset,
   }) {
     return StoryDetailDto(
@@ -171,6 +189,9 @@ class StoryDetailDto {
           : updatedAt as DateTime?,
       tree: tree ?? this.tree,
       previewNodeIds: previewNodeIds ?? this.previewNodeIds,
+      interactionMode: interactionMode ?? this.interactionMode,
+      aiRole: aiRole ?? this.aiRole,
+      interactiveConfig: interactiveConfig ?? this.interactiveConfig,
       resolvedMascotConfig: resolvedMascotConfig == _copyUnset
           ? this.resolvedMascotConfig
           : resolvedMascotConfig as MascotConfig?,

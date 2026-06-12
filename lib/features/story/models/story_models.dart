@@ -31,6 +31,8 @@ class StoryCardDto {
     required this.views,
     required this.isAdded,
     this.isPremium = false,
+    this.interactionMode = 'narrative',
+    this.aiRole = 'narrator',
     this.riveElementId,
     this.riveElement,
   });
@@ -45,6 +47,8 @@ class StoryCardDto {
   final int views;
   final bool isAdded;
   final bool isPremium;
+  final String interactionMode;
+  final String aiRole;
   final String? riveElementId;
   final RiveElementDto? riveElement;
 
@@ -63,6 +67,9 @@ class StoryCardDto {
     views: (json['views'] as num?)?.toInt() ?? 0,
     isAdded: json['is_added'] as bool? ?? false,
     isPremium: json['is_premium'] as bool? ?? false,
+    interactionMode:
+        (json['interaction_mode'] as String?)?.trim() ?? 'narrative',
+    aiRole: (json['ai_role'] as String?)?.trim() ?? 'narrator',
     riveElementId: (json['rive_element_id'] as String?)?.trim(),
     riveElement: _parseRiveElement(json['rive_element']),
   );
@@ -77,6 +84,8 @@ class StoryCardDto {
     'views': views,
     'is_added': isAdded,
     'is_premium': isPremium,
+    'interaction_mode': interactionMode,
+    'ai_role': aiRole,
     if (riveElementId != null) 'rive_element_id': riveElementId,
     if (riveElement != null) 'rive_element': riveElement!.toJson(),
   };
@@ -91,6 +100,8 @@ class FeaturedStoryDto {
     required this.author,
     required this.isAdded,
     this.isPremium = false,
+    this.interactionMode = 'narrative',
+    this.aiRole = 'narrator',
     this.riveElementId,
     this.riveElement,
   });
@@ -102,6 +113,8 @@ class FeaturedStoryDto {
   final String author;
   final bool isAdded;
   final bool isPremium;
+  final String interactionMode;
+  final String aiRole;
   final String? riveElementId;
   final RiveElementDto? riveElement;
 
@@ -116,6 +129,9 @@ class FeaturedStoryDto {
         author: (json['author'] as String?)?.trim() ?? '',
         isAdded: json['is_added'] as bool? ?? false,
         isPremium: json['is_premium'] as bool? ?? false,
+        interactionMode:
+            (json['interaction_mode'] as String?)?.trim() ?? 'narrative',
+        aiRole: (json['ai_role'] as String?)?.trim() ?? 'narrator',
         riveElementId: (json['rive_element_id'] as String?)?.trim(),
         riveElement: _parseRiveElement(json['rive_element']),
       );
@@ -128,6 +144,8 @@ class FeaturedStoryDto {
     'author': author,
     'is_added': isAdded,
     'is_premium': isPremium,
+    'interaction_mode': interactionMode,
+    'ai_role': aiRole,
     if (riveElementId != null) 'rive_element_id': riveElementId,
     if (riveElement != null) 'rive_element': riveElement!.toJson(),
   };
@@ -192,15 +210,15 @@ class ContinuePlayingDto {
       );
 
   Map<String, dynamic> toJson() => {
-        'story_id': storyId,
-        'title': title,
-        'description': description,
-        'cover_image_url': coverImageUrl,
-        'session_id': sessionId,
-        'progress_percentage': progressPercentage,
-        'path_length': pathLength,
-        'milestones_reached': milestonesReached,
-      };
+    'story_id': storyId,
+    'title': title,
+    'description': description,
+    'cover_image_url': coverImageUrl,
+    'session_id': sessionId,
+    'progress_percentage': progressPercentage,
+    'path_length': pathLength,
+    'milestones_reached': milestonesReached,
+  };
 }
 
 RiveElementDto? _parseRiveElement(dynamic value) {
