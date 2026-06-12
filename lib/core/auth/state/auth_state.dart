@@ -307,6 +307,7 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     if (ref.read(socialAuthInProgressProvider)) return;
     final socialAuthBusy = ref.read(socialAuthInProgressProvider.notifier);
     socialAuthBusy.start();
+    _clearTransientAuthError();
     try {
       debugPrint('[AuthController] signInWithGoogle start');
       final idToken = await _socialAuth.signInWithGoogle().timeout(
@@ -353,6 +354,7 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     if (ref.read(socialAuthInProgressProvider)) return;
     final socialAuthBusy = ref.read(socialAuthInProgressProvider.notifier);
     socialAuthBusy.start();
+    _clearTransientAuthError();
     try {
       debugPrint('[AuthController] signInWithApple start');
       final idToken = await _socialAuth.signInWithApple().timeout(
@@ -404,6 +406,11 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       return 'Check your internet connection and try again.';
     }
     return 'Could not sign in with $authMethod. Please try again.';
+  }
+
+  void _clearTransientAuthError() {
+    if (!state.hasError) return;
+    state = AsyncValue.data(state.value);
   }
 
   Future<void> _handleFirebaseAuth(
