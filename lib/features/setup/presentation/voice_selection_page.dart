@@ -6,6 +6,7 @@ import 'package:antroph_mobile/core/onboarding/app_setup_storage_service.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/features/profile/data/profile_repository.dart';
+import 'package:antroph_mobile/features/setup/data/voice_option.dart';
 import 'package:antroph_mobile/features/setup/data/voices_repository.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
@@ -13,6 +14,7 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 
 class VoiceSelectionPage extends StatefulWidget {
@@ -22,12 +24,18 @@ class VoiceSelectionPage extends StatefulWidget {
   State<VoiceSelectionPage> createState() => _VoiceSelectionPageState();
 }
 
-typedef _BrandedVoice = ({String name, String tone, String voiceId, List<Color> gradient});
+typedef _BrandedVoice = ({
+  String name,
+  String tone,
+  String voiceId,
+  List<Color> gradient,
+});
 
-class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProviderStateMixin {
+class _VoiceSelectionPageState extends State<VoiceSelectionPage>
+    with TickerProviderStateMixin {
   // Branded mobile voices mapped to their backend voice_id.
   // Gradients drive the orb, background tint, and strip accents.
-  static const List<_BrandedVoice> _voices = <_BrandedVoice>[
+  static const List<_BrandedVoice> _fallbackVoices = <_BrandedVoice>[
     (
       name: 'Nova',
       tone: 'Bright and playful',
@@ -100,18 +108,27 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProv
   bool _hasUserSelected = false;
   bool _isSaving = false;
 
+  late List<_BrandedVoice> _voices = List<_BrandedVoice>.of(_fallbackVoices);
   Map<String, String> _previewUrls = <String, String>{};
   String? _playingVoiceId;
   bool _playerLoading = false;
+  bool _audioSessionConfigured = false;
   StreamSubscription<PlayerState>? _playerSub;
 
-  _BrandedVoice get _current => _voices[_selectedIndex];
+  _BrandedVoice get _current => _voices[_safeSelectedIndex];
+
+  int get _safeSelectedIndex {
+    if (_voices.isEmpty) return 0;
+    return _selectedIndex.clamp(0, _voices.length - 1);
+  }
 
   @override
   void initState() {
     super.initState();
-    _idleController = AnimationController(vsync: this, duration: const Duration(seconds: 7))
-      ..repeat();
+    _idleController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 7),
+    )..repeat();
     _restoreVoice();
     _loadVoices();
     _playerSub = _player.playerStateStream.listen(_onPlayerState);
@@ -127,8 +144,15 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProv
 
   Future<void> _restoreVoice() async {
     final savedVoice = await AppSetupStorageService.getSelectedVoice();
-    if (!mounted || savedVoice == null || savedVoice.isEmpty) return;
-    final index = _voices.indexWhere((v) => v.name == savedVoice);
+    final savedVoiceId = await AppSetupStorageService.getSelectedVoiceId();
+    if (!mounted) return;
+    final savedKey = _voiceLookupKey(savedVoiceId ?? savedVoice ?? '');
+    if (savedKey.isEmpty) return;
+    final index = _voices.indexWhere(
+      (v) =>
+          _voiceLookupKey(v.voiceId) == savedKey ||
+          _voiceLookupKey(v.name) == savedKey,
+    );
     if (index < 0) return;
     setState(() {
       _selectedIndex = index;
@@ -141,15 +165,149 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProv
       final result = await _voicesRepository.fetchVoices();
       if (!mounted) return;
       final map = <String, String>{};
-      for (final v in result.voices) {
-        final url = v.previewAudioUrl;
+      final backendVoices = <_BrandedVoice>[];
+      final activeVoices = result.voices
+          .where((voice) => voice.isActive && voice.voiceId.trim().isNotEmpty)
+          .toList(growable: false);
+      for (var i = 0; i < activeVoices.length; i++) {
+        final v = activeVoices[i];
+        backendVoices.add(_brandedVoiceFromOption(v, i));
+        final url = _readyPreviewUrl(v);
         if (url != null && url.isNotEmpty) {
-          map[v.voiceId] = url;
+          map[v.voiceId.trim()] = url;
+          map[_voiceLookupKey(v.voiceId)] = url;
+          map[_voiceLookupKey(v.displayName)] = url;
         }
       }
-      setState(() => _previewUrls = map);
-    } catch (_) {
+      final nextVoices = backendVoices.isNotEmpty ? backendVoices : _voices;
+      for (final voice in nextVoices) {
+        final url = _resolvePreviewUrl(map, voice);
+        if (url != null && url.isNotEmpty) {
+          map[voice.voiceId] = url;
+        }
+      }
+      final nextSelectedIndex = _nextSelectedIndex(
+        nextVoices,
+        selectedVoice: result.selectedVoice,
+      );
+      setState(() {
+        _voices = nextVoices;
+        _selectedIndex = nextSelectedIndex;
+        _previewUrls = map;
+      });
+      debugPrint(
+        '[VoiceSelection] loaded ${map.length} voice preview URLs for ${nextVoices.length} voices',
+      );
+    } catch (error) {
+      debugPrint('[VoiceSelection] failed to load voice previews: $error');
       // Non-fatal: selection still works without previews.
+    }
+  }
+
+  _BrandedVoice _brandedVoiceFromOption(VoiceOption option, int index) {
+    final fallback = _fallbackFor(option.voiceId, option.displayName);
+    final fallbackGradient =
+        fallback?.gradient ??
+        _fallbackVoices[index % _fallbackVoices.length].gradient;
+    final description = option.description?.trim();
+    final style = option.style?.trim();
+    final gender = option.gender?.trim();
+    return (
+      name: option.displayName.trim().isNotEmpty
+          ? option.displayName.trim()
+          : fallback?.name ?? option.voiceId.trim(),
+      tone: description?.isNotEmpty == true
+          ? description!
+          : style?.isNotEmpty == true
+          ? style!
+          : gender?.isNotEmpty == true
+          ? gender!
+          : fallback?.tone ?? 'Expressive and clear',
+      voiceId: option.voiceId.trim(),
+      gradient: fallbackGradient,
+    );
+  }
+
+  _BrandedVoice? _fallbackFor(String voiceId, String displayName) {
+    final idKey = _voiceLookupKey(voiceId);
+    final nameKey = _voiceLookupKey(displayName);
+    for (final voice in _fallbackVoices) {
+      if (_voiceLookupKey(voice.voiceId) == idKey ||
+          _voiceLookupKey(voice.name) == nameKey ||
+          _voiceLookupKey(voice.name) == idKey ||
+          _voiceLookupKey(voice.voiceId) == nameKey) {
+        return voice;
+      }
+    }
+    return null;
+  }
+
+  String? _readyPreviewUrl(VoiceOption option) {
+    final url = option.previewAudioUrl?.trim();
+    if (url == null || url.isEmpty) return null;
+    final status = option.previewAudioStatus?.trim().toLowerCase() ?? '';
+    if (status.isNotEmpty && status != 'ready') return null;
+    return url;
+  }
+
+  int _nextSelectedIndex(
+    List<_BrandedVoice> voices, {
+    required String selectedVoice,
+  }) {
+    if (voices.isEmpty) return 0;
+    final current = _voices.isEmpty ? null : _current;
+    final keys = <String>[
+      if (_hasUserSelected && current != null) _voiceLookupKey(current.voiceId),
+      if (_hasUserSelected && current != null) _voiceLookupKey(current.name),
+      _voiceLookupKey(selectedVoice),
+    ].where((key) => key.isNotEmpty).toList(growable: false);
+
+    for (final key in keys) {
+      final index = voices.indexWhere(
+        (voice) =>
+            _voiceLookupKey(voice.voiceId) == key ||
+            _voiceLookupKey(voice.name) == key,
+      );
+      if (index >= 0) return index;
+    }
+    return _selectedIndex.clamp(0, voices.length - 1);
+  }
+
+  String _voiceLookupKey(String value) {
+    return value.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+  }
+
+  String? _resolvePreviewUrl(Map<String, String> map, _BrandedVoice voice) {
+    return map[voice.voiceId] ??
+        map[_voiceLookupKey(voice.voiceId)] ??
+        map[_voiceLookupKey(voice.name)];
+  }
+
+  Future<void> _configureAudioSession() async {
+    if (_audioSessionConfigured) return;
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(
+        const AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playback,
+          avAudioSessionCategoryOptions:
+              AVAudioSessionCategoryOptions.defaultToSpeaker,
+          avAudioSessionMode: AVAudioSessionMode.defaultMode,
+          avAudioSessionRouteSharingPolicy:
+              AVAudioSessionRouteSharingPolicy.defaultPolicy,
+          avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.music,
+            usage: AndroidAudioUsage.media,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+          androidWillPauseWhenDucked: false,
+        ),
+      );
+      await session.setActive(true);
+      _audioSessionConfigured = true;
+    } catch (error) {
+      debugPrint('[VoiceSelection] audio session configure failed: $error');
     }
   }
 
@@ -176,7 +334,7 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProv
       });
     }
 
-    final url = _previewUrls[voice.voiceId];
+    final url = _resolvePreviewUrl(_previewUrls, voice);
     if (url == null || url.isEmpty) return;
 
     // Re-tapping the currently playing voice stops playback.
@@ -192,12 +350,16 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProv
     });
 
     try {
+      await _configureAudioSession();
       await _player.stop();
       await _player.setUrl(url);
       if (!mounted) return;
       setState(() => _playerLoading = false);
       await _player.play();
-    } catch (_) {
+    } catch (error) {
+      debugPrint(
+        '[VoiceSelection] failed to play ${voice.voiceId} preview: $error',
+      );
       if (!mounted) return;
       setState(() {
         _playingVoiceId = null;
@@ -256,7 +418,11 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProv
               center: const Alignment(0, -0.45),
               radius: 1.3,
               colors: <Color>[
-                Color.lerp(voice.gradient.first, const Color(0xFF0A0C0D), 0.92)!,
+                Color.lerp(
+                  voice.gradient.first,
+                  const Color(0xFF0A0C0D),
+                  0.92,
+                )!,
                 const Color(0xFF07090A),
               ],
             ),
@@ -266,7 +432,12 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProv
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: ContentWidth.form),
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(horizontalPadding, 24, horizontalPadding, 20),
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    24,
+                    horizontalPadding,
+                    20,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -301,16 +472,17 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProv
                               const SizedBox(height: 20),
                               AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 280),
-                                transitionBuilder: (child, anim) => FadeTransition(
-                                  opacity: anim,
-                                  child: SlideTransition(
-                                    position: Tween<Offset>(
-                                      begin: const Offset(0, 0.15),
-                                      end: Offset.zero,
-                                    ).animate(anim),
-                                    child: child,
-                                  ),
-                                ),
+                                transitionBuilder: (child, anim) =>
+                                    FadeTransition(
+                                      opacity: anim,
+                                      child: SlideTransition(
+                                        position: Tween<Offset>(
+                                          begin: const Offset(0, 0.15),
+                                          end: Offset.zero,
+                                        ).animate(anim),
+                                        child: child,
+                                      ),
+                                    ),
                                 child: Column(
                                   key: ValueKey<String>(voice.name),
                                   children: <Widget>[
@@ -324,7 +496,9 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProv
                                     TypographyText(
                                       voice.tone,
                                       variant: TypographyVariant.body2,
-                                      color: Colors.white.withValues(alpha: 0.72),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.72,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -346,19 +520,27 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage> with TickerProv
                         width: double.infinity,
                         height: 60,
                         child: AppButton(
-                          onPressed: (_isSaving || !_hasUserSelected) ? null : _continue,
+                          onPressed: (_isSaving || !_hasUserSelected)
+                              ? null
+                              : _continue,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: Colors.black,
-                            disabledBackgroundColor: Colors.white.withValues(alpha: 0.18),
-                            disabledForegroundColor: Colors.white.withValues(alpha: 0.6),
+                            disabledBackgroundColor: Colors.white.withValues(
+                              alpha: 0.18,
+                            ),
+                            disabledForegroundColor: Colors.white.withValues(
+                              alpha: 0.6,
+                            ),
                             shape: const StadiumBorder(),
                           ),
                           child: _isSaving
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const TypographyText(
                                   'Continue',
@@ -410,7 +592,9 @@ class _VoiceOrb extends StatelessWidget {
           builder: (context, _) {
             final t = idle.value;
             final breathing = 1 + math.sin(t * 2 * math.pi) * 0.02;
-            final playingPulse = isPlaying ? 1 + math.sin(t * math.pi * 8) * 0.035 : 1.0;
+            final playingPulse = isPlaying
+                ? 1 + math.sin(t * math.pi * 8) * 0.035
+                : 1.0;
             return Stack(
               alignment: Alignment.center,
               children: <Widget>[
@@ -470,7 +654,11 @@ class _VoiceOrb extends StatelessWidget {
                     ),
                   ),
                 ),
-                _OrbOverlay(isPlaying: isPlaying, isLoading: isLoading, hasPreview: hasPreview),
+                _OrbOverlay(
+                  isPlaying: isPlaying,
+                  isLoading: isLoading,
+                  hasPreview: hasPreview,
+                ),
               ],
             );
           },
@@ -480,7 +668,9 @@ class _VoiceOrb extends StatelessWidget {
   }
 
   List<Widget> _buildRipples(double t) {
-    return <Widget>[for (int i = 0; i < 3; i++) _buildRipple((t + i / 3) % 1.0)];
+    return <Widget>[
+      for (int i = 0; i < 3; i++) _buildRipple((t + i / 3) % 1.0),
+    ];
   }
 
   Widget _buildRipple(double t) {
@@ -493,7 +683,10 @@ class _VoiceOrb extends StatelessWidget {
           height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: gradient.first.withValues(alpha: 0.6), width: 1.5),
+            border: Border.all(
+              color: gradient.first.withValues(alpha: 0.6),
+              width: 1.5,
+            ),
           ),
         ),
       ),
@@ -502,7 +695,11 @@ class _VoiceOrb extends StatelessWidget {
 }
 
 class _OrbOverlay extends StatelessWidget {
-  const _OrbOverlay({required this.isPlaying, required this.isLoading, required this.hasPreview});
+  const _OrbOverlay({
+    required this.isPlaying,
+    required this.isLoading,
+    required this.hasPreview,
+  });
 
   final bool isPlaying;
   final bool isLoading;
@@ -522,7 +719,12 @@ class _OrbOverlay extends StatelessWidget {
         ),
       );
     } else if (isPlaying) {
-      child = const Icon(Icons.stop_rounded, key: ValueKey('stop'), color: Colors.black, size: 26);
+      child = const Icon(
+        Icons.stop_rounded,
+        key: ValueKey('stop'),
+        color: Colors.black,
+        size: 26,
+      );
     } else {
       child = Icon(
         hasPreview ? Icons.play_arrow_rounded : Icons.volume_off_rounded,
@@ -539,11 +741,18 @@ class _OrbOverlay extends StatelessWidget {
         shape: BoxShape.circle,
         color: Colors.white,
         boxShadow: <BoxShadow>[
-          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 12, spreadRadius: -2),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 12,
+            spreadRadius: -2,
+          ),
         ],
       ),
       alignment: Alignment.center,
-      child: AnimatedSwitcher(duration: const Duration(milliseconds: 180), child: child),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        child: child,
+      ),
     );
   }
 }
@@ -628,13 +837,19 @@ class _VoicePill extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              _PillOrb(gradient: voice.gradient, isSelected: isSelected, isPlaying: isPlaying),
+              _PillOrb(
+                gradient: voice.gradient,
+                isSelected: isSelected,
+                isPlaying: isPlaying,
+              ),
               const SizedBox(width: 10),
               TypographyText(
                 voice.name,
                 variant: TypographyVariant.body2,
                 fontSize: 13,
-                color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.72),
+                color: isSelected
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.72),
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
               ),
               if (!hasPreview) ...<Widget>[
@@ -654,7 +869,11 @@ class _VoicePill extends StatelessWidget {
 }
 
 class _PillOrb extends StatelessWidget {
-  const _PillOrb({required this.gradient, required this.isSelected, required this.isPlaying});
+  const _PillOrb({
+    required this.gradient,
+    required this.isSelected,
+    required this.isPlaying,
+  });
 
   final List<Color> gradient;
   final bool isSelected;
@@ -683,7 +902,9 @@ class _PillOrb extends StatelessWidget {
             : null,
       ),
       alignment: Alignment.center,
-      child: isPlaying ? const Icon(Icons.graphic_eq_rounded, size: 13, color: Colors.white) : null,
+      child: isPlaying
+          ? const Icon(Icons.graphic_eq_rounded, size: 13, color: Colors.white)
+          : null,
     );
   }
 }
@@ -711,7 +932,10 @@ class _SetupHeader extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            if (onBack != null) ...<Widget>[_BackCircle(onTap: onBack!), const SizedBox(width: 12)],
+            if (onBack != null) ...<Widget>[
+              _BackCircle(onTap: onBack!),
+              const SizedBox(width: 12),
+            ],
             Expanded(
               child: Row(
                 children: <Widget>[
@@ -744,7 +968,11 @@ class _SetupHeader extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
         const SizedBox(height: 10),
-        TypographyText(subtitle, variant: TypographyVariant.body2, color: Colors.white70),
+        TypographyText(
+          subtitle,
+          variant: TypographyVariant.body2,
+          color: Colors.white70,
+        ),
       ],
     );
   }
