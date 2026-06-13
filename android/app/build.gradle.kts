@@ -64,7 +64,7 @@ fun releaseSigningConfigHint(): String = when {
 android {
     namespace = "com.antroph.aura"
     compileSdk = 36
-    ndkVersion = "28.2.13676358"
+    ndkVersion = "27.1.12297006"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

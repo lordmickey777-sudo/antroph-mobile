@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import AVFoundation
+import FirebaseCore
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -14,6 +15,10 @@ import AVFoundation
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    if FirebaseApp.app() == nil {
+      FirebaseApp.configure()
+    }
+
     GeneratedPluginRegistrant.register(with: self)
 
     // Set up method channel for PCM audio playback

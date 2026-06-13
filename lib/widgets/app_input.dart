@@ -50,7 +50,16 @@ class AppInput extends StatelessWidget {
       controller: controller,
       style: TextStyle(color: textColor, fontSize: 15),
       obscureText: obscure,
-      keyboardType: keyboardType,
+      keyboardType: obscure ? TextInputType.visiblePassword : keyboardType,
+      autocorrect: !obscure,
+      enableSuggestions: !obscure,
+      smartDashesType: obscure
+          ? SmartDashesType.disabled
+          : SmartDashesType.enabled,
+      smartQuotesType: obscure
+          ? SmartQuotesType.disabled
+          : SmartQuotesType.enabled,
+      textCapitalization: TextCapitalization.none,
       validator: validator,
       readOnly: readOnly,
       onChanged: onChanged,
@@ -68,9 +77,14 @@ class AppInput extends StatelessWidget {
     return Container(
       constraints: isMultiline ? null : BoxConstraints(minHeight: minHeight),
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(color: context.inputBackground, borderRadius: radius),
+      decoration: BoxDecoration(
+        color: context.inputBackground,
+        borderRadius: radius,
+      ),
       child: Row(
-        crossAxisAlignment: isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        crossAxisAlignment: isMultiline
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.center,
         children: [
           if (icon != null) ...[
             Padding(

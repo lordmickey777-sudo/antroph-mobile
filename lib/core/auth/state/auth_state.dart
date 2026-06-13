@@ -321,16 +321,16 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       );
       await _handleFirebaseAuth(idToken, authMethod: 'google');
       debugPrint('[AuthController] backend /auth/firebase success');
-    } on DioException catch (e, st) {
+    } on DioException catch (e) {
       final apiError = ErrorFormatter.fromDio(e);
       debugPrint(
         '[AuthController] backend /auth/firebase failed: ${apiError.message}',
       );
-      state = AsyncValue.error(apiError.message, st);
-    } catch (e, st) {
+      state = const AsyncValue.data(null);
+    } catch (e) {
       final msg = e.toString().replaceFirst('Exception: ', '');
       debugPrint('[AuthController] Google sign-in failed before backend: $msg');
-      state = AsyncValue.error(msg, st);
+      state = const AsyncValue.data(null);
     }
   }
 
@@ -349,16 +349,16 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       );
       await _handleFirebaseAuth(idToken, authMethod: 'apple');
       debugPrint('[AuthController] backend /auth/firebase success');
-    } on DioException catch (e, st) {
+    } on DioException catch (e) {
       final apiError = ErrorFormatter.fromDio(e);
       debugPrint(
         '[AuthController] backend /auth/firebase failed: ${apiError.message}',
       );
-      state = AsyncValue.error(apiError.message, st);
-    } catch (e, st) {
+      state = const AsyncValue.data(null);
+    } catch (e) {
       final msg = e.toString().replaceFirst('Exception: ', '');
       debugPrint('[AuthController] Apple sign-in failed before backend: $msg');
-      state = AsyncValue.error(msg, st);
+      state = const AsyncValue.data(null);
     }
   }
 

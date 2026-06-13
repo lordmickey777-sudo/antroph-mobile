@@ -14,7 +14,6 @@ import '../../../firebase_options.dart';
 /// sessions via JWT).
 class SocialAuthService {
   FirebaseAuth get _firebaseAuth => FirebaseAuth.instance;
-  bool _googleInitialized = false;
 
   Future<void> _ensureFirebaseInitialized() async {
     if (Firebase.apps.isNotEmpty) return;
@@ -37,108 +36,35 @@ class SocialAuthService {
   /// Throws [Exception] if the user cancels or an error occurs.
   Future<String> signInWithGoogle() async {
     await _ensureFirebaseInitialized();
-    try {
-      return await _signInWithGoogleSdk();
-    } catch (e) {
-      final sdkError = e.toString().replaceFirst('Exception: ', '');
-      final lowered = sdkError.toLowerCase();
-      if (lowered.contains('cancelled') || lowered.contains('canceled')) {
-        // Do not launch a second auth flow after an explicit cancellation.
-        rethrow;
-      }
-      if (!Platform.isIOS && !Platform.isAndroid) {
-        rethrow;
-      }
-      debugPrint('[GoogleAuth] SDK flow failed on ${Platform.operatingSystem}: $sdkError');
-      debugPrint('[GoogleAuth] retrying with Firebase provider flow');
-      try {
-        return await _signInWithGoogleViaFirebaseProvider();
-      } catch (providerError) {
-        final providerMsg =
-            providerError.toString().replaceFirst('Exception: ', '');
-        throw Exception(
-          'Google sign-in failed. SDK: $sdkError. Provider: $providerMsg',
-        );
-      }
-    }
-  }
-
-  Future<void> _initializeGoogle() async {
-    if (_googleInitialized) return;
-    final options = Firebase.app().options;
-    debugPrint(
-      '[GoogleAuth] initialize clientId=${Platform.isIOS ? options.iosClientId : '(default)'}',
-    );
-    await GoogleSignIn.instance.initialize(
-      clientId: Platform.isIOS ? options.iosClientId : null,
-    );
-    debugPrint(
-      '[GoogleAuth] supportsAuthenticate=${GoogleSignIn.instance.supportsAuthenticate()}',
-    );
-    _googleInitialized = true;
-  }
-
-  Future<String> _signInWithGoogleViaFirebaseProvider() async {
-    debugPrint('[GoogleAuth] start Firebase provider flow (${Platform.operatingSystem})');
-    final provider = GoogleAuthProvider()
-      ..addScope('email')
-      ..addScope('profile');
-    try {
-      final userCredential = await _firebaseAuth.signInWithProvider(provider);
-      return _extractAndClearFirebaseSession(userCredential);
-    } on FirebaseAuthException catch (e) {
-      debugPrint('[GoogleAuth] provider error code=${e.code} message=${e.message}');
-      if (e.code == 'web-context-cancelled' || e.code == 'canceled') {
-        throw Exception('Google sign-in was cancelled');
-      }
-      if (e.code == 'invalid-credential') {
-        if (Platform.isAndroid) {
-          throw Exception(
-            'Google credential was rejected. Verify SHA-1/SHA-256 for your signing key in Firebase and re-download android/app/google-services.json.',
-          );
-        }
-        throw Exception(
-          'Google credential was rejected. Verify Google Sign-In is enabled in Firebase Auth and the iOS URL scheme in Info.plist matches REVERSED_CLIENT_ID.',
-        );
-      }
-      throw Exception(e.message ?? 'Google sign-in failed (${e.code})');
-    }
+    return _signInWithGoogleSdk();
   }
 
   Future<String> _signInWithGoogleSdk() async {
-    debugPrint('[GoogleAuth] start sign-in flow (platform: ${Platform.operatingSystem})');
-    await _initializeGoogle();
-    final googleSignIn = GoogleSignIn.instance;
+    debugPrint(
+      '[GoogleAuth] start sign-in flow (platform: ${Platform.operatingSystem})',
+    );
 
-    GoogleSignInAccount googleUser;
-    try {
-      googleUser = await googleSignIn.authenticate().timeout(
-          const Duration(seconds: 60),
-          onTimeout: () => throw Exception(
-            'Google sign-in timed out before completing.',
-          ),
-        );
-    } on GoogleSignInException catch (e) {
-      debugPrint(
-        '[GoogleAuth] authenticate exception code=${e.code.name} desc=${e.description} details=${e.details}',
-      );
-      if (e.code == GoogleSignInExceptionCode.canceled) {
-        throw Exception('Google sign-in was cancelled');
-      }
-      throw Exception('Google sign-in failed (${e.code.name})');
-    }
+    final googleSignIn = GoogleSignIn();
+
+    final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+    if (googleUser == null) throw Exception('Google sign-in was cancelled');
+
     debugPrint('[GoogleAuth] Google account selected: ${googleUser.email}');
 
-    final googleAuth = googleUser.authentication;
+    final googleAuth = await googleUser.authentication;
     debugPrint(
-      '[GoogleAuth] token presence id=${(googleAuth.idToken ?? '').isNotEmpty}',
+      '[GoogleAuth] token presence id=${(googleAuth.idToken ?? '').isNotEmpty} '
+      'access=${(googleAuth.accessToken ?? '').isNotEmpty}',
     );
+
     if ((googleAuth.idToken ?? '').isEmpty) {
       throw Exception('Google did not return an ID token');
     }
 
     if (Platform.isAndroid) {
-      debugPrint('[GoogleAuth] using Firebase REST token exchange fast path (android)');
+      debugPrint(
+        '[GoogleAuth] using Firebase REST token exchange fast path (android)',
+      );
       final token = await _exchangeGoogleIdTokenForFirebaseToken(
         googleAuth.idToken!,
       );
@@ -151,9 +77,11 @@ class SocialAuthService {
     }
 
     final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
       idToken: googleAuth.idToken,
     );
     debugPrint('[GoogleAuth] signing into Firebase with Google credential');
+
     UserCredential userCredential;
     try {
       userCredential = await _firebaseAuth
@@ -169,39 +97,24 @@ class SocialAuthService {
       debugPrint(
         '[GoogleAuth] FirebaseAuthException code=${e.code} message=${e.message}',
       );
-      if (Platform.isAndroid &&
-          (e.code == 'invalid-credential' ||
-              e.code == 'internal-error' ||
-              e.code == 'network-request-failed')) {
+      if (e.code == 'invalid-credential') {
         throw Exception(
-          'Google credential exchange failed (${e.code}). On Android this is often caused by missing SHA-1/SHA-256 in Firebase for the signing key.',
+          'Google credential was rejected. Verify Google Sign-In is enabled in Firebase Auth and the iOS URL scheme in Info.plist matches REVERSED_CLIENT_ID.',
         );
       }
-      throw Exception(e.message ?? 'Google credential exchange failed (${e.code})');
-    } catch (e) {
-      if (Platform.isAndroid) {
-        debugPrint(
-          '[GoogleAuth] native Firebase credential exchange failed on Android: $e',
-        );
-        debugPrint('[GoogleAuth] trying Firebase REST token exchange fallback');
-        final token = await _exchangeGoogleIdTokenForFirebaseToken(
-          googleAuth.idToken!,
-        );
-        try {
-          await googleSignIn.signOut().timeout(const Duration(seconds: 8));
-        } catch (_) {}
-        return token;
-      }
-      rethrow;
+      throw Exception(
+        e.message ?? 'Google credential exchange failed (${e.code})',
+      );
     }
 
-    // Do not block login completion on SDK sign-out.
     try {
       await googleSignIn.signOut().timeout(const Duration(seconds: 8));
     } catch (e) {
       debugPrint('[GoogleAuth] non-fatal Google SDK signOut error: $e');
     }
-    debugPrint('[GoogleAuth] Firebase sign-in success, extracting Firebase ID token');
+    debugPrint(
+      '[GoogleAuth] Firebase sign-in success, extracting Firebase ID token',
+    );
     return _extractAndClearFirebaseSession(userCredential);
   }
 
@@ -226,9 +139,8 @@ class SocialAuthService {
         )
         .timeout(
           const Duration(seconds: 30),
-          onTimeout: () => throw Exception(
-            'Firebase REST token exchange timed out.',
-          ),
+          onTimeout: () =>
+              throw Exception('Firebase REST token exchange timed out.'),
         );
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -241,10 +153,9 @@ class SocialAuthService {
       return idToken;
     }
 
-    final errorMessage =
-        (body['error'] is Map<String, dynamic>)
-            ? (body['error']['message'] as String? ?? 'unknown')
-            : 'unknown';
+    final errorMessage = (body['error'] is Map<String, dynamic>)
+        ? (body['error']['message'] as String? ?? 'unknown')
+        : 'unknown';
     throw Exception(
       'Firebase REST exchange failed (${response.statusCode}): $errorMessage',
     );
@@ -256,7 +167,9 @@ class SocialAuthService {
   Future<String> signInWithApple() async {
     await _ensureFirebaseInitialized();
     if (!Platform.isIOS) {
-      throw Exception('Sign in with Apple is only available on iOS in this app');
+      throw Exception(
+        'Sign in with Apple is only available on iOS in this app',
+      );
     }
 
     final appleProvider = AppleAuthProvider()
@@ -265,7 +178,9 @@ class SocialAuthService {
 
     try {
       debugPrint('[AppleAuth] start Firebase provider flow (iOS)');
-      final userCredential = await _firebaseAuth.signInWithProvider(appleProvider);
+      final userCredential = await _firebaseAuth.signInWithProvider(
+        appleProvider,
+      );
       return _extractAndClearFirebaseSession(userCredential);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'web-context-cancelled' || e.code == 'canceled') {
@@ -286,14 +201,15 @@ class SocialAuthService {
     }
   }
 
-  Future<String> _extractAndClearFirebaseSession(UserCredential userCredential) async {
+  Future<String> _extractAndClearFirebaseSession(
+    UserCredential userCredential,
+  ) async {
     debugPrint('[SocialAuth] extracting Firebase ID token');
     final idToken = await userCredential.user?.getIdToken().timeout(
-          const Duration(seconds: 20),
-          onTimeout: () => throw Exception(
-            'Timed out while fetching Firebase ID token.',
-          ),
-        );
+      const Duration(seconds: 20),
+      onTimeout: () =>
+          throw Exception('Timed out while fetching Firebase ID token.'),
+    );
     try {
       await _firebaseAuth.signOut().timeout(const Duration(seconds: 8));
     } catch (e) {

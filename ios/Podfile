@@ -46,4 +46,22 @@ post_install do |installer|
       end
     end
   end
+
+  # google_sign_in_ios 5.9.0 uses registrar.viewController which was removed from
+  # FlutterPluginRegistrar in Xcode 26+. Patch to nil so the existing keyWindow fallback runs.
+  plugin_file = File.expand_path(
+    "../.symlinks/plugins/google_sign_in_ios/darwin/google_sign_in_ios/Sources/google_sign_in_ios/FLTGoogleSignInPlugin.m",
+    installer.sandbox.root
+  )
+  if File.exist?(plugin_file)
+    content = File.read(plugin_file)
+    patched = content.gsub(
+      'UIViewController *rootViewController = self.registrar.viewController;',
+      'UIViewController *rootViewController = nil; // patched: viewController removed in Xcode 26+'
+    )
+    if content != patched
+      File.write(plugin_file, patched)
+      puts "Patched google_sign_in_ios: removed registrar.viewController reference"
+    end
+  end
 end
