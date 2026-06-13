@@ -36,19 +36,65 @@ class SocialAuthService {
   /// Throws [Exception] if the user cancels or an error occurs.
   Future<String> signInWithGoogle() async {
     await _ensureFirebaseInitialized();
-    return _signInWithGoogleSdk();
+    try {
+      return await _signInWithGoogleSdk();
+    } catch (e) {
+      final sdkError = e.toString().replaceFirst('Exception: ', '');
+      final lowered = sdkError.toLowerCase();
+      if (lowered.contains('cancelled') || lowered.contains('canceled')) {
+        // Do not launch a second auth flow after an explicit cancellation.
+        rethrow;
+      }
+      debugPrint(
+        '[GoogleAuth] SDK flow failed on ${Platform.operatingSystem}: $sdkError',
+      );
+      throw Exception('Google sign-in failed: $sdkError');
+    }
+  }
+
+  Future<void> prepareGoogleSignIn() async {
+    await _ensureFirebaseInitialized();
+    await _initializeGoogle();
+  }
+
+  Future<void> _initializeGoogle() async {
+    if (_googleInitialized) return;
+    final options = Firebase.app().options;
+    debugPrint(
+      '[GoogleAuth] initialize clientId=${Platform.isIOS ? options.iosClientId : '(default)'}',
+    );
+    await GoogleSignIn.instance.initialize(
+      clientId: Platform.isIOS ? options.iosClientId : null,
+    );
+    debugPrint(
+      '[GoogleAuth] supportsAuthenticate=${GoogleSignIn.instance.supportsAuthenticate()}',
+    );
+    _googleInitialized = true;
   }
 
   Future<String> _signInWithGoogleSdk() async {
     debugPrint(
       '[GoogleAuth] start sign-in flow (platform: ${Platform.operatingSystem})',
     );
+    await _initializeGoogle();
+    final googleSignIn = GoogleSignIn.instance;
 
-    final googleSignIn = GoogleSignIn();
-
-    final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-    if (googleUser == null) throw Exception('Google sign-in was cancelled');
-
+    GoogleSignInAccount googleUser;
+    try {
+      googleUser = await googleSignIn.authenticate().timeout(
+        const Duration(seconds: 60),
+        onTimeout: () =>
+            throw Exception('Google sign-in timed out before completing.'),
+      );
+    } on GoogleSignInException catch (e) {
+      debugPrint(
+        '[GoogleAuth] authenticate exception code=${e.code.name} desc=${e.description} details=${e.details}',
+      );
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        throw Exception('Google sign-in was cancelled');
+      }
+      throw Exception('Google sign-in failed (${e.code.name})');
+    }
     debugPrint('[GoogleAuth] Google account selected: ${googleUser.email}');
 
     final googleAuth = await googleUser.authentication;
@@ -105,6 +151,21 @@ class SocialAuthService {
       throw Exception(
         e.message ?? 'Google credential exchange failed (${e.code})',
       );
+    } catch (e) {
+      if (Platform.isAndroid) {
+        debugPrint(
+          '[GoogleAuth] native Firebase credential exchange failed on Android: $e',
+        );
+        debugPrint('[GoogleAuth] trying Firebase REST token exchange fallback');
+        final token = await _exchangeGoogleIdTokenForFirebaseToken(
+          googleAuth.idToken!,
+        );
+        try {
+          await googleSignIn.signOut().timeout(const Duration(seconds: 8));
+        } catch (_) {}
+        return token;
+      }
+      rethrow;
     }
 
     try {

@@ -9,7 +9,6 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/features/profile/providers/profile_controller.dart';
-import 'package:antroph_mobile/widgets/restart_widget.dart';
 import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 
@@ -20,7 +19,8 @@ class ProfilePage extends ConsumerStatefulWidget {
   ConsumerState<ProfilePage> createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends ConsumerState<ProfilePage> with AutomaticKeepAliveClientMixin {
+class _ProfilePageState extends ConsumerState<ProfilePage>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -191,11 +191,18 @@ class _ProfileHeader extends ConsumerWidget {
   }
 }
 
-class _ProfileMenu extends ConsumerWidget {
+class _ProfileMenu extends ConsumerStatefulWidget {
   const _ProfileMenu();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ProfileMenu> createState() => _ProfileMenuState();
+}
+
+class _ProfileMenuState extends ConsumerState<_ProfileMenu> {
+  bool _isLoggingOut = false;
+
+  @override
+  Widget build(BuildContext context) {
     final isGuest = ref.watch(authControllerProvider).value == null;
 
     // Build menu items dynamically based on auth state
@@ -227,147 +234,178 @@ class _ProfileMenu extends ConsumerWidget {
 
     // final isDarkMode = ref.watch(themeModeProvider) == ThemeMode.dark;
 
-    return Column(
+    return Stack(
       children: [
-        // Theme toggle row
-        // _ThemeToggleRow(
-        //   isDarkMode: isDarkMode,
-        //   onToggle: () => ref.read(themeModeProvider.notifier).toggleTheme(),
-        // ),
-        for (int i = 0; i < items.length; i++) ...[
-          InkWell(
-            onTap: () async {
-              final title = items[i].$2;
+        AbsorbPointer(
+          absorbing: _isLoggingOut,
+          child: Column(
+            children: [
+              // Theme toggle row
+              // _ThemeToggleRow(
+              //   isDarkMode: isDarkMode,
+              //   onToggle: () => ref.read(themeModeProvider.notifier).toggleTheme(),
+              // ),
+              for (int i = 0; i < items.length; i++) ...[
+                InkWell(
+                  onTap: () async {
+                    final title = items[i].$2;
 
-              // Check if action requires auth and user is guest
-              if (isGuest && authRequiredActions.contains(title)) {
-                final result = await showAuthGuardSheet(
-                  context,
-                  ref,
-                  actionDescription: 'Access $title',
-                );
-                if (!context.mounted) return;
-                if (result != AuthGuardResult.authenticated &&
-                    result != AuthGuardResult.loginSuccessful) {
-                  return;
-                }
-              }
-
-              switch (title) {
-                case 'Profile':
-                  context.pushNamed('edit-profile');
-                  break;
-                case 'Customization':
-                  context.pushNamed('customization');
-                  break;
-                case 'Story mood':
-                  context.pushNamed('setup-interests');
-                  break;
-                case 'Scan':
-                  context.pushNamed('scan');
-                  break;
-                case 'Security':
-                  showToast(context, 'Security coming soon');
-                  break;
-                case 'Support':
-                  context.pushNamed('support');
-                  break;
-                case 'Privacy Policy':
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const _WebViewPage(
-                        title: 'Privacy Policy',
-                        url: 'https://www.antroph.com/privacy/',
-                      ),
-                    ),
-                  );
-                  break;
-                case 'Terms of Service':
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const _WebViewPage(
-                        title: 'Terms of Service',
-                        url: 'https://www.antroph.com/terms/',
-                      ),
-                    ),
-                  );
-                  break;
-                case 'Delete account':
-                  final confirmed =
-                      await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          backgroundColor: const Color(0xFF1B1D1F),
-                          title: const Text(
-                            'Delete account',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                          content: const Text(
-                            'This will deactivate your account and schedule deletion. Continue?',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(true),
-                              child: const Text(
-                                'Delete',
-                                style: TextStyle(color: Colors.redAccent),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ) ??
-                      false;
-                  if (!confirmed) return;
-                  try {
-                    final msg = await ref
-                        .read(profileControllerProvider.notifier)
-                        .deleteAccount();
-                    if (context.mounted) {
-                      showToast(
+                    // Check if action requires auth and user is guest
+                    if (isGuest && authRequiredActions.contains(title)) {
+                      final result = await showAuthGuardSheet(
                         context,
-                        msg.isNotEmpty ? msg : 'Account deleted',
-                        success: true,
+                        ref,
+                        actionDescription: 'Access $title',
                       );
-                      context.go('/home');
+                      if (!context.mounted) return;
+                      if (result != AuthGuardResult.authenticated &&
+                          result != AuthGuardResult.loginSuccessful) {
+                        return;
+                      }
                     }
-                  } catch (e) {
-                    if (context.mounted) {
-                      showToast(context, e.toString());
+
+                    switch (title) {
+                      case 'Profile':
+                        context.pushNamed('edit-profile');
+                        break;
+                      case 'Customization':
+                        context.pushNamed('customization');
+                        break;
+                      case 'Story mood':
+                        context.pushNamed('setup-interests');
+                        break;
+                      case 'Scan':
+                        context.pushNamed('scan');
+                        break;
+                      case 'Security':
+                        showToast(context, 'Security coming soon');
+                        break;
+                      case 'Support':
+                        context.pushNamed('support');
+                        break;
+                      case 'Privacy Policy':
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const _WebViewPage(
+                              title: 'Privacy Policy',
+                              url: 'https://www.antroph.com/privacy/',
+                            ),
+                          ),
+                        );
+                        break;
+                      case 'Terms of Service':
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const _WebViewPage(
+                              title: 'Terms of Service',
+                              url: 'https://www.antroph.com/terms/',
+                            ),
+                          ),
+                        );
+                        break;
+                      case 'Delete account':
+                        final confirmed =
+                            await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                backgroundColor: const Color(0xFF1B1D1F),
+                                title: const Text(
+                                  'Delete account',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                content: const Text(
+                                  'This will deactivate your account and schedule deletion. Continue?',
+                                  style: TextStyle(color: Colors.white70),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(ctx).pop(false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(ctx).pop(true),
+                                    child: const Text(
+                                      'Delete',
+                                      style: TextStyle(color: Colors.redAccent),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ) ??
+                            false;
+                        if (!confirmed) return;
+                        try {
+                          final msg = await ref
+                              .read(profileControllerProvider.notifier)
+                              .deleteAccount();
+                          if (context.mounted) {
+                            showToast(
+                              context,
+                              msg.isNotEmpty ? msg : 'Account deleted',
+                              success: true,
+                            );
+                            context.go('/home');
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            showToast(context, e.toString());
+                          }
+                        }
+                        break;
+                      case 'Login':
+                        await showAuthGuardSheet(
+                          context,
+                          ref,
+                          actionDescription: 'Login to your account',
+                        );
+                        break;
+                      case 'Logout':
+                        if (_isLoggingOut) return;
+                        setState(() => _isLoggingOut = true);
+                        final controller = ref.read(
+                          authControllerProvider.notifier,
+                        );
+                        try {
+                          await controller.logout();
+                        } catch (e) {
+                          if (context.mounted) {
+                            showToast(context, e.toString());
+                          }
+                        } finally {
+                          if (context.mounted) {
+                            context.go('/');
+                          }
+                        }
+                        break;
+                      default:
+                        showToast(context, '$title coming soon');
                     }
-                  }
-                  break;
-                case 'Login':
-                  await showAuthGuardSheet(
-                    context,
-                    ref,
-                    actionDescription: 'Login to your account',
-                  );
-                  break;
-                case 'Logout':
-                  final controller = ref.read(authControllerProvider.notifier);
-                  await controller.logout();
-                  if (context.mounted) {
-                    showToast(context, 'Logged out', success: true);
-                    // Perform a hard refresh to reset all providers and UI state
-                    RestartWidget.restartApp(context);
-                  }
-                  break;
-                default:
-                  showToast(context, '$title coming soon');
-              }
-            },
-            child: _ProfileMenuItem(
-              icon: items[i].$1,
-              title: items[i].$2,
-              showChevron: items[i].$3,
+                  },
+                  child: _ProfileMenuItem(
+                    icon: items[i].$1,
+                    title: items[i].$2,
+                    showChevron: items[i].$3,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (_isLoggingOut)
+          Positioned.fill(
+            child: ColoredBox(
+              color: Colors.black.withValues(alpha: 0.08),
+              child: const Center(
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2.6),
+                ),
+              ),
             ),
           ),
-        ],
       ],
     );
   }

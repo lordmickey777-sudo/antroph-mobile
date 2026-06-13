@@ -11,7 +11,6 @@ import 'package:antroph_mobile/features/story/providers/interactive_story_provid
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:antroph_mobile/features/story/widgets/interactive_story_renderer.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
-import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:flutter/cupertino.dart';
@@ -185,7 +184,6 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     final title = (widget.storyTitle?.isNotEmpty ?? false)
         ? widget.storyTitle!
         : 'Chat';
-    final storyDetail = ref.watch(storyDetailProvider(widget.storyId));
 
     return WillPopScope(
       onWillPop: () async {
@@ -592,20 +590,6 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
 
     return Column(
       children: [
-        if (!voiceState.isSessionReady) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              decoration: BoxDecoration(
-                color: mutedSurface,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: const _StorySessionLoadingShimmer(),
-            ),
-          ),
-        ],
         Expanded(
           child: messages.isEmpty
               ? _EmptyState(
@@ -822,31 +806,6 @@ class _EmptyState extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _StorySessionLoadingShimmer extends StatelessWidget {
-  const _StorySessionLoadingShimmer();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: const [
-        ShimmerBox(width: 36, height: 36, radius: 18),
-        SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ShimmerText(width: 150, height: 12, radius: 6),
-              SizedBox(height: 8),
-              ShimmerText(height: 10, radius: 6),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

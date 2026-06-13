@@ -14,9 +14,6 @@ import '../../network/api_client.dart';
 import '../../notifications/push_notification_service.dart';
 import '../../onboarding/app_setup_storage_service.dart';
 import '../../../features/story/data/stories_cache.dart';
-import '../../../features/story/providers/story_providers.dart';
-import '../../../features/profile/providers/profile_controller.dart';
-import '../../../features/profile/providers/customization_controller.dart';
 
 class AuthTokens {
   final String accessToken;
@@ -307,7 +304,10 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   }
 
   Future<void> signInWithGoogle() async {
-    state = const AsyncValue.loading();
+    if (ref.read(socialAuthInProgressProvider)) return;
+    final socialAuthBusy = ref.read(socialAuthInProgressProvider.notifier);
+    socialAuthBusy.start();
+    _clearTransientAuthError();
     try {
       debugPrint('[AuthController] signInWithGoogle start');
       final idToken = await _socialAuth.signInWithGoogle().timeout(
@@ -326,16 +326,35 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       debugPrint(
         '[AuthController] backend /auth/firebase failed: ${apiError.message}',
       );
-      state = const AsyncValue.data(null);
-    } catch (e) {
+      state = AsyncValue.error(
+        _friendlySocialAuthError(apiError.message, authMethod: 'Google'),
+        st,
+      );
+    } catch (e, st) {
       final msg = e.toString().replaceFirst('Exception: ', '');
       debugPrint('[AuthController] Google sign-in failed before backend: $msg');
-      state = const AsyncValue.data(null);
+      state = AsyncValue.error(
+        _friendlySocialAuthError(msg, authMethod: 'Google'),
+        st,
+      );
+    } finally {
+      socialAuthBusy.end();
+    }
+  }
+
+  Future<void> prepareGoogleSignIn() async {
+    try {
+      await _socialAuth.prepareGoogleSignIn();
+    } catch (e) {
+      debugPrint('[AuthController] Google sign-in prepare failed: $e');
     }
   }
 
   Future<void> signInWithApple() async {
-    state = const AsyncValue.loading();
+    if (ref.read(socialAuthInProgressProvider)) return;
+    final socialAuthBusy = ref.read(socialAuthInProgressProvider.notifier);
+    socialAuthBusy.start();
+    _clearTransientAuthError();
     try {
       debugPrint('[AuthController] signInWithApple start');
       final idToken = await _socialAuth.signInWithApple().timeout(
@@ -354,12 +373,44 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       debugPrint(
         '[AuthController] backend /auth/firebase failed: ${apiError.message}',
       );
-      state = const AsyncValue.data(null);
-    } catch (e) {
+      state = AsyncValue.error(
+        _friendlySocialAuthError(apiError.message, authMethod: 'Apple'),
+        st,
+      );
+    } catch (e, st) {
       final msg = e.toString().replaceFirst('Exception: ', '');
       debugPrint('[AuthController] Apple sign-in failed before backend: $msg');
-      state = const AsyncValue.data(null);
+      state = AsyncValue.error(
+        _friendlySocialAuthError(msg, authMethod: 'Apple'),
+        st,
+      );
+    } finally {
+      socialAuthBusy.end();
     }
+  }
+
+  String _friendlySocialAuthError(
+    String message, {
+    required String authMethod,
+  }) {
+    final normalized = message.trim().toLowerCase();
+    if (normalized.contains('cancel')) {
+      return '$authMethod sign-in was cancelled.';
+    }
+    if (normalized.contains('timeout') || normalized.contains('timed out')) {
+      return '$authMethod sign-in timed out. Please try again.';
+    }
+    if (normalized.contains('network') ||
+        normalized.contains('internet') ||
+        normalized.contains('connection')) {
+      return 'Check your internet connection and try again.';
+    }
+    return 'Could not sign in with $authMethod. Please try again.';
+  }
+
+  void _clearTransientAuthError() {
+    if (!state.hasError) return;
+    state = AsyncValue.data(state.value);
   }
 
   Future<void> _handleFirebaseAuth(
@@ -418,7 +469,7 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       // Clear story and setup caches
       await StoriesCacheService.clear();
       await AppSetupStorageService.clear();
-      
+
       // Set state to null; this automatically refreshes all providers that use ref.watch(authControllerProvider)
       state = const AsyncValue.data(null);
       _resetTrackedUser(source: 'logout');
@@ -459,3 +510,17 @@ class AuthController extends AsyncNotifier<AuthUser?> {
 final authControllerProvider = AsyncNotifierProvider<AuthController, AuthUser?>(
   AuthController.new,
 );
+
+class SocialAuthInProgressNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void start() => state = true;
+
+  void end() => state = false;
+}
+
+final socialAuthInProgressProvider =
+    NotifierProvider<SocialAuthInProgressNotifier, bool>(
+      SocialAuthInProgressNotifier.new,
+    );

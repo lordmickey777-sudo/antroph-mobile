@@ -16,7 +16,11 @@ import 'package:antroph_mobile/features/auth/widgets/social_sign_in_buttons.dart
 /// Content widget for the auth guard sheet.
 /// Shows login or signup forms.
 class AuthSheetContent extends ConsumerStatefulWidget {
-  const AuthSheetContent({super.key, this.actionDescription, required this.scrollController});
+  const AuthSheetContent({
+    super.key,
+    this.actionDescription,
+    required this.scrollController,
+  });
 
   final String? actionDescription;
   final ScrollController scrollController;
@@ -101,7 +105,10 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
       return;
     }
     final controller = ref.read(authControllerProvider.notifier);
-    await controller.login(email: _loginEmailCtrl.text.trim(), password: _loginPasswordCtrl.text);
+    await controller.login(
+      email: _loginEmailCtrl.text.trim(),
+      password: _loginPasswordCtrl.text,
+    );
   }
 
   Future<void> _submitSignup() async {
@@ -125,7 +132,9 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
     await controller.register(
       email: _signupEmailCtrl.text.trim(),
       password: _signupPasswordCtrl.text,
-      displayName: _signupNameCtrl.text.trim().isEmpty ? null : _signupNameCtrl.text.trim(),
+      displayName: _signupNameCtrl.text.trim().isEmpty
+          ? null
+          : _signupNameCtrl.text.trim(),
     );
   }
 
@@ -135,9 +144,13 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
 
     // Listen for auth state changes
     ref.listen(authControllerProvider, (previous, next) {
-      if (next.hasError && mounted) {
-        final msg = next.error?.toString() ?? 'Unexpected error';
-        showToast(context, msg);
+      final nextError = next.error?.toString();
+      final previousError = previous?.error?.toString();
+      if (next.hasError &&
+          mounted &&
+          nextError != null &&
+          nextError != previousError) {
+        showToast(context, nextError);
       }
 
       final user = next.value;
@@ -191,11 +204,19 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
                   ),
                 ),
                 GestureDetector(
-                  onTap: () => Navigator.of(context).pop(AuthGuardResult.dismissed),
+                  onTap: () =>
+                      Navigator.of(context).pop(AuthGuardResult.dismissed),
                   child: Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: iconBgColor, shape: BoxShape.circle),
-                    child: Icon(CupertinoIcons.xmark, color: textColor, size: 18),
+                    decoration: BoxDecoration(
+                      color: iconBgColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      CupertinoIcons.xmark,
+                      color: textColor,
+                      size: 18,
+                    ),
                   ),
                 ),
               ],
@@ -212,7 +233,8 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
                       emailCtrl: _loginEmailCtrl,
                       passwordCtrl: _loginPasswordCtrl,
                       obscure: _loginObscure,
-                      onToggleObscure: () => setState(() => _loginObscure = !_loginObscure),
+                      onToggleObscure: () =>
+                          setState(() => _loginObscure = !_loginObscure),
                       onSubmit: _submitLogin,
                       loading: loading,
                       validateEmail: _validateEmail,
@@ -225,7 +247,8 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
                       emailCtrl: _signupEmailCtrl,
                       passwordCtrl: _signupPasswordCtrl,
                       obscure: _signupObscure,
-                      onToggleObscure: () => setState(() => _signupObscure = !_signupObscure),
+                      onToggleObscure: () =>
+                          setState(() => _signupObscure = !_signupObscure),
                       onSubmit: _submitSignup,
                       loading: loading,
                       validateEmail: _validateSignupEmail,
@@ -243,7 +266,9 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 TypographyText(
-                  _showLogin ? 'Create New Account? ' : 'Already Have An Account? ',
+                  _showLogin
+                      ? 'Create New Account? '
+                      : 'Already Have An Account? ',
                   variant: TypographyVariant.body2,
                   color: secondaryTextColor,
                 ),
@@ -391,7 +416,11 @@ class _SignupForm extends StatelessWidget {
       key: formKey,
       child: Column(
         children: [
-          AppInput(controller: nameCtrl, hint: 'Full Name', icon: Icons.person_outline),
+          AppInput(
+            controller: nameCtrl,
+            hint: 'Full Name',
+            icon: Icons.person_outline,
+          ),
           const SizedBox(height: 16),
           AppInput(
             controller: emailCtrl,
@@ -463,7 +492,9 @@ class _PasswordChecklist extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  policy.value ? Icons.check_circle : Icons.radio_button_unchecked,
+                  policy.value
+                      ? Icons.check_circle
+                      : Icons.radio_button_unchecked,
                   size: 16,
                   color: policy.value ? Colors.greenAccent : uncheckedColor,
                 ),
