@@ -1,14 +1,10 @@
 PODS:
-  - AppAuth (2.0.0):
-    - AppAuth/Core (= 2.0.0)
-    - AppAuth/ExternalUserAgent (= 2.0.0)
-  - AppAuth/Core (2.0.0)
-  - AppAuth/ExternalUserAgent (2.0.0):
+  - AppAuth (1.7.6):
+    - AppAuth/Core (= 1.7.6)
+    - AppAuth/ExternalUserAgent (= 1.7.6)
+  - AppAuth/Core (1.7.6)
+  - AppAuth/ExternalUserAgent (1.7.6):
     - AppAuth/Core
-  - AppCheckCore (11.2.0):
-    - GoogleUtilities/Environment (~> 8.0)
-    - GoogleUtilities/UserDefaults (~> 8.0)
-    - PromisesObjC (~> 2.4)
   - audio_session (0.0.1):
     - Flutter
   - CwlCatchException (2.2.1):
@@ -79,9 +75,10 @@ PODS:
     - flutter_sound_core (= 9.28.0)
   - flutter_sound_core (9.28.0)
   - google_sign_in_ios (0.0.1):
+    - AppAuth (>= 1.7.4)
     - Flutter
     - FlutterMacOS
-    - GoogleSignIn (~> 9.0)
+    - GoogleSignIn (~> 7.1)
     - GTMSessionFetcher (>= 3.4.0)
   - GoogleDataTransport (10.1.0):
     - nanopb (~> 3.30910.0)
@@ -91,10 +88,9 @@ PODS:
     - MLKitBarcodeScanning (~> 6.0.0)
   - GoogleMLKit/MLKitCore (7.0.0):
     - MLKitCommon (~> 12.0.0)
-  - GoogleSignIn (9.1.0):
-    - AppAuth (~> 2.0)
-    - AppCheckCore (~> 11.0)
-    - GTMAppAuth (~> 5.0)
+  - GoogleSignIn (7.1.0):
+    - AppAuth (< 2.0, >= 1.7.3)
+    - GTMAppAuth (< 5.0, >= 4.1.1)
     - GTMSessionFetcher/Core (~> 3.3)
   - GoogleToolboxForMac/Defines (4.2.1)
   - GoogleToolboxForMac/Logger (4.2.1):
@@ -125,8 +121,8 @@ PODS:
   - GoogleUtilities/UserDefaults (8.1.0):
     - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
-  - GTMAppAuth (5.0.0):
-    - AppAuth/Core (~> 2.0)
+  - GTMAppAuth (4.1.1):
+    - AppAuth/Core (~> 1.7)
     - GTMSessionFetcher/Core (< 4.0, >= 3.3)
   - GTMSessionFetcher (3.5.0):
     - GTMSessionFetcher/Full (= 3.5.0)
@@ -177,8 +173,22 @@ PODS:
     - Flutter
     - FlutterMacOS
     - PostHog (< 4.0.0, >= 3.40.0)
-  - PromisesObjC (2.4.0)
+  - PromisesObjC (2.4.1)
+  - purchases_flutter (10.1.1):
+    - Flutter
+    - PurchasesHybridCommon (= 18.7.0)
+  - purchases_ui_flutter (10.1.1):
+    - Flutter
+    - PurchasesHybridCommonUI (= 18.7.0)
+  - PurchasesHybridCommon (18.7.0):
+    - RevenueCat (= 5.73.0)
+  - PurchasesHybridCommonUI (18.7.0):
+    - PurchasesHybridCommon (= 18.7.0)
+    - RevenueCatUI (= 5.73.0)
   - RecaptchaInterop (101.0.0)
+  - RevenueCat (5.73.0)
+  - RevenueCatUI (5.73.0):
+    - RevenueCat (= 5.73.0)
   - rive_common (0.0.1):
     - Flutter
   - Sentry/HybridSDK (8.56.2)
@@ -246,6 +256,8 @@ DEPENDENCIES:
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
   - posthog_flutter (from `.symlinks/plugins/posthog_flutter/ios`)
+  - purchases_flutter (from `.symlinks/plugins/purchases_flutter/ios`)
+  - purchases_ui_flutter (from `.symlinks/plugins/purchases_ui_flutter/ios`)
   - rive_common (from `.symlinks/plugins/rive_common/ios`)
   - sentry_flutter (from `.symlinks/plugins/sentry_flutter/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
@@ -258,7 +270,6 @@ DEPENDENCIES:
 SPEC REPOS:
   trunk:
     - AppAuth
-    - AppCheckCore
     - CwlCatchException
     - CwlCatchExceptionSupport
     - Firebase
@@ -285,7 +296,11 @@ SPEC REPOS:
     - nanopb
     - PostHog
     - PromisesObjC
+    - PurchasesHybridCommon
+    - PurchasesHybridCommonUI
     - RecaptchaInterop
+    - RevenueCat
+    - RevenueCatUI
     - Sentry
     - sqlite3
 
@@ -326,6 +341,10 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
   posthog_flutter:
     :path: ".symlinks/plugins/posthog_flutter/ios"
+  purchases_flutter:
+    :path: ".symlinks/plugins/purchases_flutter/ios"
+  purchases_ui_flutter:
+    :path: ".symlinks/plugins/purchases_ui_flutter/ios"
   rive_common:
     :path: ".symlinks/plugins/rive_common/ios"
   sentry_flutter:
@@ -344,8 +363,7 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/wifi_iot/ios"
 
 SPEC CHECKSUMS:
-  AppAuth: 1c1a8afa7e12f2ec3a294d9882dfa5ab7d3cb063
-  AppCheckCore: cc8fd0a3a230ddd401f326489c99990b013f0c4f
+  AppAuth: d4f13a8fe0baf391b2108511793e4b479691fb73
   audio_session: 9bb7f6c970f21241b19f5a3658097ae459681ba0
   CwlCatchException: 7acc161b299a6de7f0a46a6ed741eae2c8b4d75a
   CwlCatchExceptionSupport: 54ccab8d8c78907b57f99717fb19d4cc3bce02dc
@@ -367,13 +385,13 @@ SPEC CHECKSUMS:
   flutter_secure_storage: 1ed9476fba7e7a782b22888f956cce43e2c62f13
   flutter_sound: b9236a5875299aaa4cef1690afd2f01d52a3f890
   flutter_sound_core: 427465f72d07ab8c3edbe8ffdde709ddacd3763c
-  google_sign_in_ios: 205742c688aea0e64db9da03c33121694a365109
+  google_sign_in_ios: 0ab078e60da6dfe23cbc55c83502b52bba1aad63
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
   GoogleMLKit: eff9e23ec1d90ea4157a1ee2e32a4f610c5b3318
-  GoogleSignIn: fcee2257188d5eda57a5e2b6a715550ffff9206d
+  GoogleSignIn: d4281ab6cf21542b1cfaff85c191f230b399d2db
   GoogleToolboxForMac: d1a2cbf009c453f4d6ded37c105e2f67a32206d8
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
-  GTMAppAuth: 217a876b249c3c585a54fd6f73e6b58c4f5c4238
+  GTMAppAuth: f69bd07d68cd3b766125f7e072c45d7340dea0de
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
   image_picker_ios: 7fe1ff8e34c1790d6fff70a32484959f563a928a
   just_audio: 4e391f57b79cad2b0674030a00453ca5ce817eed
@@ -389,8 +407,14 @@ SPEC CHECKSUMS:
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
   PostHog: ad30566da65732988577300a118b809b8b54d696
   posthog_flutter: 074371576a1f82dc8d3c7ca6b0b6c3c930e03ba5
-  PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
+  PromisesObjC: 752c3227f599e3467650e47ea36f433eeb10c273
+  purchases_flutter: 5ca66464088136b9338d1024558a78016cf42b5f
+  purchases_ui_flutter: 01f075a9e00924a6a9f023c2683791dcd1088ca8
+  PurchasesHybridCommon: 90419d67c688e485c84da8d1864f9663a198751a
+  PurchasesHybridCommonUI: 06b7bb9aa692304a7963cdb3da3ae3e4e62c8530
   RecaptchaInterop: 11e0b637842dfb48308d242afc3f448062325aba
+  RevenueCat: 3210d4f19cef963a1422f38e424fc599e2f0f7c6
+  RevenueCatUI: 9d4b42ef59ec37d61f5fbff36495148097a5a911
   rive_common: dd421daaf9ae69f0125aa761dd96abd278399952
   Sentry: b53951377b78e21a734f5dc8318e333dbfc682d7
   sentry_flutter: 7f88e12d1882ec6e648644a7c0ff5b1466f07f99
@@ -402,6 +426,6 @@ SPEC CHECKSUMS:
   webview_flutter_wkwebview: 1821ceac936eba6f7984d89a9f3bcb4dea99ebb2
   wifi_iot: f645260a2be8608517b2a9bf4c39b98e97003acc
 
-PODFILE CHECKSUM: 65e15e3d28c0f68a0d9e6593ecc301034bed5a09
+PODFILE CHECKSUM: 56f0c04423dd33ff527b7be4a61a47c2deeed0e9
 
 COCOAPODS: 1.16.2

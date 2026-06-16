@@ -65,6 +65,16 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
     _themes = List<String>.from(story.themes);
     _characters = List<String>.from(story.characters);
     _tags = List<String>.from(story.tags);
+    _interactionMode = story.interactionMode;
+    _aiRole = story.aiRole;
+    _interactiveTemplate =
+        (story.interactiveConfig['template'] as String?)?.trim() ??
+        'open_story';
+    _maxPlayers =
+        (story.interactiveConfig['max_players'] as num?)?.toInt() ?? 4;
+    _timerEnabled = story.interactiveConfig['timer_enabled'] as bool? ?? false;
+    _scoringEnabled =
+        story.interactiveConfig['scoring_enabled'] as bool? ?? false;
     _existingCoverUrl = story.coverImageUrl;
   }
 
@@ -73,6 +83,12 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
   List<String> _themes = [];
   List<String> _characters = [];
   List<String> _tags = [];
+  String _interactionMode = 'narrative';
+  String _aiRole = 'narrator';
+  String _interactiveTemplate = 'open_story';
+  int _maxPlayers = 4;
+  bool _timerEnabled = false;
+  bool _scoringEnabled = false;
 
   Future<void> _pickCoverImage() async {
     final picker = ImagePicker();
@@ -127,6 +143,17 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
           themes: _themes,
           characters: _characters,
           tags: _tags,
+          interactionMode: _interactionMode,
+          aiRole: _aiRole,
+          interactiveConfig: _interactionMode == 'narrative'
+              ? const <String, dynamic>{}
+              : {
+                  'template': _interactiveTemplate,
+                  'max_players': _interactionMode == 'group' ? _maxPlayers : 1,
+                  'timer_enabled': _timerEnabled,
+                  'scoring_enabled': _scoringEnabled,
+                  if (_timerEnabled) 'time_limit_ms': 30000,
+                },
         ),
       );
       ref.invalidate(communityStoryDetailProvider(widget.storyId));
@@ -287,6 +314,92 @@ class _StoryEditorPageState extends ConsumerState<StoryEditorPage> {
                     }
                   },
                 ),
+                const SizedBox(height: 20),
+                AppDropdown(
+                  label: 'Interaction Mode',
+                  value: _interactionMode,
+                  options: const {
+                    'narrative': 'Narrative',
+                    'interactive': 'Solo Interactive',
+                    'group': 'Group Interactive',
+                  },
+                  onChanged: (v) {
+                    if (v != null) setState(() => _interactionMode = v);
+                  },
+                ),
+                if (_interactionMode != 'narrative') ...[
+                  const SizedBox(height: 20),
+                  AppDropdown(
+                    label: 'Template',
+                    value: _interactiveTemplate,
+                    options: const {
+                      'open_story': 'Open Story',
+                      'quiz': 'Quiz',
+                      'charades': 'Charades',
+                      'co_op_adventure': 'Co-op Adventure',
+                      'custom': 'Custom',
+                    },
+                    onChanged: (v) {
+                      if (v != null) setState(() => _interactiveTemplate = v);
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  AppDropdown(
+                    label: 'AI Role',
+                    value: _aiRole,
+                    options: const {
+                      'narrator': 'Narrator',
+                      'host': 'Host',
+                      'judge': 'Judge',
+                      'participant': 'Participant',
+                      'silent': 'Silent',
+                    },
+                    onChanged: (v) {
+                      if (v != null) setState(() => _aiRole = v);
+                    },
+                  ),
+                  if (_interactionMode == 'group') ...[
+                    const SizedBox(height: 20),
+                    AppDropdown(
+                      label: 'Players',
+                      value: _maxPlayers.toString(),
+                      options: const {
+                        '2': '2 players',
+                        '4': '4 players',
+                        '6': '6 players',
+                        '8': '8 players',
+                        '12': '12 players',
+                      },
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() => _maxPlayers = int.parse(v));
+                        }
+                      },
+                    ),
+                  ],
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    value: _timerEnabled,
+                    title: Text(
+                      'Timer',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    onChanged: (v) => setState(() => _timerEnabled = v),
+                  ),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    value: _scoringEnabled,
+                    title: Text(
+                      'Scoring',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    onChanged: (v) => setState(() => _scoringEnabled = v),
+                  ),
+                ],
                 const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
@@ -345,8 +458,7 @@ class _CoverImageSection extends StatelessWidget {
   final VoidCallback onEdit;
 
   bool get _hasImage =>
-      newImage != null ||
-      (existingUrl != null && existingUrl!.isNotEmpty);
+      newImage != null || (existingUrl != null && existingUrl!.isNotEmpty);
 
   @override
   Widget build(BuildContext context) {
@@ -469,10 +581,7 @@ class _StoryEditorPageShimmer extends StatelessWidget {
       child: ListView(
         physics: const NeverScrollableScrollPhysics(),
         children: const [
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: ShimmerBox(radius: 16),
-          ),
+          AspectRatio(aspectRatio: 16 / 9, child: ShimmerBox(radius: 16)),
           SizedBox(height: 24),
           ShimmerText(width: 120, height: 14),
           SizedBox(height: 6),

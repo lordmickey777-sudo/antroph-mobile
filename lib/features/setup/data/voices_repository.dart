@@ -47,8 +47,11 @@ class VoicesRepository {
   Future<VoiceListResult> _fetch() async {
     try {
       final response = await _dio.get(_endpoint);
-      final result =
-          VoiceListResult.fromJson(response.data as Map<String, dynamic>);
+      final data = response.data;
+      final json = data is Map<String, dynamic>
+          ? data
+          : <String, dynamic>{'voices': data};
+      final result = VoiceListResult.fromJson(json);
       _cache = result;
       return result;
     } on DioException catch (e) {

@@ -84,9 +84,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final authState = ref.watch(authControllerProvider);
 
     ref.listen(authControllerProvider, (previous, next) {
-      if (next.hasError && mounted) {
-        final msg = next.error?.toString() ?? 'Unexpected error';
-        showToast(context, msg);
+      final nextError = next.error?.toString();
+      final previousError = previous?.error?.toString();
+      if (next.hasError &&
+          mounted &&
+          nextError != null &&
+          nextError != previousError) {
+        showToast(context, nextError);
       }
       // Navigate when we have a non-null user and it changed from previous
       final user = next.value;

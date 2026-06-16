@@ -17,15 +17,14 @@ class App extends ConsumerWidget {
     ref.watch(riveSyncBootstrapProvider);
     ref.watch(subscriptionIdentitySyncProvider);
     final router = ref.watch(routerProvider);
-    final themeMode = ref.watch(themeModeProvider);
 
     return PostHogWidget(
       child: MaterialApp.router(
         title: 'Antroph',
         debugShowCheckedModeBanner: false,
         routerConfig: router,
-        themeMode: themeMode,
-        theme: AppTheme.lightTheme,
+        themeMode: ThemeMode.dark,
+        theme: AppTheme.darkTheme,
         darkTheme: AppTheme.darkTheme,
         builder: (context, child) {
           return GestureDetector(

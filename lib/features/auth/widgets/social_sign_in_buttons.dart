@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -13,12 +14,30 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 ///
 /// - Android: Google only
 /// - iOS: Google + Apple
-class SocialSignInButtons extends ConsumerWidget {
+class SocialSignInButtons extends ConsumerStatefulWidget {
   const SocialSignInButtons({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final loading = ref.watch(authControllerProvider).isLoading;
+  ConsumerState<SocialSignInButtons> createState() =>
+      _SocialSignInButtonsState();
+}
+
+class _SocialSignInButtonsState extends ConsumerState<SocialSignInButtons> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(
+      Future<void>.microtask(
+        () => ref.read(authControllerProvider.notifier).prepareGoogleSignIn(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loading =
+        ref.watch(authControllerProvider).isLoading ||
+        ref.watch(socialAuthInProgressProvider);
 
     return Column(
       children: [
