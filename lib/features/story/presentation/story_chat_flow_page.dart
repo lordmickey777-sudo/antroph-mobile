@@ -200,16 +200,46 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
 
     if (shouldLeave != true || !mounted) return;
 
+    final loadingNavigator = Navigator.of(context, rootNavigator: true);
     setState(() => _isLeavingGame = true);
+    unawaited(_showLeavingGameDialog());
     await ref.read(interactiveStoryProvider.notifier).leaveSession();
 
     if (!mounted) return;
+    if (loadingNavigator.canPop()) {
+      loadingNavigator.pop();
+    }
     setState(() => _isLeavingGame = false);
 
     final leftSession = ref.read(interactiveStoryProvider).session == null;
     if (leftSession && mounted) {
       navigator.pop();
     }
+  }
+
+  Future<void> _showLeavingGameDialog() {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return const PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+                SizedBox(width: 16),
+                Expanded(child: Text('Leaving game...')),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
