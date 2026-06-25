@@ -47,6 +47,7 @@ class StoryChatFlowPage extends ConsumerStatefulWidget {
 class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     with WidgetsBindingObserver {
   bool _sessionStarted = false;
+  bool _isLeavingGame = false;
   VoiceChatController? _voiceController;
 
   @override
@@ -149,6 +150,68 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     );
   }
 
+  bool _isInteractiveStory() {
+    final detail = ref.read(storyDetailProvider(widget.storyId)).asData?.value;
+    final mode =
+        detail?.interactionMode ??
+        ref.read(interactiveStoryProvider).session?.interactionMode ??
+        'narrative';
+    return mode != 'narrative';
+  }
+
+  Future<void> _handleBackPressed() async {
+    if (_isInteractiveStory()) {
+      await _confirmLeaveGame();
+      return;
+    }
+
+    final navigator = Navigator.of(context);
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    await voiceController.endStorySession();
+    await voiceController.stopPlayback();
+    if (mounted) {
+      navigator.pop();
+    }
+  }
+
+  Future<void> _confirmLeaveGame() async {
+    if (_isLeavingGame) return;
+
+    final navigator = Navigator.of(context);
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Leave game?'),
+          content: const Text('Are you sure you want to leave the game?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Yes'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldLeave != true || !mounted) return;
+
+    setState(() => _isLeavingGame = true);
+    await ref.read(interactiveStoryProvider.notifier).leaveSession();
+
+    if (!mounted) return;
+    setState(() => _isLeavingGame = false);
+
+    final leftSession = ref.read(interactiveStoryProvider).session == null;
+    if (leftSession && mounted) {
+      navigator.pop();
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -191,12 +254,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        final voiceController = ref.read(voiceChatControllerProvider.notifier);
-        await voiceController.endStorySession();
-        await voiceController.stopPlayback();
-        if (context.mounted) {
-          Navigator.of(context).pop();
-        }
+        await _handleBackPressed();
       },
       child: DecoratedBox(
         decoration: const BoxDecoration(
@@ -212,6 +270,12 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
             surfaceTintColor: Colors.transparent,
             scrolledUnderElevation: 0,
             elevation: 0,
+            leading: IconButton(
+              onPressed: _isLeavingGame ? null : _handleBackPressed,
+              icon: const Icon(CupertinoIcons.back),
+              color: context.primaryTextColor,
+              tooltip: 'Back',
+            ),
             titleSpacing: 16,
             flexibleSpace: Container(
               width: double.infinity,
