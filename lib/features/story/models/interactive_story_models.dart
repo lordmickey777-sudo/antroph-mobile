@@ -571,6 +571,7 @@ class InteractiveSessionState {
 class InteractiveInput {
   const InteractiveInput({
     required this.inputType,
+    this.questionId,
     this.value,
     this.optionId,
     this.text,
@@ -579,6 +580,7 @@ class InteractiveInput {
   });
 
   final String inputType;
+  final String? questionId;
   final dynamic value;
   final String? optionId;
   final String? text;
@@ -587,6 +589,7 @@ class InteractiveInput {
 
   Map<String, dynamic> toJson() => {
     'input_type': inputType,
+    if (questionId != null) 'question_id': questionId,
     if (value != null) 'value': value,
     if (optionId != null) 'option_id': optionId,
     if (text != null) 'text': text,
@@ -636,7 +639,9 @@ List<InteractiveOption> _parseOptions(dynamic raw) {
 
 DateTime? _parseDate(dynamic raw) {
   if (raw is String && raw.trim().isNotEmpty) {
-    return DateTime.tryParse(raw.trim())?.toUtc();
+    final value = raw.trim();
+    final hasTimezone = RegExp(r'(Z|[+-]\d\d:\d\d)$').hasMatch(value);
+    return DateTime.tryParse(hasTimezone ? value : '${value}Z')?.toUtc();
   }
   return null;
 }

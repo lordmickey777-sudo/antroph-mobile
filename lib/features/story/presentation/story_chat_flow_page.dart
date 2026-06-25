@@ -187,12 +187,16 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
         : 'Chat';
     final storyDetail = ref.watch(storyDetailProvider(widget.storyId));
 
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
         final voiceController = ref.read(voiceChatControllerProvider.notifier);
         await voiceController.endStorySession();
         await voiceController.stopPlayback();
-        return true;
+        if (context.mounted) {
+          Navigator.of(context).pop();
+        }
       },
       child: DecoratedBox(
         decoration: const BoxDecoration(
@@ -357,16 +361,30 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                   child: InteractiveStoryRenderer(
                     session: session,
                     pendingKeys: state.pendingInputKeys,
+                    localQuizSelections: state.localQuizSelections,
+                    onRetryGeneration: () =>
+                        unawaited(notifier.retryGeneration()),
+                    onReplay: () => unawaited(
+                      notifier.restart(
+                        storyId: widget.storyId,
+                        interactionMode: widget.interactionMode,
+                      ),
+                    ),
+                    onLeave: () {
+                      unawaited(notifier.leaveSession());
+                      Navigator.of(context).maybePop();
+                    },
                     onChoice: (optionId) => unawaited(
                       notifier.submitOption(
                         optionId: optionId,
                         inputType: 'option_select',
                       ),
                     ),
-                    onQuizAnswer: (optionId) => unawaited(
+                    onQuizAnswer: (optionId, questionId) => unawaited(
                       notifier.submitOption(
                         optionId: optionId,
                         inputType: 'quiz_answer',
+                        questionId: questionId,
                       ),
                     ),
                   ),

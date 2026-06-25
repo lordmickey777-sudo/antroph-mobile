@@ -247,6 +247,30 @@ class StoriesRepository {
     }
   }
 
+  Future<InteractiveSessionState> retryInteractiveQuizGeneration(
+    String sessionId,
+  ) async {
+    try {
+      final res = await _dio.post(
+        '/story-sessions/$sessionId/retry-generation',
+      );
+      return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<InteractiveSessionState> leaveInteractiveSession(
+    String sessionId,
+  ) async {
+    try {
+      final res = await _dio.post('/story-sessions/$sessionId/leave');
+      return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
   /// Pause the current active story session.
   /// Requires authentication.
   Future<StorySession> pauseSession(String storyId) async {
