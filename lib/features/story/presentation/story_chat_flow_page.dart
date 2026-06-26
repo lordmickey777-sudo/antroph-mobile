@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
+import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/features/home/models/chat_models.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/home/widgets/chat_bubble.dart';
+import 'package:antroph_mobile/features/story/models/interactive_story_models.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 import 'package:antroph_mobile/features/story/presentation/story_voice_page.dart';
@@ -161,7 +164,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
 
   Future<void> _handleBackPressed() async {
     if (_isInteractiveStory()) {
-      await _confirmLeaveGame();
+      await _leaveGame(confirm: true);
       return;
     }
 
@@ -174,29 +177,18 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     }
   }
 
-  Future<void> _confirmLeaveGame() async {
+  Future<void> _leaveGame({bool confirm = false}) async {
     if (_isLeavingGame) return;
 
     final navigator = Navigator.of(context);
-    final shouldLeave = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Leave game?'),
-          content: const Text('Are you sure you want to leave the game?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Yes'),
-            ),
-          ],
-        );
-      },
-    );
+    final shouldLeave = confirm
+        ? await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) {
+              return const _LeaveGameDialog();
+            },
+          )
+        : true;
 
     if (shouldLeave != true || !mounted) return;
 
@@ -222,22 +214,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
       context: context,
       barrierDismissible: false,
       builder: (_) {
-        return const PopScope(
-          canPop: false,
-          child: AlertDialog(
-            content: Row(
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2.5),
-                ),
-                SizedBox(width: 16),
-                Expanded(child: Text('Leaving game...')),
-              ],
-            ),
-          ),
-        );
+        return const PopScope(canPop: false, child: _LeavingGameDialog());
       },
     );
   }
@@ -349,6 +326,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
                   storyId: widget.storyId,
                   interactionMode: detail.interactionMode,
                   onCall: _openVoicePage,
+                  onLeave: _leaveGame,
                 );
               }
               return _StoryTextChatTab(onCall: _openVoicePage);
@@ -367,11 +345,13 @@ class _InteractiveStoryTab extends ConsumerStatefulWidget {
     required this.storyId,
     required this.interactionMode,
     required this.onCall,
+    required this.onLeave,
   });
 
   final String storyId;
   final String interactionMode;
   final VoidCallback onCall;
+  final Future<void> Function() onLeave;
 
   @override
   ConsumerState<_InteractiveStoryTab> createState() =>
@@ -436,8 +416,10 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     });
 
     final state = ref.watch(interactiveStoryProvider);
+    final currentUserId = ref.watch(authControllerProvider).value?.id;
     final notifier = ref.read(interactiveStoryProvider.notifier);
     final session = state.session;
+    final isQuizSession = session?.interactiveState['template'] == 'quiz';
     final isDark = context.isDarkMode;
     final mutedSurface = isDark
         ? const Color(0xFF1A1A1A)
@@ -445,113 +427,395 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final mutedText = isDark ? Colors.white60 : Colors.black54;
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 
-    return Column(
+    return Stack(
       children: [
-        Expanded(
-          child: session == null
-              ? const _StorySessionLoadingShell()
-              : RefreshIndicator(
-                  onRefresh: notifier.refresh,
-                  child: InteractiveStoryRenderer(
-                    session: session,
-                    pendingKeys: state.pendingInputKeys,
-                    localQuizSelections: state.localQuizSelections,
-                    onRetryGeneration: () =>
-                        unawaited(notifier.retryGeneration()),
-                    onReplay: () => unawaited(
-                      notifier.restart(
-                        storyId: widget.storyId,
-                        interactionMode: widget.interactionMode,
+        Column(
+          children: [
+            Expanded(
+              child: session == null
+                  ? const _StorySessionLoadingShell()
+                  : RefreshIndicator(
+                      onRefresh: notifier.refresh,
+                      child: InteractiveStoryRenderer(
+                        session: session,
+                        currentUserId: currentUserId,
+                        pendingKeys: state.pendingInputKeys,
+                        localQuizSelections: state.localQuizSelections,
+                        onRetryGeneration: () =>
+                            unawaited(notifier.retryGeneration()),
+                        onReplay: () => unawaited(
+                          notifier.restart(
+                            storyId: widget.storyId,
+                            interactionMode: widget.interactionMode,
+                          ),
+                        ),
+                        onLeave: () => unawaited(widget.onLeave()),
+                        onChoice: (optionId) => unawaited(
+                          notifier.submitOption(
+                            optionId: optionId,
+                            inputType: 'option_select',
+                          ),
+                        ),
+                        onQuizAnswer: (optionId, questionId) => unawaited(
+                          notifier.submitOption(
+                            optionId: optionId,
+                            inputType: 'quiz_answer',
+                            questionId: questionId,
+                          ),
+                        ),
                       ),
                     ),
-                    onLeave: () {
-                      unawaited(notifier.leaveSession());
-                      Navigator.of(context).maybePop();
-                    },
-                    onChoice: (optionId) => unawaited(
-                      notifier.submitOption(
-                        optionId: optionId,
-                        inputType: 'option_select',
+            ),
+            if (!isQuizSession)
+              AnimatedPadding(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(bottom: keyboardHeight),
+                child: SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: mutedSurface,
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          child: TextField(
+                            controller: _textController,
+                            maxLines: 4,
+                            minLines: 1,
+                            textCapitalization: TextCapitalization.sentences,
+                            cursorColor: context.primaryTextColor,
+                            style: TextStyle(
+                              color: context.primaryTextColor,
+                              fontSize: 16,
+                              height: 1.35,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Message',
+                              hintStyle: TextStyle(
+                                color: mutedText,
+                                fontSize: 16,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.fromLTRB(
+                                18,
+                                14,
+                                18,
+                                14,
+                              ),
+                              isDense: true,
+                            ),
+                            onSubmitted: (_) => _sendText(),
+                          ),
+                        ),
                       ),
-                    ),
-                    onQuizAnswer: (optionId, questionId) => unawaited(
-                      notifier.submitOption(
-                        optionId: optionId,
-                        inputType: 'quiz_answer',
-                        questionId: questionId,
+                      const SizedBox(width: 12),
+                      _CircleIconButton(
+                        icon: CupertinoIcons.paperplane_fill,
+                        tooltip: 'Send',
+                        background: _canSend
+                            ? (isDark ? Colors.white : Colors.black)
+                            : mutedSurface,
+                        foreground: _canSend
+                            ? (isDark ? Colors.black : Colors.white)
+                            : mutedText,
+                        onTap: _canSend ? _sendText : () {},
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      _CircleIconButton(
+                        icon: Icons.call_rounded,
+                        tooltip: 'Voice',
+                        background: const Color(0xFF22C55E),
+                        foreground: Colors.white,
+                        onTap: widget.onCall,
+                      ),
+                    ],
                   ),
                 ),
+              )
+            else
+              _QuizGameBottomBar(onCall: widget.onCall),
+          ],
         ),
-        AnimatedPadding(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.only(bottom: keyboardHeight),
-          child: SafeArea(
-            top: false,
-            minimum: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+        if (isQuizSession && session != null)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: _ActiveParticipantsStrip(
+                participants: session.participants,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _LeaveGameDialog extends StatelessWidget {
+  const _LeaveGameDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final surface = isDark ? const Color(0xFF111214) : Colors.white;
+    final subdued = isDark ? Colors.white70 : const Color(0xFF5F6368);
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.18),
+              blurRadius: 28,
+              offset: const Offset(0, 16),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: mutedSurface,
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    child: TextField(
-                      controller: _textController,
-                      maxLines: 4,
-                      minLines: 1,
-                      textCapitalization: TextCapitalization.sentences,
-                      cursorColor: context.primaryTextColor,
-                      style: TextStyle(
-                        color: context.primaryTextColor,
-                        fontSize: 16,
-                        height: 1.35,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Message',
-                        hintStyle: TextStyle(color: mutedText, fontSize: 16),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.fromLTRB(
-                          18,
-                          14,
-                          18,
-                          14,
-                        ),
-                        isDense: true,
-                      ),
-                      onSubmitted: (_) => _sendText(),
-                    ),
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.arrow_left_circle_fill,
+                    color: Colors.white,
+                    size: 22,
                   ),
                 ),
                 const SizedBox(width: 12),
-                _CircleIconButton(
-                  icon: CupertinoIcons.paperplane_fill,
-                  tooltip: 'Send',
-                  background: _canSend
-                      ? (isDark ? Colors.white : Colors.black)
-                      : mutedSurface,
-                  foreground: _canSend
-                      ? (isDark ? Colors.black : Colors.white)
-                      : mutedText,
-                  onTap: _canSend ? _sendText : () {},
-                ),
-                const SizedBox(width: 8),
-                _CircleIconButton(
-                  icon: Icons.call_rounded,
-                  tooltip: 'Voice',
-                  background: const Color(0xFF22C55E),
-                  foreground: Colors.white,
-                  onTap: widget.onCall,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Leave this game?',
+                        style: TextStyle(
+                          color: context.primaryTextColor,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          height: 1.15,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'You will exit the live game and return to the story details page.',
+                        style: TextStyle(
+                          color: subdued,
+                          fontSize: 13,
+                          height: 1.35,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: context.primaryTextColor,
+                      side: BorderSide(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.14)
+                            : Colors.black.withValues(alpha: 0.12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Stay',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Leave',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LeavingGameDialog extends StatelessWidget {
+  const _LeavingGameDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 42),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF111214) : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.06),
           ),
         ),
-      ],
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                'Leaving game...',
+                style: TextStyle(
+                  color: context.primaryTextColor,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuizGameBottomBar extends StatelessWidget {
+  const _QuizGameBottomBar({required this.onCall});
+
+  final VoidCallback onCall;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(28, 10, 28, 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xF0131415),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.20),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.only(left: 16, right: 8),
+              child: Row(
+                children: [
+                  Text(
+                    'Message',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.42),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.white.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.paperplane_fill,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: onCall,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF24D11F),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.18),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.call_rounded,
+                color: Colors.white,
+                size: 25,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -561,22 +825,280 @@ class _StorySessionLoadingShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.isDarkMode;
-    final mutedSurface = isDark
-        ? const Color(0xFF1A1A1A)
-        : const Color(0xFFF3F3F3);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: mutedSurface,
-          borderRadius: BorderRadius.circular(18),
+      padding: const EdgeInsets.fromLTRB(24, 36, 24, 8),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: const _GameLoadingGraphic(),
         ),
-        child: const _StorySessionLoadingShimmer(),
       ),
     );
+  }
+}
+
+class _GameLoadingGraphic extends StatefulWidget {
+  const _GameLoadingGraphic();
+
+  @override
+  State<_GameLoadingGraphic> createState() => _GameLoadingGraphicState();
+}
+
+class _GameLoadingGraphicState extends State<_GameLoadingGraphic>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 1.72,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          return CustomPaint(
+            painter: _GameLoadingPainter(progress: _controller.value),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _GameLoadingPainter extends CustomPainter {
+  const _GameLoadingPainter({required this.progress});
+
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final black = Paint()
+      ..color = const Color(0xFF111111)
+      ..style = PaintingStyle.fill
+      ..strokeJoin = StrokeJoin.miter;
+    final border = Paint()
+      ..color = const Color(0xFF111111)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(3, size.width * 0.008);
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: 'LOADING...',
+        style: TextStyle(
+          color: const Color(0xFF111111),
+          fontSize: size.width * 0.105,
+          fontWeight: FontWeight.w900,
+          height: 1,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout(maxWidth: size.width * 0.78);
+    textPainter.paint(canvas, Offset(size.width * 0.05, size.height * 0.34));
+
+    final barRect = Rect.fromLTWH(
+      size.width * 0.055,
+      size.height * 0.49,
+      size.width * 0.89,
+      size.height * 0.18,
+    );
+    canvas.drawRect(barRect, border);
+
+    final clipRect = barRect.deflate(size.width * 0.018);
+    canvas.save();
+    canvas.clipRect(clipRect);
+    final stripeWidth = size.width * 0.05;
+    final stripeGap = size.width * 0.022;
+    final stripeStep = stripeWidth + stripeGap;
+    final filledWidth = size.width * 0.58;
+    final shift = progress * stripeStep;
+    var x = clipRect.left - stripeStep + shift;
+    while (x < clipRect.left + filledWidth) {
+      final path = Path()
+        ..moveTo(x + stripeWidth * 0.45, clipRect.top)
+        ..lineTo(x + stripeWidth * 1.45, clipRect.top)
+        ..lineTo(x + stripeWidth, clipRect.bottom)
+        ..lineTo(x, clipRect.bottom)
+        ..close();
+      canvas.drawPath(path, black);
+      x += stripeStep;
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _GameLoadingPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
+
+class _ActiveParticipantsStrip extends StatelessWidget {
+  const _ActiveParticipantsStrip({required this.participants});
+
+  final List<StoryParticipant> participants;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = participants
+        .where((participant) => participant.status == 'active')
+        .toList();
+    if (active.isEmpty) return const SizedBox.shrink();
+
+    return SafeArea(
+      top: false,
+      bottom: false,
+      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 4,
+                  height: 4,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF22C55E),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Text(
+                  'Active Participants',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            _ActiveParticipantAvatarStack(participants: active),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActiveParticipantAvatarStack extends StatelessWidget {
+  const _ActiveParticipantAvatarStack({required this.participants});
+
+  final List<StoryParticipant> participants;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = participants.take(7).toList();
+    const size = 34.0;
+    const overlap = 24.0;
+    final width = size + ((visible.length - 1).clamp(0, 99) * overlap);
+
+    return SizedBox(
+      width: width,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (var i = 0; i < visible.length; i++)
+            Positioned(
+              left: i * overlap,
+              top: 0,
+              child: _ActiveParticipantAvatar(participant: visible[i]),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActiveParticipantAvatar extends StatelessWidget {
+  const _ActiveParticipantAvatar({required this.participant});
+
+  final StoryParticipant participant;
+
+  @override
+  Widget build(BuildContext context) {
+    final avatarUrl = _avatarUrl(participant);
+    final name = _displayName(participant);
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: const Color(0xFF2B2B2B),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.black, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            offset: const Offset(0, 3),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: avatarUrl == null
+          ? Center(
+              child: Text(
+                name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            )
+          : Image.network(
+              avatarUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Center(
+                child: Text(
+                  name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
+  static String? _avatarUrl(StoryParticipant participant) {
+    for (final key in const [
+      'avatar_url',
+      'avatarUrl',
+      'photo_url',
+      'photoUrl',
+      'image_url',
+      'profile_image_url',
+    ]) {
+      final value = participant.metadata[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
+
+  static String _displayName(StoryParticipant participant) {
+    final name = participant.displayName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    return participant.role == 'host' ? 'Host' : 'Player';
   }
 }
 

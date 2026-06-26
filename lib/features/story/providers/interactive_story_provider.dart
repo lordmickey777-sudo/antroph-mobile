@@ -168,10 +168,12 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       await repo.leaveInteractiveSession(sessionId);
       await _disconnectRoomSocket();
       state = const InteractiveStoryState();
-    } on ApiError catch (e) {
-      state = state.copyWith(isLoading: false, error: e.message);
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: '$e');
+    } on ApiError {
+      await _disconnectRoomSocket();
+      state = const InteractiveStoryState();
+    } catch (_) {
+      await _disconnectRoomSocket();
+      state = const InteractiveStoryState();
     }
   }
 
@@ -182,6 +184,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
   }) async {
     final sessionId = state.session?.sessionId;
     if (sessionId == null || sessionId.isEmpty) return;
+    if (inputType == 'quiz_answer' && _isQuizAnswerExpired()) return;
 
     final key =
         '${questionId ?? state.session?.currentTurn?.turnId ?? state.session?.lastSeq}-$inputType-$optionId';
@@ -231,6 +234,21 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
       );
     } on ApiError catch (e) {
+      if (e.statusCode == 409) {
+        final nextSelections = Map<String, String>.from(
+          state.localQuizSelections,
+        );
+        if (inputType == 'quiz_answer' && questionId != null) {
+          nextSelections.remove(questionId);
+        }
+        state = state.copyWith(
+          pendingInputKeys: {...state.pendingInputKeys}..remove(key),
+          localQuizSelections: nextSelections,
+          error: null,
+        );
+        await _refreshSilently();
+        return;
+      }
       state = state.copyWith(
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
         error: e.message,
@@ -320,19 +338,30 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     if (url.isEmpty) return;
 
     await _disconnectRoomSocket();
+    IOWebSocketChannel? channel;
     try {
-      final channel = IOWebSocketChannel.connect(Uri.parse(url));
+      channel = IOWebSocketChannel.connect(Uri.parse(url));
+      await channel.ready;
       _roomChannel = channel;
       _roomSubscription = channel.stream.listen(
         _handleRoomSocketMessage,
-        onError: (_) {},
+        onError: (_) {
+          _roomChannel = null;
+          _roomSubscription = null;
+          _scheduleWaitingRefresh();
+        },
         onDone: () {
           _roomChannel = null;
           _roomSubscription = null;
+          _scheduleWaitingRefresh();
         },
       );
     } catch (_) {
+      try {
+        await channel?.sink.close(ws_status.normalClosure, 'connect_error');
+      } catch (_) {}
       _roomChannel = null;
+      _roomSubscription = null;
       _scheduleWaitingRefresh();
     }
   }
@@ -488,11 +517,17 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       eventType: eventType,
       payload: payload,
     );
+    final nextEvents =
+        current.events.any(
+          (event) => event.seq == seq && event.eventType == eventType,
+        )
+        ? current.events
+        : [...current.events, sessionEvent];
     state = state.copyWith(
       session: current.copyWith(
         interactiveState: nextState,
-        events: [...current.events, sessionEvent],
-        lastSeq: seq,
+        events: nextEvents,
+        lastSeq: seq > current.lastSeq ? seq : current.lastSeq,
       ),
     );
     _scheduleWaitingRefresh();
@@ -543,6 +578,21 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     final remaining = expiresAt.difference(DateTime.now().toUtc());
     if (remaining.isNegative) return const Duration(milliseconds: 500);
     return remaining + const Duration(milliseconds: 800);
+  }
+
+  bool _isQuizAnswerExpired() {
+    final session = state.session;
+    if (session == null) return true;
+    final interactiveState = session.interactiveState;
+    if (interactiveState['phase'] != 'question_active') return false;
+
+    final question = interactiveState['question'];
+    final questionExpiresAt = question is Map ? question['expires_at'] : null;
+    final expiresAt =
+        _parseStateDate(questionExpiresAt) ??
+        _parseStateDate(interactiveState['expires_at']);
+    if (expiresAt == null) return false;
+    return !expiresAt.isAfter(DateTime.now().toUtc());
   }
 
   DateTime? _parseStateDate(dynamic raw) {

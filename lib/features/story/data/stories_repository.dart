@@ -27,6 +27,7 @@ class StoriesRepository {
           'collections_page': collectionsPage,
           'collections_page_size': collectionsPageSize,
         },
+        options: Options(receiveTimeout: const Duration(seconds: 45)),
       );
       final data = res.data as Map<String, dynamic>;
       return StoriesHomeResponse.fromJson(data);
@@ -170,6 +171,7 @@ class StoriesRepository {
           if (hostDisplayName != null) 'host_display_name': hostDisplayName,
           if (maxParticipants != null) 'max_participants': maxParticipants,
         },
+        options: Options(receiveTimeout: const Duration(seconds: 45)),
       );
       return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
@@ -238,13 +240,33 @@ class StoriesRepository {
       final res = await _dio.post(
         '/story-sessions/$sessionId/input',
         data: input.toJson(),
+        options: Options(validateStatus: (status) => (status ?? 0) < 500),
       );
+      if (res.statusCode == 409) {
+        throw ApiError(
+          message: _extractErrorMessage(res.data) ?? 'This turn has expired.',
+          statusCode: 409,
+        );
+      }
       return InteractiveInputResponse.fromJson(
         res.data as Map<String, dynamic>,
       );
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }
+  }
+
+  String? _extractErrorMessage(dynamic data) {
+    if (data is Map<String, dynamic>) {
+      final detail = data['detail'];
+      if (detail is String && detail.trim().isNotEmpty) return detail.trim();
+      final message = data['message'];
+      if (message is String && message.trim().isNotEmpty) {
+        return message.trim();
+      }
+    }
+    if (data is String && data.trim().isNotEmpty) return data.trim();
+    return null;
   }
 
   Future<InteractiveSessionState> retryInteractiveQuizGeneration(
@@ -260,12 +282,23 @@ class StoriesRepository {
     }
   }
 
-  Future<InteractiveSessionState> leaveInteractiveSession(
-    String sessionId,
-  ) async {
+  Future<void> leaveInteractiveSession(String sessionId) async {
     try {
-      final res = await _dio.post('/story-sessions/$sessionId/leave');
-      return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+      final res = await _dio.post(
+        '/story-sessions/$sessionId/leave',
+        options: Options(
+          receiveTimeout: const Duration(seconds: 45),
+          validateStatus: (status) => (status ?? 0) < 500,
+          extra: const {'suppressErrorLog': true},
+        ),
+      );
+      if (res.statusCode == 404) return;
+      if ((res.statusCode ?? 0) >= 400) {
+        throw ApiError(
+          message: _extractErrorMessage(res.data) ?? 'Could not leave game.',
+          statusCode: res.statusCode,
+        );
+      }
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }

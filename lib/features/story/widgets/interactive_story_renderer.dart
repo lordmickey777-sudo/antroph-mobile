@@ -13,6 +13,7 @@ class InteractiveStoryRenderer extends StatelessWidget {
   const InteractiveStoryRenderer({
     super.key,
     required this.session,
+    this.currentUserId,
     required this.onChoice,
     required this.onQuizAnswer,
     required this.onRetryGeneration,
@@ -23,6 +24,7 @@ class InteractiveStoryRenderer extends StatelessWidget {
   });
 
   final InteractiveSessionState session;
+  final String? currentUserId;
   final ValueChanged<String> onChoice;
   final QuizAnswerCallback onQuizAnswer;
   final VoidCallback onRetryGeneration;
@@ -38,6 +40,18 @@ class InteractiveStoryRenderer extends StatelessWidget {
     final liveQuiz = _LiveQuizQuestion.fromState(session.interactiveState);
     final phase = (session.interactiveState['phase'] as String?) ?? '';
     final isQuizSession = session.interactiveState['template'] == 'quiz';
+    if (isQuizSession) {
+      return _QuizTranscriptView(
+        session: session,
+        currentUserId: currentUserId,
+        pendingKeys: pendingKeys,
+        localQuizSelections: localQuizSelections,
+        onQuizAnswer: onQuizAnswer,
+        onRetryGeneration: onRetryGeneration,
+        onReplay: onReplay,
+        onLeave: onLeave,
+      );
+    }
     String? busyOptionId;
     if (liveQuiz != null) {
       final prefix = '${liveQuiz.questionId}-quiz_answer-';
@@ -123,6 +137,953 @@ class InteractiveStoryRenderer extends StatelessWidget {
               ),
             ),
           ),
+      ],
+    );
+  }
+}
+
+class _QuizTranscriptView extends StatefulWidget {
+  const _QuizTranscriptView({
+    required this.session,
+    required this.currentUserId,
+    required this.pendingKeys,
+    required this.localQuizSelections,
+    required this.onQuizAnswer,
+    required this.onRetryGeneration,
+    required this.onReplay,
+    required this.onLeave,
+  });
+
+  final InteractiveSessionState session;
+  final String? currentUserId;
+  final Set<String> pendingKeys;
+  final Map<String, String> localQuizSelections;
+  final QuizAnswerCallback onQuizAnswer;
+  final VoidCallback onRetryGeneration;
+  final VoidCallback onReplay;
+  final VoidCallback onLeave;
+
+  @override
+  State<_QuizTranscriptView> createState() => _QuizTranscriptViewState();
+}
+
+class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
+  final _controller = ScrollController();
+  int _lastSeq = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastSeq = widget.session.lastSeq;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
+  }
+
+  @override
+  void didUpdateWidget(covariant _QuizTranscriptView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.session.lastSeq != _lastSeq) {
+      _lastSeq = widget.session.lastSeq;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _jumpToBottom() {
+    if (!_controller.hasClients) return;
+    _controller.jumpTo(_controller.position.maxScrollExtent);
+  }
+
+  void _scrollToBottom() {
+    if (!_controller.hasClients) return;
+    final distanceFromBottom =
+        _controller.position.maxScrollExtent - _controller.offset;
+    if (distanceFromBottom > 180) return;
+    _controller.animateTo(
+      _controller.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.session;
+    final items = _QuizTranscriptItem.build(
+      session: session,
+      currentUserId: widget.currentUserId,
+      localQuizSelections: widget.localQuizSelections,
+    );
+
+    return ListView(
+      controller: _controller,
+      padding: const EdgeInsets.fromLTRB(2, 18, 2, 28),
+      children: [
+        const SizedBox(height: 4),
+        if (items.isEmpty)
+          _ChatMessageBubble(
+            child: _QuizStatusContent(
+              icon: CupertinoIcons.person_3_fill,
+              title: 'Waiting for the first question',
+              body: _lobbyText(session),
+            ),
+          )
+        else
+          for (final item in items) ...[
+            _QuizTranscriptRow(
+              item: item,
+              session: session,
+              pendingKeys: widget.pendingKeys,
+              onQuizAnswer: widget.onQuizAnswer,
+              onRetryGeneration: widget.onRetryGeneration,
+              onReplay: widget.onReplay,
+              onLeave: widget.onLeave,
+            ),
+            const SizedBox(height: 10),
+          ],
+      ],
+    );
+  }
+}
+
+enum _QuizTranscriptItemKind {
+  status,
+  question,
+  progress,
+  result,
+  finalStandings,
+}
+
+class _QuizTranscriptItem {
+  const _QuizTranscriptItem({
+    required this.kind,
+    required this.seq,
+    this.event,
+    this.question,
+    this.answer,
+    this.result,
+    this.statusTitle,
+    this.statusBody,
+    this.statusIcon = CupertinoIcons.info_circle_fill,
+    this.showLoading = false,
+    this.isActiveQuestion = false,
+  });
+
+  final _QuizTranscriptItemKind kind;
+  final int seq;
+  final StorySessionEvent? event;
+  final _LiveQuizQuestion? question;
+  final _UserQuizAnswer? answer;
+  final Map<String, dynamic>? result;
+  final String? statusTitle;
+  final String? statusBody;
+  final IconData statusIcon;
+  final bool showLoading;
+  final bool isActiveQuestion;
+
+  _QuizTranscriptItem copyWith({
+    Map<String, dynamic>? result,
+    bool? isActiveQuestion,
+  }) {
+    return _QuizTranscriptItem(
+      kind: kind,
+      seq: seq,
+      event: event,
+      question: question,
+      answer: answer,
+      result: result ?? this.result,
+      statusTitle: statusTitle,
+      statusBody: statusBody,
+      statusIcon: statusIcon,
+      showLoading: showLoading,
+      isActiveQuestion: isActiveQuestion ?? this.isActiveQuestion,
+    );
+  }
+
+  static List<_QuizTranscriptItem> build({
+    required InteractiveSessionState session,
+    required String? currentUserId,
+    required Map<String, String> localQuizSelections,
+  }) {
+    final events = _dedupeEvents(session.events)
+      ..sort((a, b) => a.seq.compareTo(b.seq));
+    final startedRounds = events
+        .where((event) => event.eventType == 'question_started')
+        .map((event) => (event.payload['round'] as num?)?.toInt())
+        .whereType<int>()
+        .toSet();
+    final items = <_QuizTranscriptItem>[];
+    final questionIds = <String>{};
+    final resultQuestionIds = <String>{};
+    final answerQuestionIds = <String>{};
+    final liveQuiz = _LiveQuizQuestion.fromState(session.interactiveState);
+    final phase = (session.interactiveState['phase'] as String?) ?? '';
+    final currentRound = (session.interactiveState['current_round'] as num?)
+        ?.toInt();
+    final totalRounds =
+        (session.interactiveState['total_rounds'] as num?)?.toInt() ?? 1;
+
+    for (final event in events) {
+      switch (event.eventType) {
+        case 'question_generation_started':
+          final round = (event.payload['round'] as num?)?.toInt();
+          if (round != null && startedRounds.contains(round)) break;
+          items.add(
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.status,
+              seq: event.seq,
+              event: event,
+              statusTitle: 'Aura is getting the next question ready',
+              statusBody: '',
+              statusIcon: CupertinoIcons.sparkles,
+              showLoading: true,
+            ),
+          );
+          break;
+        case 'generation_failed':
+          items.add(
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.status,
+              seq: event.seq,
+              event: event,
+              statusTitle: 'Question failed to load',
+              statusBody: 'The host can retry the question.',
+              statusIcon: CupertinoIcons.exclamationmark_triangle_fill,
+            ),
+          );
+          break;
+        case 'question_started':
+          final question = _LiveQuizQuestion.fromPayload(
+            event.payload,
+            session.interactiveState,
+          );
+          if (question == null) break;
+          questionIds.add(question.questionId);
+          items.add(
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.question,
+              seq: event.seq,
+              event: event,
+              question: question,
+              answer: localQuizSelections[question.questionId] == null
+                  ? null
+                  : _UserQuizAnswer(
+                      questionId: question.questionId,
+                      optionId: localQuizSelections[question.questionId]!,
+                      optionLabel: _optionLabel(
+                        question.options,
+                        localQuizSelections[question.questionId]!,
+                      ),
+                    ),
+              isActiveQuestion:
+                  phase == 'question_active' &&
+                  liveQuiz?.questionId == question.questionId,
+            ),
+          );
+          break;
+        case 'answer_submitted':
+          if (!_isCurrentUserEvent(event, currentUserId)) break;
+          final answer = _UserQuizAnswer.fromEvent(event);
+          if (answer == null) break;
+          answerQuestionIds.add(answer.questionId);
+          break;
+        case 'answer_received':
+          items.add(
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.progress,
+              seq: event.seq,
+              event: event,
+              result: event.payload,
+            ),
+          );
+          break;
+        case 'question_completed':
+          final result = event.payload;
+          final questionId = (result['question_id'] as String?)?.trim();
+          if (questionId != null && questionId.isNotEmpty) {
+            resultQuestionIds.add(questionId);
+            final questionIndex = _questionItemIndex(items, questionId);
+            if (questionIndex != -1) {
+              items[questionIndex] = items[questionIndex].copyWith(
+                result: result,
+                isActiveQuestion: false,
+              );
+            }
+          }
+          items.add(
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.result,
+              seq: event.seq,
+              event: event,
+              result: result,
+            ),
+          );
+          break;
+        case 'session_completed':
+          items.add(
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.finalStandings,
+              seq: event.seq,
+              event: event,
+            ),
+          );
+          break;
+      }
+    }
+
+    if (liveQuiz != null && !questionIds.contains(liveQuiz.questionId)) {
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.question,
+          seq: session.lastSeq + 1,
+          question: liveQuiz,
+          answer: localQuizSelections[liveQuiz.questionId] == null
+              ? null
+              : _UserQuizAnswer(
+                  questionId: liveQuiz.questionId,
+                  optionId: localQuizSelections[liveQuiz.questionId]!,
+                  optionLabel: _optionLabel(
+                    liveQuiz.options,
+                    localQuizSelections[liveQuiz.questionId]!,
+                  ),
+                ),
+          isActiveQuestion: true,
+        ),
+      );
+    }
+
+    final stateResult = (session.interactiveState['result'] as Map?)
+        ?.cast<String, dynamic>();
+    final stateResultQuestionId = (stateResult?['question_id'] as String?)
+        ?.trim();
+    if (stateResult != null &&
+        stateResultQuestionId != null &&
+        stateResultQuestionId.isNotEmpty &&
+        !resultQuestionIds.contains(stateResultQuestionId)) {
+      final questionIndex = _questionItemIndex(items, stateResultQuestionId);
+      if (questionIndex != -1) {
+        items[questionIndex] = items[questionIndex].copyWith(
+          result: stateResult,
+          isActiveQuestion: false,
+        );
+      }
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.result,
+          seq: session.lastSeq + 3,
+          result: stateResult,
+        ),
+      );
+    }
+
+    final questionForCurrentRoundIsRendered =
+        liveQuiz != null ||
+        (currentRound != null && startedRounds.contains(currentRound));
+    final waitingForQuestion =
+        (phase == 'generating_question' ||
+            phase == 'question_generation_started') &&
+        !questionForCurrentRoundIsRendered;
+    final waitingAfterResult =
+        phase == 'showing_results' &&
+        currentRound != null &&
+        currentRound < totalRounds &&
+        !startedRounds.contains(currentRound + 1);
+    final waitingForFinalResults =
+        phase == 'showing_results' &&
+        currentRound != null &&
+        currentRound >= totalRounds &&
+        !session.isCompleted;
+    final checkingAnswers = phase == 'finalizing_question';
+
+    if ((waitingForQuestion ||
+            waitingAfterResult ||
+            waitingForFinalResults ||
+            checkingAnswers) &&
+        (items.isEmpty || items.last.kind != _QuizTranscriptItemKind.status)) {
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.status,
+          seq: session.lastSeq + 4,
+          statusTitle: waitingForFinalResults
+              ? 'Calculating results...'
+              : checkingAnswers
+              ? 'Checking answers'
+              : 'Aura is getting the next question ready',
+          statusBody: checkingAnswers ? _lobbyText(session) : '',
+          statusIcon: CupertinoIcons.person_3_fill,
+          showLoading:
+              waitingForQuestion ||
+              waitingAfterResult ||
+              waitingForFinalResults,
+        ),
+      );
+    }
+
+    if (phase == 'generation_failed' &&
+        (items.isEmpty || items.last.kind != _QuizTranscriptItemKind.status)) {
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.status,
+          seq: session.lastSeq + 5,
+          statusTitle: 'Question failed to load',
+          statusBody:
+              (session.interactiveState['generation_error'] as String?) ??
+              'The host can retry the question.',
+          statusIcon: CupertinoIcons.exclamationmark_triangle_fill,
+        ),
+      );
+    }
+
+    if (phase == 'completed' &&
+        !items.any(
+          (item) => item.kind == _QuizTranscriptItemKind.finalStandings,
+        )) {
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.finalStandings,
+          seq: session.lastSeq + 6,
+        ),
+      );
+    }
+
+    return items;
+  }
+
+  static int _questionItemIndex(
+    List<_QuizTranscriptItem> items,
+    String questionId,
+  ) {
+    return items.indexWhere(
+      (item) =>
+          item.kind == _QuizTranscriptItemKind.question &&
+          item.question?.questionId == questionId,
+    );
+  }
+
+  static bool _isCurrentUserEvent(StorySessionEvent event, String? userId) {
+    if (userId == null || userId.isEmpty) {
+      return event.visibility == 'private';
+    }
+    return event.actorUserId == userId || event.targetUserIds.contains(userId);
+  }
+
+  static List<StorySessionEvent> _dedupeEvents(List<StorySessionEvent> events) {
+    final seen = <String>{};
+    final deduped = <StorySessionEvent>[];
+    for (final event in events) {
+      final key = _eventKey(event);
+      if (!seen.add(key)) continue;
+      deduped.add(event);
+    }
+    return deduped;
+  }
+
+  static String _eventKey(StorySessionEvent event) {
+    final payload = event.payload;
+    final questionId = (payload['question_id'] as String?)?.trim() ?? '';
+    final participantId = (payload['participant_id'] as String?)?.trim() ?? '';
+    final optionId = (payload['option_id'] as String?)?.trim() ?? '';
+    final round = payload['round']?.toString() ?? '';
+    return [
+      event.seq,
+      event.eventType,
+      questionId,
+      participantId,
+      optionId,
+      round,
+    ].join('|');
+  }
+
+  static String _optionLabel(List<InteractiveOption> options, String optionId) {
+    for (final option in options) {
+      if (option.id == optionId) {
+        return option.label.isEmpty ? option.id : option.label;
+      }
+    }
+    return optionId;
+  }
+}
+
+class _QuizTranscriptRow extends StatelessWidget {
+  const _QuizTranscriptRow({
+    required this.item,
+    required this.session,
+    required this.pendingKeys,
+    required this.onQuizAnswer,
+    required this.onRetryGeneration,
+    required this.onReplay,
+    required this.onLeave,
+  });
+
+  final _QuizTranscriptItem item;
+  final InteractiveSessionState session;
+  final Set<String> pendingKeys;
+  final QuizAnswerCallback onQuizAnswer;
+  final VoidCallback onRetryGeneration;
+  final VoidCallback onReplay;
+  final VoidCallback onLeave;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (item.kind) {
+      _QuizTranscriptItemKind.question => _QuestionTranscriptBubble(
+        question: item.question!,
+        session: session,
+        result: item.result,
+        selectedAnswer: _selectedAnswer(item.question!.questionId),
+        busyOptionId: _busyOptionId(item.question!.questionId),
+        active: item.isActiveQuestion,
+        onSelected: (optionId) =>
+            onQuizAnswer(optionId, item.question!.questionId),
+      ),
+      _QuizTranscriptItemKind.progress => _ChatMessageBubble(
+        child: _AnswerProgressContent(
+          answeredCount: _intFromState(item.result?['answered_count']),
+          eligibleCount: _intFromState(item.result?['eligible_count']),
+        ),
+      ),
+      _QuizTranscriptItemKind.result => _QuizResultGroup(
+        session: session,
+        result: item.result ?? const <String, dynamic>{},
+      ),
+      _QuizTranscriptItemKind.finalStandings => _ChatMessageBubble(
+        child: _FinalStandingsContent(
+          session: session,
+          onReplay: onReplay,
+          onLeave: onLeave,
+        ),
+      ),
+      _QuizTranscriptItemKind.status => _ChatMessageBubble(
+        child: item.showLoading
+            ? _QuizLoadingContent(title: item.statusTitle)
+            : _QuizStatusContent(
+                icon: item.statusIcon,
+                title: item.statusTitle ?? 'Game update',
+                body: item.statusBody ?? _lobbyText(session),
+                actionLabel: item.statusTitle == 'Question failed to load'
+                    ? 'Retry'
+                    : null,
+                onAction: item.statusTitle == 'Question failed to load'
+                    ? onRetryGeneration
+                    : null,
+              ),
+      ),
+    };
+  }
+
+  String? _busyOptionId(String questionId) {
+    final prefix = '$questionId-quiz_answer-';
+    for (final key in pendingKeys) {
+      if (key.startsWith(prefix)) return key.substring(prefix.length);
+    }
+    return null;
+  }
+
+  String? _selectedAnswer(String questionId) {
+    if (item.answer?.questionId == questionId) return item.answer?.optionId;
+    for (final event in session.events.reversed) {
+      if (event.eventType != 'answer_submitted') continue;
+      if ((event.payload['question_id'] as String?) != questionId) continue;
+      return (event.payload['option_id'] as String?)?.trim();
+    }
+    return null;
+  }
+}
+
+class _ChatMessageBubble extends StatelessWidget {
+  const _ChatMessageBubble({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    const color = Color(0xED101112);
+    const textColor = Colors.white;
+    final maxWidth = MediaQuery.sizeOf(context).width * 0.72;
+    final bubble = ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(6),
+            topRight: Radius.circular(18),
+            bottomLeft: Radius.circular(18),
+            bottomRight: Radius.circular(18),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              offset: const Offset(0, 6),
+              blurRadius: 18,
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          child: DefaultTextStyle.merge(
+            style: TextStyle(color: textColor),
+            child: IconTheme.merge(
+              data: IconThemeData(color: textColor),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: _QuizBotAvatar(size: 20),
+        ),
+        const SizedBox(width: 6),
+        Flexible(child: bubble),
+      ],
+    );
+  }
+}
+
+class _QuizBotAvatar extends StatelessWidget {
+  const _QuizBotAvatar({this.size = 20});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: const Color(0xFF151515),
+        shape: BoxShape.circle,
+        border: Border.all(color: const Color(0xFFF59E0B), width: 1.4),
+      ),
+      child: Center(
+        child: Icon(
+          CupertinoIcons.game_controller_solid,
+          size: size * 0.58,
+          color: const Color(0xFF22C55E),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuestionTranscriptBubble extends StatelessWidget {
+  const _QuestionTranscriptBubble({
+    required this.question,
+    required this.session,
+    required this.result,
+    required this.selectedAnswer,
+    required this.busyOptionId,
+    required this.active,
+    required this.onSelected,
+  });
+
+  final _LiveQuizQuestion question;
+  final InteractiveSessionState session;
+  final Map<String, dynamic>? result;
+  final String? selectedAnswer;
+  final String? busyOptionId;
+  final bool active;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    if (active) {
+      return _LiveQuizQuestionGroup(
+        question: question,
+        session: session,
+        selectedOptionId: selectedAnswer,
+        busyOptionId: busyOptionId,
+        onSelected: onSelected,
+      );
+    }
+    return _PastQuizQuestionGroup(
+      question: question,
+      session: session,
+      result: result,
+    );
+  }
+}
+
+class _PastQuizQuestionGroup extends StatelessWidget {
+  const _PastQuizQuestionGroup({
+    required this.question,
+    required this.session,
+    required this.result,
+  });
+
+  final _LiveQuizQuestion question;
+  final InteractiveSessionState session;
+  final Map<String, dynamic>? result;
+
+  @override
+  Widget build(BuildContext context) {
+    final correctOptionId =
+        (result?['correct_option_id'] as String?)?.trim() ??
+        question.correctOptionId;
+    final participantsByOption = _participantsByOption(session, result);
+    final bubbleWidth = MediaQuery.sizeOf(context).width * 0.72;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ChatMessageBubble(
+          child: Text(
+            question.text,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              height: 1.24,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.only(left: 26),
+          child: SizedBox(
+            width: bubbleWidth,
+            child: Column(
+              children: [
+                for (final option in question.options) ...[
+                  _ResultOptionRow(
+                    option: option,
+                    correct:
+                        correctOptionId.isNotEmpty &&
+                        option.id == correctOptionId,
+                    participants:
+                        participantsByOption[option.id] ??
+                        const <StoryParticipant>[],
+                  ),
+                  if (option != question.options.last)
+                    const SizedBox(height: 2),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UserQuizAnswer {
+  const _UserQuizAnswer({
+    required this.questionId,
+    required this.optionId,
+    required this.optionLabel,
+  });
+
+  final String questionId;
+  final String optionId;
+  final String optionLabel;
+
+  static _UserQuizAnswer? fromEvent(StorySessionEvent event) {
+    final questionId = (event.payload['question_id'] as String?)?.trim() ?? '';
+    final optionId = (event.payload['option_id'] as String?)?.trim() ?? '';
+    final optionLabel =
+        (event.payload['option_label'] as String?)?.trim() ?? optionId;
+    if (questionId.isEmpty || optionId.isEmpty) return null;
+    return _UserQuizAnswer(
+      questionId: questionId,
+      optionId: optionId,
+      optionLabel: optionLabel,
+    );
+  }
+}
+
+class _AnswerProgressContent extends StatelessWidget {
+  const _AnswerProgressContent({
+    required this.answeredCount,
+    required this.eligibleCount,
+  });
+
+  final int answeredCount;
+  final int eligibleCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = eligibleCount <= 0 ? 1 : eligibleCount.clamp(1, 12);
+    final answered = answeredCount.clamp(0, total);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$answeredCount/$eligibleCount players have locked in their answers',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            for (var i = 0; i < total; i++) ...[
+              Expanded(
+                child: Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: i < answered
+                        ? const Color(0xFF63F26B)
+                        : Colors.white.withValues(alpha: 0.32),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              if (i != total - 1) const SizedBox(width: 4),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _QuizLoadingContent extends StatefulWidget {
+  const _QuizLoadingContent({this.title});
+
+  final String? title;
+
+  @override
+  State<_QuizLoadingContent> createState() => _QuizLoadingContentState();
+}
+
+class _QuizLoadingContentState extends State<_QuizLoadingContent>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = widget.title?.trim() ?? '';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (title.isNotEmpty &&
+            title != 'Aura is getting the next question ready') ...[
+          Flexible(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
+        SizedBox(
+          width: 34,
+          height: 14,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (var i = 0; i < 3; i++) ...[
+                    Opacity(
+                      opacity: ((_controller.value * 3 - i).abs() < 0.55)
+                          ? 1
+                          : 0.34,
+                      child: Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                    if (i != 2) const SizedBox(width: 5),
+                  ],
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _QuizStatusContent extends StatelessWidget {
+  const _QuizStatusContent({
+    required this.icon,
+    required this.title,
+    required this.body,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: const Color(0xFF2563EB), size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: context.primaryTextColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (body.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            body,
+            style: TextStyle(
+              color: context.secondaryTextColor,
+              fontSize: 13,
+              height: 1.35,
+            ),
+          ),
+        ],
+        if (actionLabel != null && onAction != null) ...[
+          const SizedBox(height: 12),
+          FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+        ],
       ],
     );
   }
@@ -441,6 +1402,39 @@ class _LiveQuizQuestion {
       explanation: (question['explanation'] as String?)?.trim(),
     );
   }
+
+  static _LiveQuizQuestion? fromPayload(
+    Map<String, dynamic> payload,
+    Map<String, dynamic> state,
+  ) {
+    final raw = payload['question'];
+    if (raw is! Map) return null;
+    final question = raw.cast<String, dynamic>();
+    final questionId = (question['question_id'] as String?)?.trim() ?? '';
+    final text =
+        (question['text'] as String?)?.trim() ??
+        (question['question'] as String?)?.trim() ??
+        '';
+    final options = ((question['options'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => InteractiveOption.fromJson(e.cast<String, dynamic>()))
+        .where((option) => option.id.isNotEmpty || option.label.isNotEmpty)
+        .toList();
+    if (questionId.isEmpty || text.isEmpty || options.isEmpty) return null;
+    return _LiveQuizQuestion(
+      questionId: questionId,
+      text: text,
+      options: options,
+      correctOptionId: (question['correct_option_id'] as String?)?.trim() ?? '',
+      currentRound:
+          (payload['round'] as num?)?.toInt() ??
+          (state['current_round'] as num?)?.toInt() ??
+          1,
+      totalRounds: (state['total_rounds'] as num?)?.toInt() ?? 1,
+      expiresAt: _parseQuizDate(question['expires_at']),
+      explanation: (question['explanation'] as String?)?.trim(),
+    );
+  }
 }
 
 class _LiveQuizBlock extends StatefulWidget {
@@ -486,6 +1480,7 @@ class _LiveQuizBlockState extends State<_LiveQuizBlock> {
     final answered = selected != null;
     final isCorrect = selected == question.correctOptionId;
     final seconds = _remainingSeconds(question.expiresAt);
+    final isExpired = question.expiresAt != null && seconds == 0;
     final answeredCount = _intFromState(
       widget.session.interactiveState['answered_count'],
       fallback:
@@ -564,16 +1559,26 @@ class _LiveQuizBlockState extends State<_LiveQuizBlock> {
             _OptionButton(
               option: option,
               busy: widget.busyOptionId == option.id,
+              disabled: answered || isExpired,
               status: _statusForOption(
                 option.id,
                 selected,
                 question.correctOptionId,
               ),
-              onTap: answered || seconds == 0
-                  ? () {}
-                  : () => widget.onSelected(option.id),
+              onTap: () => widget.onSelected(option.id),
             ),
             if (option != question.options.last) const SizedBox(height: 8),
+          ],
+          if (isExpired && !answered) ...[
+            const SizedBox(height: 12),
+            Text(
+              "Time's up",
+              style: TextStyle(
+                color: context.secondaryTextColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ],
           if (answered) ...[
             const SizedBox(height: 12),
@@ -641,6 +1646,704 @@ class _LiveQuizBlockState extends State<_LiveQuizBlock> {
       }
     }
     return question.correctOptionId;
+  }
+}
+
+class _LiveQuizContent extends StatefulWidget {
+  const _LiveQuizContent({
+    required this.question,
+    required this.session,
+    required this.selectedOptionId,
+    required this.busyOptionId,
+    required this.onSelected,
+  });
+
+  final _LiveQuizQuestion question;
+  final InteractiveSessionState session;
+  final String? selectedOptionId;
+  final String? busyOptionId;
+  final ValueChanged<String> onSelected;
+
+  @override
+  State<_LiveQuizContent> createState() => _LiveQuizContentState();
+}
+
+class _LiveQuizQuestionGroup extends StatefulWidget {
+  const _LiveQuizQuestionGroup({
+    required this.question,
+    required this.session,
+    required this.selectedOptionId,
+    required this.busyOptionId,
+    required this.onSelected,
+  });
+
+  final _LiveQuizQuestion question;
+  final InteractiveSessionState session;
+  final String? selectedOptionId;
+  final String? busyOptionId;
+  final ValueChanged<String> onSelected;
+
+  @override
+  State<_LiveQuizQuestionGroup> createState() => _LiveQuizQuestionGroupState();
+}
+
+class _LiveQuizQuestionGroupState extends State<_LiveQuizQuestionGroup> {
+  Timer? _timer;
+  String? _draftOptionId;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _LiveQuizQuestionGroup oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.question.questionId != widget.question.questionId ||
+        widget.selectedOptionId != null) {
+      _draftOptionId = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final question = widget.question;
+    final confirmedOptionId = widget.selectedOptionId;
+    final selected = confirmedOptionId ?? _draftOptionId;
+    final answered = confirmedOptionId != null;
+    final seconds = _LiveQuizBlockState._remainingSeconds(question.expiresAt);
+    final isExpired = question.expiresAt != null && seconds == 0;
+    final bubbleWidth = MediaQuery.sizeOf(context).width * 0.72;
+    final draftLabel = _draftOptionId == null
+        ? null
+        : _QuizTranscriptItem._optionLabel(question.options, _draftOptionId!);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ChatMessageBubble(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  question.text,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    height: 1.24,
+                  ),
+                ),
+              ),
+              if (question.expiresAt != null) ...[
+                const SizedBox(width: 12),
+                _QuizTimerRing(seconds: seconds),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.only(left: 26),
+          child: SizedBox(
+            width: bubbleWidth,
+            child: Column(
+              children: [
+                for (final option in question.options) ...[
+                  _OptionButton(
+                    option: option,
+                    busy: widget.busyOptionId == option.id,
+                    disabled: answered || isExpired,
+                    quizStyle: true,
+                    status: selected == option.id
+                        ? _OptionStatus.selected
+                        : null,
+                    onTap: () {
+                      if (answered || isExpired) return;
+                      setState(() => _draftOptionId = option.id);
+                    },
+                  ),
+                  if (option != question.options.last)
+                    const SizedBox(height: 2),
+                ],
+              ],
+            ),
+          ),
+        ),
+        if (_draftOptionId != null && !answered && !isExpired) ...[
+          const SizedBox(height: 10),
+          _ChatMessageBubble(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'You selected $draftLabel',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  height: 24,
+                  child: FilledButton(
+                    onPressed: widget.busyOptionId == _draftOptionId
+                        ? null
+                        : () => widget.onSelected(_draftOptionId!),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF111111),
+                      textStyle: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    child: widget.busyOptionId == _draftOptionId
+                        ? const SizedBox(
+                            width: 10,
+                            height: 10,
+                            child: CircularProgressIndicator(strokeWidth: 1.5),
+                          )
+                        : const Text('Confirm'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (isExpired && !answered)
+          Padding(
+            padding: const EdgeInsets.only(left: 32, top: 8),
+            child: Text(
+              "Time's up",
+              style: TextStyle(
+                color: context.secondaryTextColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _QuizTimerRing extends StatelessWidget {
+  const _QuizTimerRing({required this.seconds});
+
+  final int seconds;
+
+  @override
+  Widget build(BuildContext context) {
+    final urgent = seconds <= 5;
+    return SizedBox(
+      width: 42,
+      height: 42,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CircularProgressIndicator(
+            value: null,
+            strokeWidth: 4,
+            backgroundColor: Colors.white.withValues(alpha: 0.20),
+            valueColor: AlwaysStoppedAnimation<Color>(
+              urgent ? const Color(0xFFEF4444) : const Color(0xFFF87171),
+            ),
+          ),
+          Text(
+            '${seconds}s',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LiveQuizContentState extends State<_LiveQuizContent> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final question = widget.question;
+    final selected = widget.selectedOptionId;
+    final answered = selected != null;
+    final isCorrect = selected == question.correctOptionId;
+    final seconds = _LiveQuizBlockState._remainingSeconds(question.expiresAt);
+    final isExpired = question.expiresAt != null && seconds == 0;
+    final answeredCount = _intFromState(
+      widget.session.interactiveState['answered_count'],
+      fallback:
+          (widget.session.interactiveState['answered_participant_ids'] as List?)
+              ?.length ??
+          0,
+    );
+    final eligibleCount = _intFromState(
+      widget.session.interactiveState['eligible_count'],
+      fallback:
+          (widget.session.interactiveState['eligible_participant_ids'] as List?)
+              ?.length ??
+          widget.session.participants.where((p) => p.status == 'active').length,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _RoundPill(
+              current: question.currentRound,
+              total: question.totalRounds,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                question.text,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  height: 1.28,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (question.expiresAt != null) ...[
+          Row(
+            children: [
+              Icon(
+                CupertinoIcons.timer,
+                color: seconds <= 5 ? const Color(0xFFDC2626) : Colors.white70,
+                size: 17,
+              ),
+              const SizedBox(width: 7),
+              Text(
+                '${seconds}s',
+                style: TextStyle(
+                  color: seconds <= 5
+                      ? const Color(0xFFDC2626)
+                      : Colors.white70,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$answeredCount/$eligibleCount answered',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
+        for (final option in question.options) ...[
+          _OptionButton(
+            option: option,
+            busy: widget.busyOptionId == option.id,
+            disabled: answered || isExpired,
+            quizStyle: true,
+            status: _LiveQuizBlockState._statusForOption(
+              option.id,
+              selected,
+              question.correctOptionId,
+            ),
+            onTap: () => widget.onSelected(option.id),
+          ),
+          if (option != question.options.last) const SizedBox(height: 8),
+        ],
+        if (isExpired && !answered) ...[
+          const SizedBox(height: 12),
+          Text(
+            "Time's up",
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+        if (answered) ...[
+          const SizedBox(height: 12),
+          Text(
+            isCorrect
+                ? 'Correct'
+                : 'Not quite. Correct answer: ${_LiveQuizBlockState._correctLabel(question)}',
+            style: TextStyle(
+              color: isCorrect
+                  ? const Color(0xFF16A34A)
+                  : const Color(0xFFDC2626),
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          if ((question.explanation ?? '').isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              question.explanation!,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+          ],
+          if (answeredCount < eligibleCount) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Waiting for others...',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+}
+
+class _QuizResultGroup extends StatelessWidget {
+  const _QuizResultGroup({required this.session, required this.result});
+
+  final InteractiveSessionState session;
+  final Map<String, dynamic> result;
+
+  @override
+  Widget build(BuildContext context) {
+    final correctOptionId = (result['correct_option_id'] as String?) ?? '';
+    final explanation = (result['explanation'] as String?)?.trim() ?? '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ChatMessageBubble(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Correct Answer: $correctOptionId',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              if (explanation.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  explanation,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ResultOptionRow extends StatelessWidget {
+  const _ResultOptionRow({
+    required this.option,
+    required this.correct,
+    required this.participants,
+  });
+
+  final InteractiveOption option;
+  final bool correct;
+  final List<StoryParticipant> participants;
+
+  @override
+  Widget build(BuildContext context) {
+    final optionId = option.id.isEmpty ? '?' : option.id.toUpperCase();
+    final label = option.label.isEmpty ? option.id : option.label;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 42),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xF0131415),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: correct
+              ? const Color(0xFFF59E0B)
+              : Colors.white.withValues(alpha: 0.04),
+          width: correct ? 1.2 : 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: correct
+                  ? const Color(0xFFF59E0B)
+                  : Colors.white.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              optionId.substring(0, 1),
+              style: TextStyle(
+                color: correct ? Colors.white : Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: correct ? Colors.white : Colors.white70,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (participants.isNotEmpty)
+            _ParticipantAvatarStack(participants: participants),
+        ],
+      ),
+    );
+  }
+}
+
+class _ParticipantAvatarStack extends StatelessWidget {
+  const _ParticipantAvatarStack({required this.participants});
+
+  final List<StoryParticipant> participants;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = participants.take(4).toList();
+    return SizedBox(
+      width: (visible.length * 16) + 6,
+      height: 22,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (var i = 0; i < visible.length; i++)
+            Positioned(
+              right: i * 14,
+              top: 0,
+              child: _ParticipantAvatar(participant: visible[i]),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+Map<String, List<StoryParticipant>> _participantsByOption(
+  InteractiveSessionState session,
+  Map<String, dynamic>? result,
+) {
+  final answerRows = ((result?['answers'] as List?) ?? const [])
+      .whereType<Map>()
+      .map((e) => e.cast<String, dynamic>());
+  final participantsByOption = <String, List<StoryParticipant>>{};
+  for (final answer in answerRows) {
+    final optionId = (answer['option_id'] as String?)?.trim() ?? '';
+    final participant = _participantById(
+      session.participants,
+      answer['participant_id'] as String?,
+    );
+    if (optionId.isEmpty || participant == null) continue;
+    participantsByOption.putIfAbsent(optionId, () => []).add(participant);
+  }
+  return participantsByOption;
+}
+
+class _ParticipantAvatar extends StatelessWidget {
+  const _ParticipantAvatar({required this.participant});
+
+  final StoryParticipant participant;
+
+  @override
+  Widget build(BuildContext context) {
+    final avatarUrl = _avatarUrl(participant);
+    final name = _displayName(participant);
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        color: const Color(0xFF2B2B2B),
+        shape: BoxShape.circle,
+        border: Border.all(color: const Color(0xFF111111), width: 1.4),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: avatarUrl == null
+          ? Center(
+              child: Text(
+                name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            )
+          : Image.network(
+              avatarUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Center(
+                child: Text(
+                  name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
+  static String? _avatarUrl(StoryParticipant participant) {
+    for (final key in const [
+      'avatar_url',
+      'avatarUrl',
+      'photo_url',
+      'photoUrl',
+      'image_url',
+      'profile_image_url',
+    ]) {
+      final value = participant.metadata[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
+}
+
+class _FinalStandingsContent extends StatelessWidget {
+  const _FinalStandingsContent({
+    required this.session,
+    required this.onReplay,
+    required this.onLeave,
+  });
+
+  final InteractiveSessionState session;
+  final VoidCallback onReplay;
+  final VoidCallback onLeave;
+
+  @override
+  Widget build(BuildContext context) {
+    final standings = _standingsFromState(
+      session.interactiveState,
+      session.participants,
+    );
+    final winnerIds =
+        ((session.interactiveState['winner_participant_ids'] as List?) ??
+                const [])
+            .whereType<String>()
+            .toSet();
+    final winners = standings
+        .where((row) => winnerIds.contains(row.participantId))
+        .map((row) => row.name)
+        .where((name) => name.isNotEmpty)
+        .join(', ');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              CupertinoIcons.rosette,
+              color: Color(0xFFF59E0B),
+              size: 22,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                winners.isEmpty ? 'Final scores' : 'Winner: $winners',
+                style: TextStyle(
+                  color: context.primaryTextColor,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (standings.isEmpty)
+          Text(
+            'No scores were recorded.',
+            style: TextStyle(color: context.secondaryTextColor),
+          )
+        else
+          _StandingsList(rows: standings),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: onLeave,
+                child: const Text('Leave'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton(
+                onPressed: onReplay,
+                child: const Text('Replay'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }
 
@@ -712,7 +2415,7 @@ class _QuizResultsBlock extends StatelessWidget {
             Text(
               explanation,
               style: TextStyle(
-                color: context.secondaryTextColor,
+                color: Colors.white70,
                 fontSize: 13,
                 height: 1.35,
               ),
@@ -1123,6 +2826,16 @@ String _participantName(List<StoryParticipant> participants, String? id) {
   return 'Player';
 }
 
+StoryParticipant? _participantById(
+  List<StoryParticipant> participants,
+  String? id,
+) {
+  for (final participant in participants) {
+    if (participant.id == id) return participant;
+  }
+  return null;
+}
+
 String _displayName(StoryParticipant participant) {
   final name = participant.displayName?.trim();
   if (name != null && name.isNotEmpty) return name;
@@ -1133,18 +2846,23 @@ class _OptionButton extends StatelessWidget {
   const _OptionButton({
     required this.option,
     required this.busy,
+    this.disabled = false,
+    this.quizStyle = false,
     this.status,
     required this.onTap,
   });
 
   final InteractiveOption option;
   final bool busy;
+  final bool disabled;
+  final bool quizStyle;
   final _OptionStatus? status;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
+    if (quizStyle) return _buildQuizStyle(context);
     final color = switch (status) {
       _OptionStatus.correct => const Color(0xFF16A34A),
       _OptionStatus.incorrect => const Color(0xFFDC2626),
@@ -1154,11 +2872,12 @@ class _OptionButton extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton(
-        onPressed: busy ? null : onTap,
+        onPressed: busy || disabled ? null : onTap,
         style: OutlinedButton.styleFrom(
           alignment: Alignment.centerLeft,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
           foregroundColor: context.primaryTextColor,
+          disabledForegroundColor: color ?? context.secondaryTextColor,
           side: BorderSide(
             color:
                 color?.withValues(alpha: 0.75) ??
@@ -1205,6 +2924,77 @@ class _OptionButton extends StatelessWidget {
                 CupertinoIcons.chevron_right,
                 size: 16,
                 color: context.secondaryTextColor,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuizStyle(BuildContext context) {
+    final accent = switch (status) {
+      _OptionStatus.selected => const Color(0xFFF59E0B),
+      _OptionStatus.correct => const Color(0xFF16A34A),
+      _OptionStatus.incorrect => const Color(0xFFDC2626),
+      null => null,
+    };
+    final optionId = option.id.isEmpty ? '?' : option.id.toUpperCase();
+    final label = option.label.isEmpty ? option.id : option.label;
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: busy || disabled ? null : onTap,
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+          foregroundColor: Colors.white,
+          disabledForegroundColor: Colors.white.withValues(alpha: 0.72),
+          side: BorderSide(
+            color: accent ?? Colors.white.withValues(alpha: 0.04),
+            width: accent == null ? 1 : 1.2,
+          ),
+          backgroundColor: const Color(0xF0131415),
+          disabledBackgroundColor: const Color(0xE5131415),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: accent ?? Colors.white.withValues(alpha: 0.10),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                optionId.substring(0, 1),
+                style: TextStyle(
+                  color: accent == null ? Colors.white70 : Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: accent == null ? Colors.white70 : Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (busy)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
               ),
           ],
         ),
