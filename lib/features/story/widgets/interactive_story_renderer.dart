@@ -20,6 +20,7 @@ class InteractiveStoryRenderer extends StatelessWidget {
     required this.onReplay,
     required this.onLeave,
     this.pendingKeys = const <String>{},
+    this.pendingTextMessages = const <PendingInteractiveTextMessage>[],
     this.localQuizSelections = const <String, String>{},
   });
 
@@ -31,6 +32,7 @@ class InteractiveStoryRenderer extends StatelessWidget {
   final VoidCallback onReplay;
   final VoidCallback onLeave;
   final Set<String> pendingKeys;
+  final List<PendingInteractiveTextMessage> pendingTextMessages;
   final Map<String, String> localQuizSelections;
 
   @override
@@ -45,6 +47,7 @@ class InteractiveStoryRenderer extends StatelessWidget {
         session: session,
         currentUserId: currentUserId,
         pendingKeys: pendingKeys,
+        pendingTextMessages: pendingTextMessages,
         localQuizSelections: localQuizSelections,
         onQuizAnswer: onQuizAnswer,
         onRetryGeneration: onRetryGeneration,
@@ -147,6 +150,7 @@ class _QuizTranscriptView extends StatefulWidget {
     required this.session,
     required this.currentUserId,
     required this.pendingKeys,
+    required this.pendingTextMessages,
     required this.localQuizSelections,
     required this.onQuizAnswer,
     required this.onRetryGeneration,
@@ -157,6 +161,7 @@ class _QuizTranscriptView extends StatefulWidget {
   final InteractiveSessionState session;
   final String? currentUserId;
   final Set<String> pendingKeys;
+  final List<PendingInteractiveTextMessage> pendingTextMessages;
   final Map<String, String> localQuizSelections;
   final QuizAnswerCallback onQuizAnswer;
   final VoidCallback onRetryGeneration;
@@ -216,6 +221,7 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
     final items = _QuizTranscriptItem.build(
       session: session,
       currentUserId: widget.currentUserId,
+      pendingTextMessages: widget.pendingTextMessages,
       localQuizSelections: widget.localQuizSelections,
     );
 
@@ -252,6 +258,8 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
 
 enum _QuizTranscriptItemKind {
   status,
+  aiMessage,
+  userMessage,
   question,
   progress,
   result,
@@ -268,9 +276,11 @@ class _QuizTranscriptItem {
     this.result,
     this.statusTitle,
     this.statusBody,
+    this.userText,
     this.statusIcon = CupertinoIcons.info_circle_fill,
     this.showLoading = false,
     this.isActiveQuestion = false,
+    this.isPending = false,
   });
 
   final _QuizTranscriptItemKind kind;
@@ -281,9 +291,11 @@ class _QuizTranscriptItem {
   final Map<String, dynamic>? result;
   final String? statusTitle;
   final String? statusBody;
-  final IconData statusIcon;
+  final String? userText;
+  final IconData? statusIcon;
   final bool showLoading;
   final bool isActiveQuestion;
+  final bool isPending;
 
   _QuizTranscriptItem copyWith({
     Map<String, dynamic>? result,
@@ -298,6 +310,7 @@ class _QuizTranscriptItem {
       result: result ?? this.result,
       statusTitle: statusTitle,
       statusBody: statusBody,
+      userText: userText,
       statusIcon: statusIcon,
       showLoading: showLoading,
       isActiveQuestion: isActiveQuestion ?? this.isActiveQuestion,
@@ -307,6 +320,7 @@ class _QuizTranscriptItem {
   static List<_QuizTranscriptItem> build({
     required InteractiveSessionState session,
     required String? currentUserId,
+    required List<PendingInteractiveTextMessage> pendingTextMessages,
     required Map<String, String> localQuizSelections,
   }) {
     final events = _dedupeEvents(session.events)
@@ -329,6 +343,54 @@ class _QuizTranscriptItem {
 
     for (final event in events) {
       switch (event.eventType) {
+        case 'topic_selection_started':
+          _addTopicPromptItems(
+            items: items,
+            baseSeq: event.seq,
+            event: event,
+            prompt:
+                (event.payload['prompt'] as String?) ??
+                'What topic do you want to play?',
+          );
+          break;
+        case 'topic_selected':
+          final topic = (event.payload['topic'] as String?)?.trim();
+          if (topic == null || topic.isEmpty) break;
+          items.add(
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.userMessage,
+              seq: event.seq,
+              event: event,
+              userText: topic,
+            ),
+          );
+          break;
+        case 'solo_user_message':
+          final text = (event.payload['text'] as String?)?.trim();
+          if (text == null || text.isEmpty) break;
+          items.add(
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.userMessage,
+              seq: event.seq,
+              event: event,
+              userText: text,
+            ),
+          );
+          break;
+        case 'interactive_turn':
+          final turn = InteractiveTurn.fromJson(event.payload);
+          final texts = _turnTexts(turn);
+          for (final text in texts) {
+            items.add(
+              _QuizTranscriptItem(
+                kind: _QuizTranscriptItemKind.aiMessage,
+                seq: event.seq,
+                event: event,
+                statusTitle: text,
+              ),
+            );
+          }
+          break;
         case 'question_generation_started':
           final round = (event.payload['round'] as num?)?.toInt();
           if (round != null && startedRounds.contains(round)) break;
@@ -456,6 +518,24 @@ class _QuizTranscriptItem {
       );
     }
 
+    final currentTurn = session.currentTurn;
+    if (currentTurn != null &&
+        !events.any(
+          (event) =>
+              event.eventType == 'interactive_turn' &&
+              event.seq == currentTurn.seq,
+        )) {
+      for (final text in _turnTexts(currentTurn)) {
+        items.add(
+          _QuizTranscriptItem(
+            kind: _QuizTranscriptItemKind.aiMessage,
+            seq: currentTurn.seq,
+            statusTitle: text,
+          ),
+        );
+      }
+    }
+
     final stateResult = (session.interactiveState['result'] as Map?)
         ?.cast<String, dynamic>();
     final stateResultQuestionId = (stateResult?['question_id'] as String?)
@@ -483,6 +563,17 @@ class _QuizTranscriptItem {
     final questionForCurrentRoundIsRendered =
         liveQuiz != null ||
         (currentRound != null && startedRounds.contains(currentRound));
+    if (phase == 'topic_selection' &&
+        !events.any((event) => event.eventType == 'topic_selection_started')) {
+      _addTopicPromptItems(
+        items: items,
+        baseSeq: session.lastSeq + 2,
+        prompt:
+            (session.interactiveState['topic_prompt'] as String?) ??
+            'Before I start throwing questions, what topic do you want?',
+      );
+    }
+
     final waitingForQuestion =
         (phase == 'generating_question' ||
             phase == 'question_generation_started') &&
@@ -550,7 +641,62 @@ class _QuizTranscriptItem {
       );
     }
 
+    for (var i = 0; i < pendingTextMessages.length; i += 1) {
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.userMessage,
+          seq: session.lastSeq + 1000 + i,
+          userText: pendingTextMessages[i].text,
+          isPending: true,
+        ),
+      );
+    }
+
     return items;
+  }
+
+  static void _addTopicPromptItems({
+    required List<_QuizTranscriptItem> items,
+    required int baseSeq,
+    required String prompt,
+    StorySessionEvent? event,
+  }) {
+    final chunks = _topicPromptChunks(prompt);
+    for (var i = 0; i < chunks.length; i += 1) {
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.status,
+          seq: baseSeq + i,
+          event: i == 0 ? event : null,
+          statusTitle: chunks[i],
+          statusBody: '',
+          statusIcon: null,
+        ),
+      );
+    }
+  }
+
+  static List<String> _topicPromptChunks(String value) {
+    final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized.isEmpty) return const ['What topic do you want to play?'];
+
+    final sentenceMatches = RegExp(r'[^.!?]+[.!?]*').allMatches(normalized);
+    var parts = sentenceMatches
+        .map((match) => match.group(0)?.trim() ?? '')
+        .where((part) => part.isNotEmpty)
+        .toList();
+
+    if (parts.length <= 1 && normalized.length > 90) {
+      parts = normalized
+          .split(RegExp(r'(?<=,)\s+'))
+          .map((part) => part.trim())
+          .where((part) => part.isNotEmpty)
+          .toList();
+    }
+    if (parts.isEmpty) parts = [normalized];
+    if (parts.length <= 3) return parts;
+
+    return [parts[0], parts[1], parts.skip(2).join(' ')];
   }
 
   static int _questionItemIndex(
@@ -562,6 +708,26 @@ class _QuizTranscriptItem {
           item.kind == _QuizTranscriptItemKind.question &&
           item.question?.questionId == questionId,
     );
+  }
+
+  static List<String> _turnTexts(InteractiveTurn turn) {
+    final texts = <String>[];
+    for (final block in turn.blocks) {
+      if (block case InteractiveTextBlock b) {
+        final text = b.text.trim();
+        if (text.isNotEmpty) texts.add(text);
+      } else if (block case InteractiveSystemBlock b) {
+        final text = b.text.trim();
+        if (text.isNotEmpty) texts.add(text);
+      } else if (block case InteractivePrivatePromptBlock b) {
+        final text = b.text.trim();
+        if (text.isNotEmpty) texts.add(text);
+      } else if (block case InteractiveChoiceGroupBlock b) {
+        final text = b.prompt.trim();
+        if (text.isNotEmpty) texts.add(text);
+      }
+    }
+    return texts;
   }
 
   static bool _isCurrentUserEvent(StorySessionEvent event, String? userId) {
@@ -630,6 +796,21 @@ class _QuizTranscriptRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (item.kind) {
+      _QuizTranscriptItemKind.aiMessage => _ChatMessageBubble(
+        child: Text(
+          item.statusTitle ?? '',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            height: 1.26,
+          ),
+        ),
+      ),
+      _QuizTranscriptItemKind.userMessage => _UserMessageBubble(
+        text: item.userText ?? '',
+        pending: item.isPending,
+      ),
       _QuizTranscriptItemKind.question => _QuestionTranscriptBubble(
         question: item.question!,
         session: session,
@@ -750,6 +931,64 @@ class _ChatMessageBubble extends StatelessWidget {
   }
 }
 
+class _UserMessageBubble extends StatelessWidget {
+  const _UserMessageBubble({required this.text, this.pending = false});
+
+  final String text;
+  final bool pending;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxWidth = MediaQuery.sizeOf(context).width * 0.64;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Flexible(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(18),
+                  topRight: Radius.circular(6),
+                  bottomLeft: Radius.circular(18),
+                  bottomRight: Radius.circular(18),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.14),
+                    offset: const Offset(0, 6),
+                    blurRadius: 16,
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 11,
+                ),
+                child: Opacity(
+                  opacity: pending ? 0.72 : 1,
+                  child: Text(
+                    text,
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      height: 1.25,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _QuizBotAvatar extends StatelessWidget {
   const _QuizBotAvatar({this.size = 20});
 
@@ -814,6 +1053,112 @@ class _QuestionTranscriptBubble extends StatelessWidget {
   }
 }
 
+class _AnimatedQuestionText extends StatefulWidget {
+  const _AnimatedQuestionText({
+    required this.questionId,
+    required this.text,
+    required this.style,
+    this.skipAnimation = false,
+    this.onComplete,
+  });
+
+  final String questionId;
+  final String text;
+  final TextStyle style;
+  final bool skipAnimation;
+  final VoidCallback? onComplete;
+
+  @override
+  State<_AnimatedQuestionText> createState() => _AnimatedQuestionTextState();
+}
+
+class _AnimatedQuestionTextState extends State<_AnimatedQuestionText> {
+  static const _tick = Duration(milliseconds: 22);
+
+  Timer? _timer;
+  List<String> _symbols = const <String>[];
+  int _visibleCount = 0;
+  bool _didNotifyComplete = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _restart();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedQuestionText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.questionId != widget.questionId ||
+        oldWidget.text != widget.text ||
+        oldWidget.skipAnimation != widget.skipAnimation) {
+      _restart();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _restart() {
+    _timer?.cancel();
+    _symbols = widget.text.runes
+        .map((value) => String.fromCharCode(value))
+        .toList(growable: false);
+    _didNotifyComplete = false;
+
+    if (_symbols.isEmpty) {
+      _visibleCount = 0;
+      _notifyComplete();
+      return;
+    }
+
+    if (widget.skipAnimation || _symbols.length == 1) {
+      _visibleCount = _symbols.length;
+      _notifyComplete();
+      return;
+    }
+
+    _visibleCount = 1;
+    final step = _revealStep(_symbols.length);
+    _timer = Timer.periodic(_tick, (timer) {
+      if (!mounted) return;
+      final nextCount = (_visibleCount + step).clamp(0, _symbols.length);
+      if (nextCount == _visibleCount) return;
+      setState(() => _visibleCount = nextCount);
+      if (_visibleCount >= _symbols.length) {
+        timer.cancel();
+        _notifyComplete();
+      }
+    });
+  }
+
+  int _revealStep(int length) {
+    if (length > 220) return 7;
+    if (length > 150) return 5;
+    if (length > 90) return 4;
+    if (length > 50) return 3;
+    if (length > 24) return 2;
+    return 1;
+  }
+
+  void _notifyComplete() {
+    if (_didNotifyComplete) return;
+    _didNotifyComplete = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onComplete?.call();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleText = _symbols.take(_visibleCount).join();
+    return Text(visibleText, style: widget.style);
+  }
+}
+
 class _PastQuizQuestionGroup extends StatelessWidget {
   const _PastQuizQuestionGroup({
     required this.question,
@@ -835,6 +1180,20 @@ class _PastQuizQuestionGroup extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if ((question.leadText ?? '').isNotEmpty) ...[
+          _ChatMessageBubble(
+            child: Text(
+              question.leadText!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                height: 1.26,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
         _ChatMessageBubble(
           child: Text(
             question.text,
@@ -1035,14 +1394,14 @@ class _QuizLoadingContentState extends State<_QuizLoadingContent>
 
 class _QuizStatusContent extends StatelessWidget {
   const _QuizStatusContent({
-    required this.icon,
+    this.icon,
     required this.title,
     required this.body,
     this.actionLabel,
     this.onAction,
   });
 
-  final IconData icon;
+  final IconData? icon;
   final String title;
   final String body;
   final String? actionLabel;
@@ -1055,13 +1414,15 @@ class _QuizStatusContent extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(icon, color: const Color(0xFF2563EB), size: 20),
-            const SizedBox(width: 8),
+            if (icon != null) ...[
+              Icon(icon, color: const Color(0xFF2563EB), size: 20),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Text(
                 title,
-                style: TextStyle(
-                  color: context.primaryTextColor,
+                style: const TextStyle(
+                  color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.w900,
                 ),
@@ -1074,7 +1435,7 @@ class _QuizStatusContent extends StatelessWidget {
           Text(
             body,
             style: TextStyle(
-              color: context.secondaryTextColor,
+              color: Colors.white.withValues(alpha: 0.78),
               fontSize: 13,
               height: 1.35,
             ),
@@ -1360,6 +1721,7 @@ class _LiveQuizQuestion {
     required this.correctOptionId,
     required this.currentRound,
     required this.totalRounds,
+    this.leadText,
     this.expiresAt,
     this.explanation,
   });
@@ -1370,6 +1732,7 @@ class _LiveQuizQuestion {
   final String correctOptionId;
   final int currentRound;
   final int totalRounds;
+  final String? leadText;
   final DateTime? expiresAt;
   final String? explanation;
 
@@ -1398,6 +1761,7 @@ class _LiveQuizQuestion {
       correctOptionId: correctOptionId,
       currentRound: (state['current_round'] as num?)?.toInt() ?? 1,
       totalRounds: (state['total_rounds'] as num?)?.toInt() ?? 1,
+      leadText: (question['lead_text'] as String?)?.trim(),
       expiresAt: _parseQuizDate(question['expires_at']),
       explanation: (question['explanation'] as String?)?.trim(),
     );
@@ -1431,6 +1795,7 @@ class _LiveQuizQuestion {
           (state['current_round'] as num?)?.toInt() ??
           1,
       totalRounds: (state['total_rounds'] as num?)?.toInt() ?? 1,
+      leadText: (question['lead_text'] as String?)?.trim(),
       expiresAt: _parseQuizDate(question['expires_at']),
       explanation: (question['explanation'] as String?)?.trim(),
     );
@@ -1458,6 +1823,7 @@ class _LiveQuizBlock extends StatefulWidget {
 
 class _LiveQuizBlockState extends State<_LiveQuizBlock> {
   Timer? _timer;
+  bool _questionRevealComplete = false;
 
   @override
   void initState() {
@@ -1465,6 +1831,17 @@ class _LiveQuizBlockState extends State<_LiveQuizBlock> {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant _LiveQuizBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.question.questionId != widget.question.questionId) {
+      _questionRevealComplete = false;
+    }
+    if (widget.selectedOptionId != null) {
+      _questionRevealComplete = true;
+    }
   }
 
   @override
@@ -1481,6 +1858,8 @@ class _LiveQuizBlockState extends State<_LiveQuizBlock> {
     final isCorrect = selected == question.correctOptionId;
     final seconds = _remainingSeconds(question.expiresAt);
     final isExpired = question.expiresAt != null && seconds == 0;
+    final skipReveal = _shouldSkipQuestionReveal(question, selected, seconds);
+    final questionReady = _questionRevealComplete || skipReveal;
     final answeredCount = _intFromState(
       widget.session.interactiveState['answered_count'],
       fallback:
@@ -1508,8 +1887,15 @@ class _LiveQuizBlockState extends State<_LiveQuizBlock> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  question.text,
+                child: _AnimatedQuestionText(
+                  questionId: question.questionId,
+                  text: question.text,
+                  skipAnimation: skipReveal,
+                  onComplete: () {
+                    if (!_questionRevealComplete && mounted) {
+                      setState(() => _questionRevealComplete = true);
+                    }
+                  },
                   style: TextStyle(
                     color: context.primaryTextColor,
                     fontSize: 17,
@@ -1555,20 +1941,21 @@ class _LiveQuizBlockState extends State<_LiveQuizBlock> {
             ),
             const SizedBox(height: 12),
           ],
-          for (final option in question.options) ...[
-            _OptionButton(
-              option: option,
-              busy: widget.busyOptionId == option.id,
-              disabled: answered || isExpired,
-              status: _statusForOption(
-                option.id,
-                selected,
-                question.correctOptionId,
+          if (questionReady)
+            for (final option in question.options) ...[
+              _OptionButton(
+                option: option,
+                busy: widget.busyOptionId == option.id,
+                disabled: answered || isExpired,
+                status: _statusForOption(
+                  option.id,
+                  selected,
+                  question.correctOptionId,
+                ),
+                onTap: () => widget.onSelected(option.id),
               ),
-              onTap: () => widget.onSelected(option.id),
-            ),
-            if (option != question.options.last) const SizedBox(height: 8),
-          ],
+              if (option != question.options.last) const SizedBox(height: 8),
+            ],
           if (isExpired && !answered) ...[
             const SizedBox(height: 12),
             Text(
@@ -1690,6 +2077,7 @@ class _LiveQuizQuestionGroup extends StatefulWidget {
 class _LiveQuizQuestionGroupState extends State<_LiveQuizQuestionGroup> {
   Timer? _timer;
   String? _draftOptionId;
+  bool _questionRevealComplete = false;
 
   @override
   void initState() {
@@ -1702,8 +2090,12 @@ class _LiveQuizQuestionGroupState extends State<_LiveQuizQuestionGroup> {
   @override
   void didUpdateWidget(covariant _LiveQuizQuestionGroup oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.question.questionId != widget.question.questionId ||
-        widget.selectedOptionId != null) {
+    if (oldWidget.question.questionId != widget.question.questionId) {
+      _questionRevealComplete = false;
+      _draftOptionId = null;
+    }
+    if (widget.selectedOptionId != null) {
+      _questionRevealComplete = true;
       _draftOptionId = null;
     }
   }
@@ -1722,6 +2114,12 @@ class _LiveQuizQuestionGroupState extends State<_LiveQuizQuestionGroup> {
     final answered = confirmedOptionId != null;
     final seconds = _LiveQuizBlockState._remainingSeconds(question.expiresAt);
     final isExpired = question.expiresAt != null && seconds == 0;
+    final skipReveal = _shouldSkipQuestionReveal(
+      question,
+      confirmedOptionId,
+      seconds,
+    );
+    final questionReady = _questionRevealComplete || skipReveal;
     final bubbleWidth = MediaQuery.sizeOf(context).width * 0.72;
     final draftLabel = _draftOptionId == null
         ? null
@@ -1730,13 +2128,34 @@ class _LiveQuizQuestionGroupState extends State<_LiveQuizQuestionGroup> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if ((question.leadText ?? '').isNotEmpty) ...[
+          _ChatMessageBubble(
+            child: Text(
+              question.leadText!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                height: 1.26,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
         _ChatMessageBubble(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  question.text,
+                child: _AnimatedQuestionText(
+                  questionId: question.questionId,
+                  text: question.text,
+                  skipAnimation: skipReveal,
+                  onComplete: () {
+                    if (!_questionRevealComplete && mounted) {
+                      setState(() => _questionRevealComplete = true);
+                    }
+                  },
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,
@@ -1752,35 +2171,40 @@ class _LiveQuizQuestionGroupState extends State<_LiveQuizQuestionGroup> {
             ],
           ),
         ),
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.only(left: 26),
-          child: SizedBox(
-            width: bubbleWidth,
-            child: Column(
-              children: [
-                for (final option in question.options) ...[
-                  _OptionButton(
-                    option: option,
-                    busy: widget.busyOptionId == option.id,
-                    disabled: answered || isExpired,
-                    quizStyle: true,
-                    status: selected == option.id
-                        ? _OptionStatus.selected
-                        : null,
-                    onTap: () {
-                      if (answered || isExpired) return;
-                      setState(() => _draftOptionId = option.id);
-                    },
-                  ),
-                  if (option != question.options.last)
-                    const SizedBox(height: 2),
+        if (questionReady) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 26),
+            child: SizedBox(
+              width: bubbleWidth,
+              child: Column(
+                children: [
+                  for (final option in question.options) ...[
+                    _OptionButton(
+                      option: option,
+                      busy: widget.busyOptionId == option.id,
+                      disabled: answered || isExpired,
+                      quizStyle: true,
+                      status: selected == option.id
+                          ? _OptionStatus.selected
+                          : null,
+                      onTap: () {
+                        if (answered || isExpired) return;
+                        setState(() => _draftOptionId = option.id);
+                      },
+                    ),
+                    if (option != question.options.last)
+                      const SizedBox(height: 2),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
-        ),
-        if (_draftOptionId != null && !answered && !isExpired) ...[
+        ],
+        if (questionReady &&
+            _draftOptionId != null &&
+            !answered &&
+            !isExpired) ...[
           const SizedBox(height: 10),
           _ChatMessageBubble(
             child: Row(
@@ -2744,6 +3168,16 @@ DateTime? _parseQuizDate(dynamic raw) {
     return DateTime.tryParse(hasTimezone ? value : '${value}Z')?.toUtc();
   }
   return null;
+}
+
+bool _shouldSkipQuestionReveal(
+  _LiveQuizQuestion question,
+  String? selectedOptionId,
+  int secondsRemaining,
+) {
+  if (selectedOptionId != null) return true;
+  if (question.expiresAt != null && secondsRemaining <= 6) return true;
+  return false;
 }
 
 int _intFromState(dynamic raw, {int fallback = 0}) {

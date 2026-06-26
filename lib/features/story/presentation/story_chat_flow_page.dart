@@ -420,6 +420,21 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final notifier = ref.read(interactiveStoryProvider.notifier);
     final session = state.session;
     final isQuizSession = session?.interactiveState['template'] == 'quiz';
+    final phase = (session?.interactiveState['phase'] as String?) ?? '';
+    final sessionType =
+        (session?.interactiveState['session_type'] as String?) ?? '';
+    final isSoloQuizTextPhase =
+        isQuizSession &&
+        sessionType == 'solo' &&
+        {
+          'topic_selection',
+          'mode_selection',
+          'discussion',
+          'timer_selection',
+          'post_question_prompt',
+        }.contains(phase);
+    final isGroupQuizSession =
+        isQuizSession && session?.interactiveState['session_type'] == 'group';
     final isDark = context.isDarkMode;
     final mutedSurface = isDark
         ? const Color(0xFF1A1A1A)
@@ -440,6 +455,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                         session: session,
                         currentUserId: currentUserId,
                         pendingKeys: state.pendingInputKeys,
+                        pendingTextMessages: state.pendingTextMessages,
                         localQuizSelections: state.localQuizSelections,
                         onRetryGeneration: () =>
                             unawaited(notifier.retryGeneration()),
@@ -466,7 +482,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                       ),
                     ),
             ),
-            if (!isQuizSession)
+            if (session != null && (!isQuizSession || isSoloQuizTextPhase))
               AnimatedPadding(
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeOut,
@@ -495,7 +511,14 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                               height: 1.35,
                             ),
                             decoration: InputDecoration(
-                              hintText: 'Message',
+                              hintText: switch (phase) {
+                                'topic_selection' => 'Topic or category',
+                                'mode_selection' =>
+                                  'Discuss first or quiz now?',
+                                'timer_selection' => 'Timed or untimed?',
+                                'post_question_prompt' => 'Reply here',
+                                _ => 'Message',
+                              },
                               hintStyle: TextStyle(
                                 color: mutedText,
                                 fontSize: 16,
@@ -537,11 +560,11 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                   ),
                 ),
               )
-            else
+            else if (session != null)
               _QuizGameBottomBar(onCall: widget.onCall),
           ],
         ),
-        if (isQuizSession && session != null)
+        if (isGroupQuizSession && session != null)
           Positioned(
             top: 0,
             left: 0,
@@ -1445,7 +1468,7 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Chat here or call Aura 🌝',
+              'Chat here or call Aura',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: secondaryTextColor,

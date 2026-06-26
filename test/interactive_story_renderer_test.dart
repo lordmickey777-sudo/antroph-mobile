@@ -69,7 +69,7 @@ void main() {
     expect(selected, 'paris');
   });
 
-  testWidgets('InteractiveStoryRenderer renders live quiz answered count', (
+  testWidgets('InteractiveStoryRenderer renders active quiz transcript', (
     tester,
   ) async {
     final session = InteractiveSessionState.fromJson({
@@ -123,10 +123,9 @@ void main() {
       ),
     );
 
-    expect(find.text('2/5'), findsOneWidget);
-    expect(find.text('1/2 answered'), findsOneWidget);
-    expect(find.text('Correct'), findsOneWidget);
-    expect(find.text('Waiting for others...'), findsOneWidget);
+    expect(find.text('Which planet is red?'), findsOneWidget);
+    expect(find.text('Mars'), findsOneWidget);
+    expect(find.text('Venus'), findsOneWidget);
   });
 
   testWidgets('InteractiveStoryRenderer renders results and final podium', (
@@ -160,6 +159,7 @@ void main() {
         'template': 'quiz',
         'phase': 'showing_results',
         'result': {
+          'question_id': 'q1',
           'correct_option_id': 'mars',
           'explanation': 'Mars is known as the red planet.',
           'answered_count': 2,
@@ -195,9 +195,8 @@ void main() {
       ),
     );
 
-    expect(find.text('Answer revealed'), findsOneWidget);
-    expect(find.text('Correct answer: mars'), findsOneWidget);
-    expect(find.text('Next question starting...'), findsOneWidget);
+    expect(find.text('Correct Answer: mars'), findsOneWidget);
+    expect(find.text('Mars is known as the red planet.'), findsOneWidget);
 
     final finalSession = InteractiveSessionState.fromJson({
       ...base,
@@ -242,4 +241,124 @@ void main() {
     expect(find.text('Replay'), findsOneWidget);
     expect(find.text('Leave'), findsOneWidget);
   });
+
+  testWidgets('InteractiveStoryRenderer renders pending user text at bottom', (
+    tester,
+  ) async {
+    final session = InteractiveSessionState.fromJson({
+      'session_id': 'session-1',
+      'story_id': 'story-1',
+      'interaction_mode': 'interactive',
+      'ai_role': 'host',
+      'interactive_state': {
+        'template': 'quiz',
+        'phase': 'discussion',
+        'session_type': 'solo',
+      },
+      'participants': [],
+      'events': [
+        {
+          'id': 'event-1',
+          'session_id': 'session-1',
+          'seq': 1,
+          'actor_type': 'ai',
+          'event_type': 'interactive_turn',
+          'payload': {
+            'type': 'interactive_turn.v1',
+            'session_id': 'session-1',
+            'turn_id': 'turn-1',
+            'seq': 1,
+            'speaker': {'type': 'ai', 'role': 'host'},
+            'blocks': [
+              {'kind': 'text', 'text': 'What topic do you want to discuss?'},
+            ],
+          },
+        },
+      ],
+      'last_seq': 1,
+      'is_completed': false,
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: InteractiveStoryRenderer(
+            session: session,
+            pendingTextMessages: const [
+              PendingInteractiveTextMessage(
+                clientId: 'pending-1',
+                text: 'Computer science',
+              ),
+            ],
+            onChoice: (_) {},
+            onQuizAnswer: (_, _) {},
+            onRetryGeneration: () {},
+            onReplay: () {},
+            onLeave: () {},
+          ),
+        ),
+      ),
+    );
+
+    final aiPosition = tester.getTopLeft(
+      find.text('What topic do you want to discuss?'),
+    );
+    final pendingPosition = tester.getTopLeft(find.text('Computer science'));
+
+    expect(find.text('Computer science'), findsOneWidget);
+    expect(pendingPosition.dy, greaterThan(aiPosition.dy));
+  });
+
+  testWidgets(
+    'InteractiveStoryRenderer shows untimed solo options after question reveal',
+    (tester) async {
+      final session = InteractiveSessionState.fromJson({
+        'session_id': 'session-1',
+        'story_id': 'story-1',
+        'interaction_mode': 'interactive',
+        'ai_role': 'host',
+        'interactive_state': {
+          'template': 'quiz',
+          'phase': 'question_active',
+          'session_type': 'solo',
+          'current_round': 1,
+          'total_rounds': 3,
+          'question': {
+            'question_id': 'q1',
+            'text': 'Which part of a computer stores files for the long term?',
+            'correct_option_id': 'ssd',
+            'options': [
+              {'id': 'cpu', 'label': 'CPU cache'},
+              {'id': 'ssd', 'label': 'SSD'},
+            ],
+          },
+        },
+        'participants': const [],
+        'events': const [],
+        'last_seq': 1,
+        'is_completed': false,
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: InteractiveStoryRenderer(
+              session: session,
+              onChoice: (_) {},
+              onQuizAnswer: (_, _) {},
+              onRetryGeneration: () {},
+              onReplay: () {},
+              onLeave: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+
+      expect(find.text('CPU cache'), findsOneWidget);
+      expect(find.text('SSD'), findsOneWidget);
+    },
+  );
 }

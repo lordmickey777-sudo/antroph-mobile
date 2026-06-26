@@ -481,6 +481,16 @@ class StorySessionEvent {
   }
 }
 
+class PendingInteractiveTextMessage {
+  const PendingInteractiveTextMessage({
+    required this.clientId,
+    required this.text,
+  });
+
+  final String clientId;
+  final String text;
+}
+
 class InteractiveSessionState {
   const InteractiveSessionState({
     required this.sessionId,

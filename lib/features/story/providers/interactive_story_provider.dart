@@ -17,6 +17,7 @@ class InteractiveStoryState {
     this.session,
     this.isLoading = false,
     this.pendingInputKeys = const <String>{},
+    this.pendingTextMessages = const <PendingInteractiveTextMessage>[],
     this.localQuizSelections = const <String, String>{},
     this.error,
   });
@@ -24,6 +25,7 @@ class InteractiveStoryState {
   final InteractiveSessionState? session;
   final bool isLoading;
   final Set<String> pendingInputKeys;
+  final List<PendingInteractiveTextMessage> pendingTextMessages;
   final Map<String, String> localQuizSelections;
   final String? error;
 
@@ -31,6 +33,7 @@ class InteractiveStoryState {
     InteractiveSessionState? session,
     bool? isLoading,
     Set<String>? pendingInputKeys,
+    List<PendingInteractiveTextMessage>? pendingTextMessages,
     Map<String, String>? localQuizSelections,
     Object? error = _unset,
   }) {
@@ -38,6 +41,7 @@ class InteractiveStoryState {
       session: session ?? this.session,
       isLoading: isLoading ?? this.isLoading,
       pendingInputKeys: pendingInputKeys ?? this.pendingInputKeys,
+      pendingTextMessages: pendingTextMessages ?? this.pendingTextMessages,
       localQuizSelections: localQuizSelections ?? this.localQuizSelections,
       error: error == _unset ? this.error : error as String?,
     );
@@ -211,26 +215,9 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       );
       final current = state.session;
       if (current == null) return;
-      final nextEvents = [...current.events, response.event];
-      if (response.turn != null) {
-        nextEvents.add(
-          StorySessionEvent(
-            id: response.turn!.turnId,
-            sessionId: sessionId,
-            seq: response.turn!.seq,
-            actorType: 'ai',
-            eventType: 'interactive_turn',
-            payload: response.turn!.toJson(),
-          ),
-        );
-      }
+      final mergedSession = _mergeResponseIntoSession(current, response);
       state = state.copyWith(
-        session: current.copyWith(
-          interactiveState: response.state,
-          events: nextEvents,
-          currentTurn: response.turn ?? current.currentTurn,
-          lastSeq: response.turn?.seq ?? response.event.seq,
-        ),
+        session: mergedSession,
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
       );
     } on ApiError catch (e) {
@@ -267,9 +254,14 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     if (sessionId == null || sessionId.isEmpty || trimmed.isEmpty) return;
     final key =
         '${state.session?.currentTurn?.turnId ?? state.session?.lastSeq}-text-${DateTime.now().millisecondsSinceEpoch}';
+    final pendingMessage = PendingInteractiveTextMessage(
+      clientId: key,
+      text: trimmed,
+    );
 
     state = state.copyWith(
       pendingInputKeys: {...state.pendingInputKeys, key},
+      pendingTextMessages: [...state.pendingTextMessages, pendingMessage],
       error: null,
     );
 
@@ -285,36 +277,22 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       );
       final current = state.session;
       if (current == null) return;
-      final nextEvents = [...current.events, response.event];
-      if (response.turn != null) {
-        nextEvents.add(
-          StorySessionEvent(
-            id: response.turn!.turnId,
-            sessionId: sessionId,
-            seq: response.turn!.seq,
-            actorType: 'ai',
-            eventType: 'interactive_turn',
-            payload: response.turn!.toJson(),
-          ),
-        );
-      }
+      final mergedSession = _mergeResponseIntoSession(current, response);
       state = state.copyWith(
-        session: current.copyWith(
-          interactiveState: response.state,
-          events: nextEvents,
-          currentTurn: response.turn ?? current.currentTurn,
-          lastSeq: response.turn?.seq ?? response.event.seq,
-        ),
+        session: mergedSession,
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
+        pendingTextMessages: _pendingTextMessagesExcluding(key),
       );
     } on ApiError catch (e) {
       state = state.copyWith(
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
+        pendingTextMessages: _pendingTextMessagesExcluding(key),
         error: e.message,
       );
     } catch (e) {
       state = state.copyWith(
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
+        pendingTextMessages: _pendingTextMessagesExcluding(key),
         error: '$e',
       );
     }
@@ -437,11 +415,30 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         <String, dynamic>{};
     final seq = (event['seq'] as num?)?.toInt() ?? current.lastSeq;
     final nextState = Map<String, dynamic>.from(current.interactiveState);
+    InteractiveTurn? nextTurn = current.currentTurn;
 
     switch (eventType) {
+      case 'topic_selection_started':
+        nextState
+          ..['template'] = 'quiz'
+          ..['phase'] = 'topic_selection'
+          ..['topic_prompt'] = payload['prompt'];
+        break;
+      case 'topic_selected':
+        _consumePendingTextByValue(payload['topic'] as String?);
+        nextState['selected_topic'] = payload['topic'];
+        break;
+      case 'solo_user_message':
+        _consumePendingTextByValue(payload['text'] as String?);
+        break;
+      case 'interactive_turn':
+        nextTurn = InteractiveTurn.fromJson(payload);
+        nextState.addAll(nextTurn.statePatch);
+        break;
       case 'question_generation_started':
         nextState
           ..['phase'] = 'generating_question'
+          ..['selected_topic'] = payload['topic'] ?? nextState['selected_topic']
           ..['current_round'] =
               (payload['round'] as num?)?.toInt() ?? nextState['current_round']
           ..['question'] = null
@@ -527,10 +524,15 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       session: current.copyWith(
         interactiveState: nextState,
         events: nextEvents,
+        currentTurn: nextTurn,
         lastSeq: seq > current.lastSeq ? seq : current.lastSeq,
       ),
     );
     _scheduleWaitingRefresh();
+  }
+
+  void applyRoomEventForTest(Map<String, dynamic> event) {
+    _applyRoomEvent(event);
   }
 
   void _scheduleWaitingRefresh() {
@@ -602,6 +604,74 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       return DateTime.tryParse(hasTimezone ? value : '${value}Z')?.toUtc();
     }
     return null;
+  }
+
+  InteractiveSessionState _mergeResponseIntoSession(
+    InteractiveSessionState current,
+    InteractiveInputResponse response,
+  ) {
+    final nextEvents = [...current.events];
+    if (!_hasEvent(nextEvents, response.event.seq, response.event.eventType)) {
+      nextEvents.add(response.event);
+    }
+    if (response.turn != null &&
+        !_hasEvent(nextEvents, response.turn!.seq, 'interactive_turn')) {
+      nextEvents.add(
+        StorySessionEvent(
+          id: response.turn!.turnId,
+          sessionId: current.sessionId,
+          seq: response.turn!.seq,
+          actorType: 'ai',
+          eventType: 'interactive_turn',
+          payload: response.turn!.toJson(),
+        ),
+      );
+    }
+    final responseSeq = response.turn?.seq ?? response.event.seq;
+    final currentTurn = current.currentTurn;
+    final nextTurn = switch ((currentTurn, response.turn)) {
+      (InteractiveTurn existing, InteractiveTurn incoming)
+          when existing.seq > incoming.seq =>
+        existing,
+      (_, InteractiveTurn incoming) => incoming,
+      _ => currentTurn,
+    };
+    return current.copyWith(
+      interactiveState: response.state,
+      events: nextEvents,
+      currentTurn: nextTurn,
+      lastSeq: responseSeq > current.lastSeq ? responseSeq : current.lastSeq,
+    );
+  }
+
+  bool _hasEvent(List<StorySessionEvent> events, int seq, String eventType) {
+    return events.any(
+      (event) => event.seq == seq && event.eventType == eventType,
+    );
+  }
+
+  List<PendingInteractiveTextMessage> _pendingTextMessagesExcluding(
+    String clientId,
+  ) {
+    return state.pendingTextMessages
+        .where((message) => message.clientId != clientId)
+        .toList();
+  }
+
+  void _consumePendingTextByValue(String? rawValue) {
+    final normalized = _normalizePendingText(rawValue);
+    if (normalized.isEmpty || state.pendingTextMessages.isEmpty) return;
+    final nextMessages = [...state.pendingTextMessages];
+    final index = nextMessages.indexWhere(
+      (message) => _normalizePendingText(message.text) == normalized,
+    );
+    if (index == -1) return;
+    nextMessages.removeAt(index);
+    state = state.copyWith(pendingTextMessages: nextMessages);
+  }
+
+  String _normalizePendingText(String? value) {
+    return (value ?? '').trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
   }
 }
 
