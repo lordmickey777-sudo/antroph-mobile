@@ -457,6 +457,9 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                         pendingKeys: state.pendingInputKeys,
                         pendingTextMessages: state.pendingTextMessages,
                         localQuizSelections: state.localQuizSelections,
+                        streamingAssistantText: state.streamingAssistantText,
+                        recentStreamedAssistantText:
+                            state.recentStreamedAssistantText,
                         onRetryGeneration: () =>
                             unawaited(notifier.retryGeneration()),
                         onReplay: () => unawaited(

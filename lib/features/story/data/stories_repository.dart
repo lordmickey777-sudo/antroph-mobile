@@ -125,7 +125,10 @@ class StoriesRepository {
     try {
       final res = await _dio.get(
         '/stories/$storyId',
-        options: Options(extra: const {'skipAuth': true}),
+        options: Options(
+          receiveTimeout: const Duration(seconds: 60),
+          extra: const {'skipAuth': true},
+        ),
       );
       final data = res.data as Map<String, dynamic>;
       return StoryDetailDto.fromJson(data);
@@ -240,7 +243,10 @@ class StoriesRepository {
       final res = await _dio.post(
         '/story-sessions/$sessionId/input',
         data: input.toJson(),
-        options: Options(validateStatus: (status) => (status ?? 0) < 500),
+        options: Options(
+          receiveTimeout: const Duration(seconds: 60),
+          validateStatus: (status) => (status ?? 0) < 500,
+        ),
       );
       if (res.statusCode == 409) {
         throw ApiError(

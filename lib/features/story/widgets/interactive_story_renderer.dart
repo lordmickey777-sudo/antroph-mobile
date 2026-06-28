@@ -22,6 +22,8 @@ class InteractiveStoryRenderer extends StatelessWidget {
     this.pendingKeys = const <String>{},
     this.pendingTextMessages = const <PendingInteractiveTextMessage>[],
     this.localQuizSelections = const <String, String>{},
+    this.streamingAssistantText,
+    this.recentStreamedAssistantText,
   });
 
   final InteractiveSessionState session;
@@ -34,6 +36,8 @@ class InteractiveStoryRenderer extends StatelessWidget {
   final Set<String> pendingKeys;
   final List<PendingInteractiveTextMessage> pendingTextMessages;
   final Map<String, String> localQuizSelections;
+  final String? streamingAssistantText;
+  final String? recentStreamedAssistantText;
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +53,9 @@ class InteractiveStoryRenderer extends StatelessWidget {
         pendingKeys: pendingKeys,
         pendingTextMessages: pendingTextMessages,
         localQuizSelections: localQuizSelections,
+        streamingAssistantText: streamingAssistantText,
+        recentStreamedAssistantText: recentStreamedAssistantText,
+        onChoice: onChoice,
         onQuizAnswer: onQuizAnswer,
         onRetryGeneration: onRetryGeneration,
         onReplay: onReplay,
@@ -152,6 +159,9 @@ class _QuizTranscriptView extends StatefulWidget {
     required this.pendingKeys,
     required this.pendingTextMessages,
     required this.localQuizSelections,
+    this.streamingAssistantText,
+    this.recentStreamedAssistantText,
+    required this.onChoice,
     required this.onQuizAnswer,
     required this.onRetryGeneration,
     required this.onReplay,
@@ -163,6 +173,9 @@ class _QuizTranscriptView extends StatefulWidget {
   final Set<String> pendingKeys;
   final List<PendingInteractiveTextMessage> pendingTextMessages;
   final Map<String, String> localQuizSelections;
+  final String? streamingAssistantText;
+  final String? recentStreamedAssistantText;
+  final ValueChanged<String> onChoice;
   final QuizAnswerCallback onQuizAnswer;
   final VoidCallback onRetryGeneration;
   final VoidCallback onReplay;
@@ -175,19 +188,34 @@ class _QuizTranscriptView extends StatefulWidget {
 class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
   final _controller = ScrollController();
   int _lastSeq = -1;
+  int _lastPendingCount = 0;
+  int _lastPendingKeyCount = 0;
+  String _lastStreamingAssistantText = '';
 
   @override
   void initState() {
     super.initState();
     _lastSeq = widget.session.lastSeq;
+    _lastPendingCount = widget.pendingTextMessages.length;
+    _lastPendingKeyCount = widget.pendingKeys.length;
+    _lastStreamingAssistantText = widget.streamingAssistantText ?? '';
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
   }
 
   @override
   void didUpdateWidget(covariant _QuizTranscriptView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.session.lastSeq != _lastSeq) {
+    final pendingCount = widget.pendingTextMessages.length;
+    final pendingKeyCount = widget.pendingKeys.length;
+    final streamingAssistantText = widget.streamingAssistantText ?? '';
+    if (widget.session.lastSeq != _lastSeq ||
+        pendingCount != _lastPendingCount ||
+        pendingKeyCount != _lastPendingKeyCount ||
+        streamingAssistantText != _lastStreamingAssistantText) {
       _lastSeq = widget.session.lastSeq;
+      _lastPendingCount = pendingCount;
+      _lastPendingKeyCount = pendingKeyCount;
+      _lastStreamingAssistantText = streamingAssistantText;
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
     }
   }
@@ -221,13 +249,15 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
     final items = _QuizTranscriptItem.build(
       session: session,
       currentUserId: widget.currentUserId,
+      pendingKeys: widget.pendingKeys,
       pendingTextMessages: widget.pendingTextMessages,
       localQuizSelections: widget.localQuizSelections,
+      streamingAssistantText: widget.streamingAssistantText,
     );
 
     return ListView(
       controller: _controller,
-      padding: const EdgeInsets.fromLTRB(2, 18, 2, 28),
+      padding: const EdgeInsets.fromLTRB(2, 42, 2, 28),
       children: [
         const SizedBox(height: 4),
         if (items.isEmpty)
@@ -244,10 +274,13 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
               item: item,
               session: session,
               pendingKeys: widget.pendingKeys,
+              recentStreamedAssistantText: widget.recentStreamedAssistantText,
+              onChoice: widget.onChoice,
               onQuizAnswer: widget.onQuizAnswer,
               onRetryGeneration: widget.onRetryGeneration,
               onReplay: widget.onReplay,
               onLeave: widget.onLeave,
+              onTextRevealTick: _scrollToBottom,
             ),
             const SizedBox(height: 10),
           ],
@@ -260,6 +293,9 @@ enum _QuizTranscriptItemKind {
   status,
   aiMessage,
   userMessage,
+  choiceGroup,
+  pendingAssistant,
+  streamingAssistant,
   question,
   progress,
   result,
@@ -278,6 +314,9 @@ class _QuizTranscriptItem {
     this.statusBody,
     this.userText,
     this.statusIcon = CupertinoIcons.info_circle_fill,
+    this.choicePrompt,
+    this.choiceOptions = const <InteractiveOption>[],
+    this.choiceTurnId,
     this.showLoading = false,
     this.isActiveQuestion = false,
     this.isPending = false,
@@ -293,6 +332,9 @@ class _QuizTranscriptItem {
   final String? statusBody;
   final String? userText;
   final IconData? statusIcon;
+  final String? choicePrompt;
+  final List<InteractiveOption> choiceOptions;
+  final String? choiceTurnId;
   final bool showLoading;
   final bool isActiveQuestion;
   final bool isPending;
@@ -312,16 +354,22 @@ class _QuizTranscriptItem {
       statusBody: statusBody,
       userText: userText,
       statusIcon: statusIcon,
+      choicePrompt: choicePrompt,
+      choiceOptions: choiceOptions,
+      choiceTurnId: choiceTurnId,
       showLoading: showLoading,
       isActiveQuestion: isActiveQuestion ?? this.isActiveQuestion,
+      isPending: isPending,
     );
   }
 
   static List<_QuizTranscriptItem> build({
     required InteractiveSessionState session,
     required String? currentUserId,
+    required Set<String> pendingKeys,
     required List<PendingInteractiveTextMessage> pendingTextMessages,
     required Map<String, String> localQuizSelections,
+    String? streamingAssistantText,
   }) {
     final events = _dedupeEvents(session.events)
       ..sort((a, b) => a.seq.compareTo(b.seq));
@@ -368,12 +416,13 @@ class _QuizTranscriptItem {
         case 'solo_user_message':
           final text = (event.payload['text'] as String?)?.trim();
           if (text == null || text.isEmpty) break;
+          final eventPhase = (event.payload['phase'] as String?)?.trim();
           items.add(
             _QuizTranscriptItem(
               kind: _QuizTranscriptItemKind.userMessage,
               seq: event.seq,
               event: event,
-              userText: text,
+              userText: _routeChoiceLabel(text, phase: eventPhase) ?? text,
             ),
           );
           break;
@@ -390,6 +439,9 @@ class _QuizTranscriptItem {
               ),
             );
           }
+          items.addAll(
+            _turnChoiceItems(turn, event.seq, phase: phase, event: event),
+          );
           break;
         case 'question_generation_started':
           final round = (event.payload['round'] as num?)?.toInt();
@@ -534,6 +586,9 @@ class _QuizTranscriptItem {
           ),
         );
       }
+      items.addAll(
+        _turnChoiceItems(currentTurn, currentTurn.seq, phase: phase),
+      );
     }
 
     final stateResult = (session.interactiveState['result'] as Map?)
@@ -565,13 +620,23 @@ class _QuizTranscriptItem {
         (currentRound != null && startedRounds.contains(currentRound));
     if (phase == 'topic_selection' &&
         !events.any((event) => event.eventType == 'topic_selection_started')) {
-      _addTopicPromptItems(
-        items: items,
-        baseSeq: session.lastSeq + 2,
-        prompt:
-            (session.interactiveState['topic_prompt'] as String?) ??
-            'Before I start throwing questions, what topic do you want?',
-      );
+      final topicPrompt = (session.interactiveState['topic_prompt'] as String?)
+          ?.trim();
+      if (topicPrompt != null && topicPrompt.isNotEmpty) {
+        _addTopicPromptItems(
+          items: items,
+          baseSeq: session.lastSeq + 2,
+          prompt: topicPrompt,
+        );
+      } else {
+        items.add(
+          _QuizTranscriptItem(
+            kind: _QuizTranscriptItemKind.pendingAssistant,
+            seq: session.lastSeq + 2,
+            showLoading: true,
+          ),
+        );
+      }
     }
 
     final waitingForQuestion =
@@ -651,6 +716,29 @@ class _QuizTranscriptItem {
         ),
       );
     }
+    final liveAssistantText = streamingAssistantText?.trim() ?? '';
+    final waitingForAssistant =
+        pendingTextMessages.isNotEmpty ||
+        pendingKeys.any(
+          (key) => key.contains('-text-') || key.contains('-option_select-'),
+        );
+    if (liveAssistantText.isNotEmpty) {
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.streamingAssistant,
+          seq: session.lastSeq + 2000 + pendingKeys.length,
+          statusTitle: liveAssistantText,
+        ),
+      );
+    } else if (waitingForAssistant) {
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.pendingAssistant,
+          seq: session.lastSeq + 2000 + pendingKeys.length,
+          showLoading: true,
+        ),
+      );
+    }
 
     return items;
   }
@@ -722,12 +810,47 @@ class _QuizTranscriptItem {
       } else if (block case InteractivePrivatePromptBlock b) {
         final text = b.text.trim();
         if (text.isNotEmpty) texts.add(text);
-      } else if (block case InteractiveChoiceGroupBlock b) {
-        final text = b.prompt.trim();
-        if (text.isNotEmpty) texts.add(text);
       }
     }
     return texts;
+  }
+
+  static List<_QuizTranscriptItem> _turnChoiceItems(
+    InteractiveTurn turn,
+    int seq, {
+    required String phase,
+    StorySessionEvent? event,
+  }) {
+    final items = <_QuizTranscriptItem>[];
+    for (final block in turn.blocks) {
+      if (block case InteractiveChoiceGroupBlock b) {
+        if (b.options.isEmpty) continue;
+        final choiceKind = (b.metadata['choice_kind'] as String?)?.trim();
+        if (choiceKind == 'solo_quiz_mode' && phase != 'mode_selection') {
+          continue;
+        }
+        items.add(
+          _QuizTranscriptItem(
+            kind: _QuizTranscriptItemKind.choiceGroup,
+            seq: seq,
+            event: event,
+            choicePrompt: b.prompt,
+            choiceOptions: b.options,
+            choiceTurnId: turn.turnId,
+          ),
+        );
+      }
+    }
+    return items;
+  }
+
+  static String? _routeChoiceLabel(String text, {String? phase}) {
+    if (phase != null && phase != 'mode_selection') return null;
+    return switch (text.trim().toLowerCase()) {
+      'chat' || 'discuss' || 'discussion' => 'Chat',
+      'quiz' || 'quiz_now' => 'Quiz',
+      _ => null,
+    };
   }
 
   static bool _isCurrentUserEvent(StorySessionEvent event, String? userId) {
@@ -779,26 +902,38 @@ class _QuizTranscriptRow extends StatelessWidget {
     required this.item,
     required this.session,
     required this.pendingKeys,
+    required this.recentStreamedAssistantText,
+    required this.onChoice,
     required this.onQuizAnswer,
     required this.onRetryGeneration,
     required this.onReplay,
     required this.onLeave,
+    required this.onTextRevealTick,
   });
 
   final _QuizTranscriptItem item;
   final InteractiveSessionState session;
   final Set<String> pendingKeys;
+  final String? recentStreamedAssistantText;
+  final ValueChanged<String> onChoice;
   final QuizAnswerCallback onQuizAnswer;
   final VoidCallback onRetryGeneration;
   final VoidCallback onReplay;
   final VoidCallback onLeave;
+  final VoidCallback onTextRevealTick;
 
   @override
   Widget build(BuildContext context) {
     return switch (item.kind) {
       _QuizTranscriptItemKind.aiMessage => _ChatMessageBubble(
-        child: Text(
-          item.statusTitle ?? '',
+        child: _StreamingTranscriptText(
+          id: _itemAnimationId(item),
+          text: item.statusTitle ?? '',
+          skipAnimation: _sameTranscriptText(
+            item.statusTitle,
+            recentStreamedAssistantText,
+          ),
+          onTick: onTextRevealTick,
           style: const TextStyle(
             color: Colors.white,
             fontSize: 13,
@@ -810,6 +945,27 @@ class _QuizTranscriptRow extends StatelessWidget {
       _QuizTranscriptItemKind.userMessage => _UserMessageBubble(
         text: item.userText ?? '',
         pending: item.isPending,
+      ),
+      _QuizTranscriptItemKind.choiceGroup => _ChoiceTranscriptBubble(
+        prompt: item.choicePrompt ?? '',
+        options: item.choiceOptions,
+        turnId: item.choiceTurnId,
+        pendingKeys: pendingKeys,
+        onSelected: onChoice,
+      ),
+      _QuizTranscriptItemKind.pendingAssistant => const _ChatMessageBubble(
+        child: _QuizLoadingContent(),
+      ),
+      _QuizTranscriptItemKind.streamingAssistant => _ChatMessageBubble(
+        child: Text(
+          item.statusTitle ?? '',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            height: 1.26,
+          ),
+        ),
       ),
       _QuizTranscriptItemKind.question => _QuestionTranscriptBubble(
         question: item.question!,
@@ -845,6 +1001,12 @@ class _QuizTranscriptRow extends StatelessWidget {
                 icon: item.statusIcon,
                 title: item.statusTitle ?? 'Game update',
                 body: item.statusBody ?? _lobbyText(session),
+                animationId: item.statusTitle == 'Question failed to load'
+                    ? null
+                    : _itemAnimationId(item),
+                onTextRevealTick: item.statusTitle == 'Question failed to load'
+                    ? null
+                    : onTextRevealTick,
                 actionLabel: item.statusTitle == 'Question failed to load'
                     ? 'Retry'
                     : null,
@@ -854,6 +1016,11 @@ class _QuizTranscriptRow extends StatelessWidget {
               ),
       ),
     };
+  }
+
+  String _itemAnimationId(_QuizTranscriptItem item) {
+    final eventId = item.event?.id ?? '';
+    return '${item.kind.name}-${item.seq}-$eventId-${item.statusTitle ?? ''}';
   }
 
   String? _busyOptionId(String questionId) {
@@ -1053,6 +1220,159 @@ class _QuestionTranscriptBubble extends StatelessWidget {
   }
 }
 
+class _ChoiceTranscriptBubble extends StatelessWidget {
+  const _ChoiceTranscriptBubble({
+    required this.prompt,
+    required this.options,
+    required this.turnId,
+    required this.pendingKeys,
+    required this.onSelected,
+  });
+
+  final String prompt;
+  final List<InteractiveOption> options;
+  final String? turnId;
+  final Set<String> pendingKeys;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 26),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (prompt.trim().isNotEmpty) ...[
+                Text(
+                  prompt.trim(),
+                  style: TextStyle(
+                    color: context.secondaryTextColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final option in options)
+                    _QuickReplyButton(
+                      option: option,
+                      busy: pendingKeys.contains(
+                        '$turnId-option_select-${option.id}',
+                      ),
+                      onTap: () => onSelected(option.id),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickReplyButton extends StatelessWidget {
+  const _QuickReplyButton({
+    required this.option,
+    required this.busy,
+    required this.onTap,
+  });
+
+  final InteractiveOption option;
+  final bool busy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final label = option.label.isEmpty ? option.id : option.label;
+    return Material(
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.16)
+          : Colors.black.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(24),
+      child: InkWell(
+        onTap: busy ? null : onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: context.primaryTextColor,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                ),
+              ),
+              if (busy) ...[
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: context.primaryTextColor,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StreamingTranscriptText extends StatelessWidget {
+  const _StreamingTranscriptText({
+    required this.id,
+    required this.text,
+    required this.style,
+    required this.onTick,
+    this.skipAnimation = false,
+  });
+
+  final String id;
+  final String text;
+  final TextStyle style;
+  final VoidCallback onTick;
+  final bool skipAnimation;
+
+  @override
+  Widget build(BuildContext context) {
+    return _AnimatedQuestionText(
+      questionId: id,
+      text: text,
+      style: style,
+      skipAnimation: skipAnimation,
+      onTick: onTick,
+    );
+  }
+}
+
+bool _sameTranscriptText(String? left, String? right) {
+  final normalizedLeft = _normalizeTranscriptText(left);
+  final normalizedRight = _normalizeTranscriptText(right);
+  return normalizedLeft.isNotEmpty && normalizedLeft == normalizedRight;
+}
+
+String _normalizeTranscriptText(String? text) {
+  return (text ?? '').trim().replaceAll(RegExp(r'\s+'), ' ');
+}
+
 class _AnimatedQuestionText extends StatefulWidget {
   const _AnimatedQuestionText({
     required this.questionId,
@@ -1060,6 +1380,7 @@ class _AnimatedQuestionText extends StatefulWidget {
     required this.style,
     this.skipAnimation = false,
     this.onComplete,
+    this.onTick,
   });
 
   final String questionId;
@@ -1067,6 +1388,7 @@ class _AnimatedQuestionText extends StatefulWidget {
   final TextStyle style;
   final bool skipAnimation;
   final VoidCallback? onComplete;
+  final VoidCallback? onTick;
 
   @override
   State<_AnimatedQuestionText> createState() => _AnimatedQuestionTextState();
@@ -1132,6 +1454,7 @@ class _AnimatedQuestionTextState extends State<_AnimatedQuestionText> {
         timer.cancel();
         _notifyComplete();
       }
+      widget.onTick?.call();
     });
   }
 
@@ -1397,6 +1720,8 @@ class _QuizStatusContent extends StatelessWidget {
     this.icon,
     required this.title,
     required this.body,
+    this.animationId,
+    this.onTextRevealTick,
     this.actionLabel,
     this.onAction,
   });
@@ -1404,6 +1729,8 @@ class _QuizStatusContent extends StatelessWidget {
   final IconData? icon;
   final String title;
   final String body;
+  final String? animationId;
+  final VoidCallback? onTextRevealTick;
   final String? actionLabel;
   final VoidCallback? onAction;
 
@@ -1419,14 +1746,25 @@ class _QuizStatusContent extends StatelessWidget {
               const SizedBox(width: 8),
             ],
             Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
+              child: animationId == null || onTextRevealTick == null
+                  ? Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    )
+                  : _StreamingTranscriptText(
+                      id: animationId!,
+                      text: title,
+                      onTick: onTextRevealTick!,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
             ),
           ],
         ),

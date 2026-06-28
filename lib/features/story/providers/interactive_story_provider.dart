@@ -19,6 +19,8 @@ class InteractiveStoryState {
     this.pendingInputKeys = const <String>{},
     this.pendingTextMessages = const <PendingInteractiveTextMessage>[],
     this.localQuizSelections = const <String, String>{},
+    this.streamingAssistantText,
+    this.recentStreamedAssistantText,
     this.error,
   });
 
@@ -27,6 +29,8 @@ class InteractiveStoryState {
   final Set<String> pendingInputKeys;
   final List<PendingInteractiveTextMessage> pendingTextMessages;
   final Map<String, String> localQuizSelections;
+  final String? streamingAssistantText;
+  final String? recentStreamedAssistantText;
   final String? error;
 
   InteractiveStoryState copyWith({
@@ -35,6 +39,8 @@ class InteractiveStoryState {
     Set<String>? pendingInputKeys,
     List<PendingInteractiveTextMessage>? pendingTextMessages,
     Map<String, String>? localQuizSelections,
+    Object? streamingAssistantText = _unset,
+    Object? recentStreamedAssistantText = _unset,
     Object? error = _unset,
   }) {
     return InteractiveStoryState(
@@ -43,6 +49,12 @@ class InteractiveStoryState {
       pendingInputKeys: pendingInputKeys ?? this.pendingInputKeys,
       pendingTextMessages: pendingTextMessages ?? this.pendingTextMessages,
       localQuizSelections: localQuizSelections ?? this.localQuizSelections,
+      streamingAssistantText: streamingAssistantText == _unset
+          ? this.streamingAssistantText
+          : streamingAssistantText as String?,
+      recentStreamedAssistantText: recentStreamedAssistantText == _unset
+          ? this.recentStreamedAssistantText
+          : recentStreamedAssistantText as String?,
       error: error == _unset ? this.error : error as String?,
     );
   }
@@ -199,6 +211,8 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       localQuizSelections: inputType == 'quiz_answer' && questionId != null
           ? {...state.localQuizSelections, questionId: optionId}
           : state.localQuizSelections,
+      streamingAssistantText: null,
+      recentStreamedAssistantText: null,
       error: null,
     );
 
@@ -216,9 +230,16 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       final current = state.session;
       if (current == null) return;
       final mergedSession = _mergeResponseIntoSession(current, response);
+      final streamedText = state.streamingAssistantText?.trim();
       state = state.copyWith(
         session: mergedSession,
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
+        pendingTextMessages: _pendingTextMessagesExcluding(key),
+        streamingAssistantText: null,
+        recentStreamedAssistantText:
+            streamedText == null || streamedText.isEmpty
+            ? _unset
+            : streamedText,
       );
     } on ApiError catch (e) {
       if (e.statusCode == 409) {
@@ -230,7 +251,9 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         }
         state = state.copyWith(
           pendingInputKeys: {...state.pendingInputKeys}..remove(key),
+          pendingTextMessages: _pendingTextMessagesExcluding(key),
           localQuizSelections: nextSelections,
+          streamingAssistantText: null,
           error: null,
         );
         await _refreshSilently();
@@ -238,11 +261,15 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       }
       state = state.copyWith(
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
+        pendingTextMessages: _pendingTextMessagesExcluding(key),
+        streamingAssistantText: null,
         error: e.message,
       );
     } catch (e) {
       state = state.copyWith(
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
+        pendingTextMessages: _pendingTextMessagesExcluding(key),
+        streamingAssistantText: null,
         error: '$e',
       );
     }
@@ -262,6 +289,8 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     state = state.copyWith(
       pendingInputKeys: {...state.pendingInputKeys, key},
       pendingTextMessages: [...state.pendingTextMessages, pendingMessage],
+      streamingAssistantText: null,
+      recentStreamedAssistantText: null,
       error: null,
     );
 
@@ -278,21 +307,29 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       final current = state.session;
       if (current == null) return;
       final mergedSession = _mergeResponseIntoSession(current, response);
+      final streamedText = state.streamingAssistantText?.trim();
       state = state.copyWith(
         session: mergedSession,
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
         pendingTextMessages: _pendingTextMessagesExcluding(key),
+        streamingAssistantText: null,
+        recentStreamedAssistantText:
+            streamedText == null || streamedText.isEmpty
+            ? _unset
+            : streamedText,
       );
     } on ApiError catch (e) {
       state = state.copyWith(
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
         pendingTextMessages: _pendingTextMessagesExcluding(key),
+        streamingAssistantText: null,
         error: e.message,
       );
     } catch (e) {
       state = state.copyWith(
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
         pendingTextMessages: _pendingTextMessagesExcluding(key),
+        streamingAssistantText: null,
         error: '$e',
       );
     }
@@ -413,16 +450,26 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     final payload =
         (event['payload'] as Map?)?.cast<String, dynamic>() ??
         <String, dynamic>{};
+    if (eventType == 'solo_assistant_stream') {
+      final text = (payload['text'] as String?)?.trim();
+      state = state.copyWith(
+        streamingAssistantText: text == null || text.isEmpty ? null : text,
+        recentStreamedAssistantText: null,
+      );
+      return;
+    }
     final seq = (event['seq'] as num?)?.toInt() ?? current.lastSeq;
     final nextState = Map<String, dynamic>.from(current.interactiveState);
     InteractiveTurn? nextTurn = current.currentTurn;
+    String? recentStreamedAssistantText;
 
     switch (eventType) {
       case 'topic_selection_started':
         nextState
           ..['template'] = 'quiz'
           ..['phase'] = 'topic_selection'
-          ..['topic_prompt'] = payload['prompt'];
+          ..['topic_prompt'] = payload['prompt']
+          ..['topic_prompt_status'] = 'ready';
         break;
       case 'topic_selected':
         _consumePendingTextByValue(payload['topic'] as String?);
@@ -432,6 +479,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         _consumePendingTextByValue(payload['text'] as String?);
         break;
       case 'interactive_turn':
+        recentStreamedAssistantText = state.streamingAssistantText?.trim();
         nextTurn = InteractiveTurn.fromJson(payload);
         nextState.addAll(nextTurn.statePatch);
         break;
@@ -527,6 +575,14 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         currentTurn: nextTurn,
         lastSeq: seq > current.lastSeq ? seq : current.lastSeq,
       ),
+      streamingAssistantText: eventType == 'interactive_turn'
+          ? null
+          : state.streamingAssistantText,
+      recentStreamedAssistantText:
+          recentStreamedAssistantText == null ||
+              recentStreamedAssistantText.isEmpty
+          ? _unset
+          : recentStreamedAssistantText,
     );
     _scheduleWaitingRefresh();
   }
@@ -540,6 +596,8 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     final session = state.session;
     if (session == null || session.isCompleted) return;
     final phase = session.interactiveState['phase'] as String?;
+    final topicPromptStatus =
+        session.interactiveState['topic_prompt_status'] as String?;
     final hasQuestion = session.interactiveState['question'] is Map;
     if (phase == 'question_active') {
       final expiresAt = _parseStateDate(session.interactiveState['expires_at']);
@@ -552,6 +610,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     final shouldPoll =
         phase == 'generating_question' ||
         phase == 'question_generation_started' ||
+        (phase == 'topic_selection' && topicPromptStatus == 'generating') ||
         phase == 'finalizing_question' ||
         phase == 'showing_results' ||
         (!hasQuestion && session.currentTurn == null);
