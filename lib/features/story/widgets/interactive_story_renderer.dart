@@ -378,6 +378,15 @@ class _QuizTranscriptItem {
         .map((event) => (event.payload['round'] as num?)?.toInt())
         .whereType<int>()
         .toSet();
+    final retriedFailedRounds = events
+        .where(
+          (event) =>
+              event.eventType == 'question_generation_started' &&
+              event.payload['retry'] == true,
+        )
+        .map((event) => (event.payload['round'] as num?)?.toInt())
+        .whereType<int>()
+        .toSet();
     final items = <_QuizTranscriptItem>[];
     final questionIds = <String>{};
     final resultQuestionIds = <String>{};
@@ -459,6 +468,12 @@ class _QuizTranscriptItem {
           );
           break;
         case 'generation_failed':
+          final round = (event.payload['round'] as num?)?.toInt();
+          if (round != null &&
+              (retriedFailedRounds.contains(round) ||
+                  startedRounds.contains(round))) {
+            break;
+          }
           items.add(
             _QuizTranscriptItem(
               kind: _QuizTranscriptItemKind.status,
