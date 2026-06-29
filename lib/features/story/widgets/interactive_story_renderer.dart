@@ -668,23 +668,29 @@ class _QuizTranscriptItem {
         currentRound != null &&
         currentRound >= totalRounds &&
         !session.isCompleted;
+    final waitingForPlayers = phase == 'waiting_for_players';
     final checkingAnswers = phase == 'finalizing_question';
 
     if ((waitingForQuestion ||
             waitingAfterResult ||
             waitingForFinalResults ||
+            waitingForPlayers ||
             checkingAnswers) &&
         (items.isEmpty || items.last.kind != _QuizTranscriptItemKind.status)) {
       items.add(
         _QuizTranscriptItem(
           kind: _QuizTranscriptItemKind.status,
           seq: session.lastSeq + 4,
-          statusTitle: waitingForFinalResults
+          statusTitle: waitingForPlayers
+              ? 'Waiting for players'
+              : waitingForFinalResults
               ? 'Calculating results...'
               : checkingAnswers
               ? 'Checking answers'
               : 'Aura is getting the next question ready',
-          statusBody: checkingAnswers ? _lobbyText(session) : '',
+          statusBody: (checkingAnswers || waitingForPlayers)
+              ? _lobbyText(session)
+              : '',
           statusIcon: CupertinoIcons.person_3_fill,
           showLoading:
               waitingForQuestion ||

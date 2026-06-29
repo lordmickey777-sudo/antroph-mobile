@@ -531,6 +531,13 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
           ..['question'] = null
           ..['result'] = null;
         break;
+      case 'quiz_waiting_for_players':
+        nextState
+          ..['phase'] = 'waiting_for_players'
+          ..['waiting_round'] = payload['round']
+          ..['waiting_reason'] = payload['reason']
+          ..['question'] = null;
+        break;
       case 'question_started':
         final question = payload['question'];
         if (question is Map) {
