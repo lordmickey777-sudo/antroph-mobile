@@ -174,6 +174,7 @@ class _QuizTranscriptView extends StatefulWidget {
 
 class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
   final _controller = ScrollController();
+  final Set<String> _completedTranscriptAnimationIds = <String>{};
   int _lastSeq = -1;
   int _lastPendingCount = 0;
   int _lastPendingKeyCount = 0;
@@ -230,6 +231,10 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
     );
   }
 
+  void _markTranscriptAnimationComplete(String id) {
+    _completedTranscriptAnimationIds.add(id);
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = widget.session;
@@ -244,7 +249,7 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
 
     return ListView(
       controller: _controller,
-      padding: const EdgeInsets.fromLTRB(2, 42, 2, 28),
+      padding: const EdgeInsets.fromLTRB(2, 14, 2, 28),
       children: [
         const SizedBox(height: 4),
         if (items.isEmpty)
@@ -268,6 +273,8 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
               onReplay: widget.onReplay,
               onLeave: widget.onLeave,
               onTextRevealTick: _scrollToBottom,
+              completedTranscriptAnimationIds: _completedTranscriptAnimationIds,
+              onTranscriptAnimationComplete: _markTranscriptAnimationComplete,
             ),
             const SizedBox(height: 10),
           ],
@@ -370,6 +377,9 @@ class _QuizTranscriptItem {
     final resultQuestionIds = <String>{};
     final answerQuestionIds = <String>{};
     final liveQuiz = _LiveQuizQuestion.fromState(session.interactiveState);
+    final stateQuestion = _LiveQuizQuestion.fromStateSnapshot(
+      session.interactiveState,
+    );
     final phase = (session.interactiveState['phase'] as String?) ?? '';
     final currentRound = (session.interactiveState['current_round'] as num?)
         ?.toInt();
@@ -527,6 +537,7 @@ class _QuizTranscriptItem {
     }
 
     if (liveQuiz != null && !questionIds.contains(liveQuiz.questionId)) {
+      questionIds.add(liveQuiz.questionId);
       items.add(
         _QuizTranscriptItem(
           kind: _QuizTranscriptItemKind.question,
@@ -547,24 +558,28 @@ class _QuizTranscriptItem {
       );
     }
 
-    final currentTurn = session.currentTurn;
-    if (currentTurn != null &&
-        !events.any(
-          (event) =>
-              event.eventType == 'interactive_turn' &&
-              event.seq == currentTurn.seq,
-        )) {
-      for (final text in _turnTexts(currentTurn)) {
-        items.add(
-          _QuizTranscriptItem(
-            kind: _QuizTranscriptItemKind.aiMessage,
-            seq: currentTurn.seq,
-            statusTitle: text,
-          ),
-        );
-      }
-      items.addAll(
-        _turnChoiceItems(currentTurn, currentTurn.seq, phase: phase),
+    if (stateQuestion != null &&
+        !questionIds.contains(stateQuestion.questionId)) {
+      questionIds.add(stateQuestion.questionId);
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.question,
+          seq: session.lastSeq + 1,
+          question: stateQuestion,
+          answer: localQuizSelections[stateQuestion.questionId] == null
+              ? null
+              : _UserQuizAnswer(
+                  questionId: stateQuestion.questionId,
+                  optionId: localQuizSelections[stateQuestion.questionId]!,
+                  optionLabel: _optionLabel(
+                    stateQuestion.options,
+                    localQuizSelections[stateQuestion.questionId]!,
+                  ),
+                ),
+          isActiveQuestion:
+              phase == 'question_active' &&
+              liveQuiz?.questionId == stateQuestion.questionId,
+        ),
       );
     }
 
@@ -589,6 +604,27 @@ class _QuizTranscriptItem {
           seq: session.lastSeq + 3,
           result: stateResult,
         ),
+      );
+    }
+
+    final currentTurn = session.currentTurn;
+    if (currentTurn != null &&
+        !events.any(
+          (event) =>
+              event.eventType == 'interactive_turn' &&
+              event.seq == currentTurn.seq,
+        )) {
+      for (final text in _turnTexts(currentTurn)) {
+        items.add(
+          _QuizTranscriptItem(
+            kind: _QuizTranscriptItemKind.aiMessage,
+            seq: currentTurn.seq,
+            statusTitle: text,
+          ),
+        );
+      }
+      items.addAll(
+        _turnChoiceItems(currentTurn, currentTurn.seq, phase: phase),
       );
     }
 
@@ -721,12 +757,10 @@ class _QuizTranscriptItem {
     for (var i = 0; i < chunks.length; i += 1) {
       items.add(
         _QuizTranscriptItem(
-          kind: _QuizTranscriptItemKind.status,
+          kind: _QuizTranscriptItemKind.aiMessage,
           seq: baseSeq + i,
           event: i == 0 ? event : null,
           statusTitle: chunks[i],
-          statusBody: '',
-          statusIcon: null,
         ),
       );
     }
@@ -877,6 +911,8 @@ class _QuizTranscriptRow extends StatelessWidget {
     required this.onReplay,
     required this.onLeave,
     required this.onTextRevealTick,
+    required this.completedTranscriptAnimationIds,
+    required this.onTranscriptAnimationComplete,
   });
 
   final _QuizTranscriptItem item;
@@ -889,27 +925,13 @@ class _QuizTranscriptRow extends StatelessWidget {
   final VoidCallback onReplay;
   final VoidCallback onLeave;
   final VoidCallback onTextRevealTick;
+  final Set<String> completedTranscriptAnimationIds;
+  final ValueChanged<String> onTranscriptAnimationComplete;
 
   @override
   Widget build(BuildContext context) {
     return switch (item.kind) {
-      _QuizTranscriptItemKind.aiMessage => _ChatMessageBubble(
-        child: _StreamingTranscriptText(
-          id: _itemAnimationId(item),
-          text: item.statusTitle ?? '',
-          skipAnimation: _sameTranscriptText(
-            item.statusTitle,
-            recentStreamedAssistantText,
-          ),
-          onTick: onTextRevealTick,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            height: 1.26,
-          ),
-        ),
-      ),
+      _QuizTranscriptItemKind.aiMessage => _buildAiMessage(),
       _QuizTranscriptItemKind.userMessage => _UserMessageBubble(
         text: item.userText ?? '',
         pending: item.isPending,
@@ -969,12 +991,6 @@ class _QuizTranscriptRow extends StatelessWidget {
                 icon: item.statusIcon,
                 title: item.statusTitle ?? 'Game update',
                 body: item.statusBody ?? _lobbyText(session),
-                animationId: item.statusTitle == 'Question failed to load'
-                    ? null
-                    : _itemAnimationId(item),
-                onTextRevealTick: item.statusTitle == 'Question failed to load'
-                    ? null
-                    : onTextRevealTick,
                 actionLabel: item.statusTitle == 'Question failed to load'
                     ? 'Retry'
                     : null,
@@ -986,9 +1002,43 @@ class _QuizTranscriptRow extends StatelessWidget {
     };
   }
 
+  Widget _buildAiMessage() {
+    final animationId = _itemAnimationId(item);
+    final skipAnimation =
+        completedTranscriptAnimationIds.contains(animationId) ||
+        !_shouldAnimateTranscriptItem(item) ||
+        _sameTranscriptText(item.statusTitle, recentStreamedAssistantText);
+
+    return _ChatMessageBubble(
+      child: _StreamingTranscriptText(
+        id: animationId,
+        text: item.statusTitle ?? '',
+        skipAnimation: skipAnimation,
+        onTick: onTextRevealTick,
+        onComplete: () => onTranscriptAnimationComplete(animationId),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          height: 1.26,
+        ),
+      ),
+    );
+  }
+
   String _itemAnimationId(_QuizTranscriptItem item) {
     final eventId = item.event?.id ?? '';
     return '${item.kind.name}-${item.seq}-$eventId-${item.statusTitle ?? ''}';
+  }
+
+  bool _shouldAnimateTranscriptItem(_QuizTranscriptItem item) {
+    if (item.kind != _QuizTranscriptItemKind.aiMessage &&
+        item.kind != _QuizTranscriptItemKind.status) {
+      return false;
+    }
+    final eventSeq = item.event?.seq;
+    if (eventSeq != null) return eventSeq == session.lastSeq;
+    return item.seq == session.lastSeq;
   }
 
   String? _busyOptionId(String questionId) {
@@ -1311,6 +1361,7 @@ class _StreamingTranscriptText extends StatelessWidget {
     required this.style,
     required this.onTick,
     this.skipAnimation = false,
+    this.onComplete,
   });
 
   final String id;
@@ -1318,6 +1369,7 @@ class _StreamingTranscriptText extends StatelessWidget {
   final TextStyle style;
   final VoidCallback onTick;
   final bool skipAnimation;
+  final VoidCallback? onComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -1327,6 +1379,7 @@ class _StreamingTranscriptText extends StatelessWidget {
       style: style,
       skipAnimation: skipAnimation,
       onTick: onTick,
+      onComplete: onComplete,
     );
   }
 }
@@ -1688,8 +1741,6 @@ class _QuizStatusContent extends StatelessWidget {
     this.icon,
     required this.title,
     required this.body,
-    this.animationId,
-    this.onTextRevealTick,
     this.actionLabel,
     this.onAction,
   });
@@ -1697,8 +1748,6 @@ class _QuizStatusContent extends StatelessWidget {
   final IconData? icon;
   final String title;
   final String body;
-  final String? animationId;
-  final VoidCallback? onTextRevealTick;
   final String? actionLabel;
   final VoidCallback? onAction;
 
@@ -1730,25 +1779,14 @@ class _QuizStatusContent extends StatelessWidget {
               const SizedBox(width: 8),
             ],
             Expanded(
-              child: animationId == null || onTextRevealTick == null
-                  ? Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    )
-                  : _StreamingTranscriptText(
-                      id: animationId!,
-                      text: title,
-                      onTick: onTextRevealTick!,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ],
         ),
@@ -2060,6 +2098,10 @@ class _LiveQuizQuestion {
 
   static _LiveQuizQuestion? fromState(Map<String, dynamic> state) {
     if (state['phase'] != 'question_active') return null;
+    return fromStateSnapshot(state);
+  }
+
+  static _LiveQuizQuestion? fromStateSnapshot(Map<String, dynamic> state) {
     final raw = state['question'];
     if (raw is! Map) return null;
     final question = raw.cast<String, dynamic>();
