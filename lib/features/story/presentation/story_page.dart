@@ -25,6 +25,7 @@ import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
 import 'package:antroph_mobile/features/community_stories/providers/community_stories_providers.dart';
 import 'package:antroph_mobile/features/community_stories/models/community_story_model.dart';
 import 'package:antroph_mobile/features/community_stories/presentation/community_browse_page.dart';
+import 'package:antroph_mobile/features/community_stories/data/community_stories_cache.dart';
 
 class StoryPage extends ConsumerStatefulWidget {
   const StoryPage({super.key});
@@ -33,9 +34,20 @@ class StoryPage extends ConsumerStatefulWidget {
   ConsumerState<StoryPage> createState() => _StoryPageState();
 }
 
-class _StoryPageState extends ConsumerState<StoryPage> with AutomaticKeepAliveClientMixin {
+class _StoryPageState extends ConsumerState<StoryPage>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+
+  Future<void> _refreshStoriesHome() async {
+    await CommunityStoriesCacheService.clear(categoryId: null);
+    ref.invalidate(communityBrowseProvider(null));
+    await Future.wait([
+      ref.read(storiesHomeSectionsProvider.notifier).refreshNow(),
+      ref.read(continuePlayingProvider.notifier).refreshNow(),
+      ref.read(communityBrowseProvider(null).future),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,38 +57,33 @@ class _StoryPageState extends ConsumerState<StoryPage> with AutomaticKeepAliveCl
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF141718) : const Color(0xFFF5F5F7),
+      backgroundColor: isDark
+          ? const Color(0xFF141718)
+          : const Color(0xFFF5F5F7),
       body: asyncHome.when(
         loading: () => const StoryPageShimmer(),
         error: (err, st) {
           final msg = err is ApiError ? err.message : 'Failed to load stories.';
-          return _ErrorView(
-            message: msg,
-            onRetry: () async {
-              ref.invalidate(continuePlayingProvider);
-              final refreshed = ref.refresh(storiesHomeSectionsProvider.future);
-              await refreshed;
-            },
-          );
+          return _ErrorView(message: msg, onRetry: _refreshStoriesHome);
         },
         data: (data) {
           final sections = data.sections;
           final featuredStories = data.featuredStories;
-          final continueStories = asyncContinue.asData?.value ?? const <ContinuePlayingDto>[];
-          if (sections.isEmpty && featuredStories.isEmpty && continueStories.isEmpty) {
-            return _EmptyView(
-              onRefresh: () async {
-                ref.invalidate(continuePlayingProvider);
-                final refreshed = ref.refresh(storiesHomeSectionsProvider.future);
-                await refreshed;
-              },
-            );
+          final continueStories =
+              asyncContinue.asData?.value ?? const <ContinuePlayingDto>[];
+          if (sections.isEmpty &&
+              featuredStories.isEmpty &&
+              continueStories.isEmpty) {
+            return _EmptyView(onRefresh: _refreshStoriesHome);
           }
 
           return ScrollFadeGradient(
             child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
               slivers: [
+                CupertinoSliverRefreshControl(onRefresh: _refreshStoriesHome),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
@@ -84,7 +91,11 @@ class _StoryPageState extends ConsumerState<StoryPage> with AutomaticKeepAliveCl
                       bottom: false,
                       child: Row(
                         children: [
-                          Image.asset('assets/images/app_logo.png', width: 38, height: 38),
+                          Image.asset(
+                            'assets/images/app_logo.png',
+                            width: 38,
+                            height: 38,
+                          ),
                           const SizedBox(width: 2),
                           TypographyText(
                             'Explore',
@@ -95,13 +106,6 @@ class _StoryPageState extends ConsumerState<StoryPage> with AutomaticKeepAliveCl
                       ),
                     ),
                   ),
-                ),
-                CupertinoSliverRefreshControl(
-                  onRefresh: () async {
-                    ref.invalidate(continuePlayingProvider);
-                    final refreshed = ref.refresh(storiesHomeSectionsProvider.future);
-                    await refreshed;
-                  },
                 ),
                 if (continueStories.isNotEmpty)
                   _ContinuePlayingSliver(
@@ -130,7 +134,11 @@ class _StoryPageState extends ConsumerState<StoryPage> with AutomaticKeepAliveCl
     );
   }
 
-  Future<void> _playStoryCard(BuildContext context, WidgetRef ref, StoryCardDto card) async {
+  Future<void> _playStoryCard(
+    BuildContext context,
+    WidgetRef ref,
+    StoryCardDto card,
+  ) async {
     _openStorySheet(
       context,
       storyId: card.storyId,
@@ -185,7 +193,11 @@ class _StoryPageState extends ConsumerState<StoryPage> with AutomaticKeepAliveCl
     );
   }
 
-  Future<void> _resumeStory(BuildContext context, WidgetRef ref, ContinuePlayingDto story) async {
+  Future<void> _resumeStory(
+    BuildContext context,
+    WidgetRef ref,
+    ContinuePlayingDto story,
+  ) async {
     await _startStory(
       context,
       ref,
@@ -236,7 +248,11 @@ class _StoryPageState extends ConsumerState<StoryPage> with AutomaticKeepAliveCl
 }
 
 class _FeaturedStoryCard extends StatelessWidget {
-  const _FeaturedStoryCard({required this.story, required this.onTap, this.textOpacity = 1.0});
+  const _FeaturedStoryCard({
+    required this.story,
+    required this.onTap,
+    this.textOpacity = 1.0,
+  });
 
   final FeaturedStoryDto story;
   final VoidCallback onTap;
@@ -270,7 +286,11 @@ class _FeaturedStoryCard extends StatelessWidget {
                   ),
                 ),
                 if (story.isPremium)
-                  const Positioned(right: 20, bottom: 34, child: PremiumStar(size: 24)),
+                  const Positioned(
+                    right: 20,
+                    bottom: 34,
+                    child: PremiumStar(size: 24),
+                  ),
                 Positioned(
                   left: 20,
                   right: 20,
@@ -304,7 +324,10 @@ class _FeaturedStoryCard extends StatelessWidget {
                           label: 'Tap to start',
                           backgroundColor: context.actionButtonBackground,
                           foregroundColor: context.actionButtonForeground,
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 24,
+                          ),
                           variant: TypographyVariant.body1,
                           fontWeight: FontWeight.w600,
                         ),
@@ -328,7 +351,8 @@ class _FeaturedStoriesCarousel extends StatefulWidget {
   final void Function(FeaturedStoryDto story) onTap;
 
   @override
-  State<_FeaturedStoriesCarousel> createState() => _FeaturedStoriesCarouselState();
+  State<_FeaturedStoriesCarousel> createState() =>
+      _FeaturedStoriesCarouselState();
 }
 
 class _FeaturedStoriesCarouselState extends State<_FeaturedStoriesCarousel> {
@@ -398,14 +422,17 @@ class _FeaturedStoriesCarouselState extends State<_FeaturedStoriesCarousel> {
                     // Calculate text opacity based on how centered this card is
                     double textOpacity = 1.0;
                     if (_pageController.position.haveDimensions) {
-                      final page = _pageController.page ?? _currentPage.toDouble();
+                      final page =
+                          _pageController.page ?? _currentPage.toDouble();
                       final distance = (page - index).abs();
                       // Fade out quickly as we scroll away (opacity goes from 1 to 0 as distance goes from 0 to 0.5)
                       textOpacity = (1.0 - (distance * 2)).clamp(0.0, 1.0);
                     }
 
                     return Padding(
-                      padding: EdgeInsets.symmetric(horizontal: horizontalPadding * 0.1),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: horizontalPadding * 0.1,
+                      ),
                       child: _FeaturedStoryCard(
                         story: story,
                         onTap: () => widget.onTap(story),
@@ -593,7 +620,11 @@ class _StoryCard extends StatelessWidget {
                   ),
                 ),
                 if (item.isPremium)
-                  const Positioned(top: 8, right: 8, child: PremiumStar(size: 18)),
+                  const Positioned(
+                    top: 8,
+                    right: 8,
+                    child: PremiumStar(size: 18),
+                  ),
               ],
             ),
           ),
@@ -644,11 +675,16 @@ class _ContinueStoryCard extends StatelessWidget {
                 left: 10,
                 top: 10,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.45),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
                   ),
                   child: TypographyText(
                     '${progress.round()}%',
@@ -681,7 +717,9 @@ class _ContinueStoryCard extends StatelessWidget {
                         value: progress / 100,
                         minHeight: 6,
                         backgroundColor: Colors.white.withValues(alpha: 0.2),
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
                       ),
                     ),
                   ],
@@ -768,7 +806,8 @@ class _CommunityStoriesSliver extends ConsumerWidget {
     final asyncCommunity = ref.watch(communityBrowseProvider(null));
 
     return asyncCommunity.when(
-      loading: () => const SliverToBoxAdapter(child: _CommunityStoriesSliverShimmer()),
+      loading: () =>
+          const SliverToBoxAdapter(child: _CommunityStoriesSliverShimmer()),
       error: (_, __) => const SliverToBoxAdapter(child: SizedBox.shrink()),
       data: (stories) {
         if (stories.isEmpty) {
@@ -792,9 +831,11 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                       fontWeight: FontWeight.w600,
                     ),
                     GestureDetector(
-                      onTap: () => Navigator.of(
-                        context,
-                      ).push(MaterialPageRoute(builder: (_) => const CommunityBrowsePage())),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const CommunityBrowsePage(),
+                        ),
+                      ),
                       child: TypographyText(
                         'See All',
                         variant: TypographyVariant.body2,
@@ -876,7 +917,9 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: story.coverImageUrl != null && story.coverImageUrl!.isNotEmpty
+                    child:
+                        story.coverImageUrl != null &&
+                            story.coverImageUrl!.isNotEmpty
                         ? Image.network(
                             story.coverImageUrl!,
                             width: double.infinity,
@@ -915,7 +958,8 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                       ),
                     ),
                   ],
-                  if (story.description != null && story.description!.isNotEmpty) ...[
+                  if (story.description != null &&
+                      story.description!.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Text(
                       story.description!,
@@ -934,7 +978,10 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                       children: story.themes
                           .map(
                             (t) => Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: isDark
                                     ? Colors.white.withValues(alpha: 0.08)
@@ -944,7 +991,9 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                               child: Text(
                                 t,
                                 style: TextStyle(
-                                  color: isDark ? Colors.white70 : Colors.black54,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : Colors.black54,
                                   fontSize: 13,
                                 ),
                               ),
@@ -962,7 +1011,10 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                         label: 'Continue',
                         backgroundColor: isDark ? Colors.white : Colors.black,
                         foregroundColor: isDark ? Colors.black : Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 28),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 14,
+                          horizontal: 28,
+                        ),
                         variant: TypographyVariant.body1,
                         fontWeight: FontWeight.w600,
                       );
@@ -1034,7 +1086,8 @@ class _CommunityStoryCompactCard extends StatelessWidget {
       return Image.network(
         coverUrl,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Image.asset('assets/images/default.png', fit: BoxFit.cover),
+        errorBuilder: (_, __, ___) =>
+            Image.asset('assets/images/default.png', fit: BoxFit.cover),
       );
     }
     final thumb = story.riveElement?.thumbnailUrl;
@@ -1042,7 +1095,8 @@ class _CommunityStoryCompactCard extends StatelessWidget {
       return Image.network(
         thumb,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Image.asset('assets/images/default.png', fit: BoxFit.cover),
+        errorBuilder: (_, __, ___) =>
+            Image.asset('assets/images/default.png', fit: BoxFit.cover),
       );
     }
     return Image.asset('assets/images/default.png', fit: BoxFit.cover);
@@ -1105,7 +1159,10 @@ class _CommunityStoryCompactCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         story.creatorName!,
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 11,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1143,7 +1200,9 @@ class _EmptyView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
-      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
       slivers: [
         CupertinoSliverRefreshControl(onRefresh: onRefresh),
         const SliverFillRemaining(
@@ -1166,7 +1225,9 @@ class _ErrorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
-      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
       slivers: [
         CupertinoSliverRefreshControl(onRefresh: onRetry),
         SliverFillRemaining(

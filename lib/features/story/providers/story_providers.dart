@@ -34,7 +34,9 @@ final riveRegistryServiceProvider = Provider<RiveRegistryService>((ref) {
 /// Stable boolean derived from auth state.
 /// Only changes on login/logout, not during loading transitions.
 final _isAuthenticatedProvider = Provider<bool>((ref) {
-  return ref.watch(authControllerProvider.select((v) => v.asData?.value != null));
+  return ref.watch(
+    authControllerProvider.select((v) => v.asData?.value != null),
+  );
 });
 
 /// Hybrid provider: returns cached data immediately when available, then refreshes from network.
@@ -53,17 +55,15 @@ class StoriesHomeSectionsNotifier extends AsyncNotifier<StoriesHomeResponse> {
     );
 
     if (cached != null) {
-      print('DEBUG: storiesHomeSectionsProvider - CACHE HIT');
       unawaited(riveRegistry.syncManifest().catchError((_) {}));
       _preloadStoryMascots(riveRegistry, cached);
-      
+
       // Trigger background refresh to update the UI if data changed on backend
       _refreshInBackground(repo, riveRegistry, isAuthenticated);
-      
+
       return cached;
     }
 
-    print('DEBUG: storiesHomeSectionsProvider - CACHE MISS');
     return _fetchFromNetwork(repo, riveRegistry, isAuthenticated);
   }
 
@@ -74,15 +74,14 @@ class StoriesHomeSectionsNotifier extends AsyncNotifier<StoriesHomeResponse> {
   ) async {
     try {
       final fresh = await repo.fetchHomeSections();
-      print('DEBUG: storiesHomeSectionsProvider - Background Refresh Success');
       await StoriesCacheService.save(fresh, isAuthenticated: isAuthenticated);
       unawaited(riveRegistry.syncManifest().catchError((_) {}));
       _preloadStoryMascots(riveRegistry, fresh);
-      
+
       // Update state so UI reflects the new data from backend
       state = AsyncData(fresh);
-    } catch (e) {
-      print('DEBUG: storiesHomeSectionsProvider - Background Refresh Error: $e');
+    } catch (_) {
+      // Keep cached content visible when a background refresh fails.
     }
   }
 
@@ -97,12 +96,20 @@ class StoriesHomeSectionsNotifier extends AsyncNotifier<StoriesHomeResponse> {
     _preloadStoryMascots(riveRegistry, res);
     return res;
   }
+
+  Future<void> refreshNow() async {
+    final repo = ref.read(storiesRepositoryProvider);
+    final riveRegistry = ref.read(riveRegistryServiceProvider);
+    final isAuthenticated = ref.read(_isAuthenticatedProvider);
+    final fresh = await _fetchFromNetwork(repo, riveRegistry, isAuthenticated);
+    state = AsyncData(fresh);
+  }
 }
 
 final storiesHomeSectionsProvider =
     AsyncNotifierProvider<StoriesHomeSectionsNotifier, StoriesHomeResponse>(
-  StoriesHomeSectionsNotifier.new,
-);
+      StoriesHomeSectionsNotifier.new,
+    );
 
 class ContinuePlayingNotifier extends AsyncNotifier<List<ContinuePlayingDto>> {
   @override
@@ -115,12 +122,10 @@ class ContinuePlayingNotifier extends AsyncNotifier<List<ContinuePlayingDto>> {
     // Return disk cache immediately while refreshing in background
     final cached = await ContinuePlayingCacheService.load();
     if (cached != null) {
-      print('DEBUG: continuePlayingProvider - CACHE HIT');
       _refreshInBackground(repo);
       return cached;
     }
 
-    print('DEBUG: continuePlayingProvider - CACHE MISS');
     final res = await repo.fetchContinuePlaying();
     await ContinuePlayingCacheService.save(res);
     return res;
@@ -129,19 +134,30 @@ class ContinuePlayingNotifier extends AsyncNotifier<List<ContinuePlayingDto>> {
   Future<void> _refreshInBackground(StoriesRepository repo) async {
     try {
       final fresh = await repo.fetchContinuePlaying();
-      print('DEBUG: continuePlayingProvider - Background Refresh Success');
       await ContinuePlayingCacheService.save(fresh);
       state = AsyncData(fresh);
-    } catch (e) {
-      print('DEBUG: continuePlayingProvider - Background Refresh Error: $e');
+    } catch (_) {
+      // Keep cached content visible when a background refresh fails.
     }
+  }
+
+  Future<void> refreshNow() async {
+    final isAuthenticated = ref.read(_isAuthenticatedProvider);
+    if (!isAuthenticated) {
+      state = const AsyncData([]);
+      return;
+    }
+    final repo = ref.read(storiesRepositoryProvider);
+    final fresh = await repo.fetchContinuePlaying();
+    await ContinuePlayingCacheService.save(fresh);
+    state = AsyncData(fresh);
   }
 }
 
 final continuePlayingProvider =
     AsyncNotifierProvider<ContinuePlayingNotifier, List<ContinuePlayingDto>>(
-  ContinuePlayingNotifier.new,
-);
+      ContinuePlayingNotifier.new,
+    );
 
 /// Fetch a single story detail by id
 final storyDetailProvider = FutureProvider.family

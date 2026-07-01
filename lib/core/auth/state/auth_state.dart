@@ -321,7 +321,7 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       );
       await _handleFirebaseAuth(idToken, authMethod: 'google');
       debugPrint('[AuthController] backend /auth/firebase success');
-    } on DioException catch (e) {
+    } on DioException catch (e, st) {
       final apiError = ErrorFormatter.fromDio(e);
       debugPrint(
         '[AuthController] backend /auth/firebase failed: ${apiError.message}',
@@ -368,7 +368,7 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       );
       await _handleFirebaseAuth(idToken, authMethod: 'apple');
       debugPrint('[AuthController] backend /auth/firebase success');
-    } on DioException catch (e) {
+    } on DioException catch (e, st) {
       final apiError = ErrorFormatter.fromDio(e);
       debugPrint(
         '[AuthController] backend /auth/firebase failed: ${apiError.message}',

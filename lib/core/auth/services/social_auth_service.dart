@@ -14,6 +14,7 @@ import '../../../firebase_options.dart';
 /// sessions via JWT).
 class SocialAuthService {
   FirebaseAuth get _firebaseAuth => FirebaseAuth.instance;
+  GoogleSignIn? _googleSignIn;
 
   Future<void> _ensureFirebaseInitialized() async {
     if (Firebase.apps.isNotEmpty) return;
@@ -58,18 +59,14 @@ class SocialAuthService {
   }
 
   Future<void> _initializeGoogle() async {
-    if (_googleInitialized) return;
+    if (_googleSignIn != null) return;
     final options = Firebase.app().options;
     debugPrint(
       '[GoogleAuth] initialize clientId=${Platform.isIOS ? options.iosClientId : '(default)'}',
     );
-    await GoogleSignIn.instance.initialize(
+    _googleSignIn = GoogleSignIn(
       clientId: Platform.isIOS ? options.iosClientId : null,
     );
-    debugPrint(
-      '[GoogleAuth] supportsAuthenticate=${GoogleSignIn.instance.supportsAuthenticate()}',
-    );
-    _googleInitialized = true;
   }
 
   Future<String> _signInWithGoogleSdk() async {
@@ -77,23 +74,21 @@ class SocialAuthService {
       '[GoogleAuth] start sign-in flow (platform: ${Platform.operatingSystem})',
     );
     await _initializeGoogle();
-    final googleSignIn = GoogleSignIn.instance;
+    final googleSignIn = _googleSignIn!;
 
-    GoogleSignInAccount googleUser;
+    final GoogleSignInAccount? googleUser;
     try {
-      googleUser = await googleSignIn.authenticate().timeout(
+      googleUser = await googleSignIn.signIn().timeout(
         const Duration(seconds: 60),
         onTimeout: () =>
             throw Exception('Google sign-in timed out before completing.'),
       );
-    } on GoogleSignInException catch (e) {
-      debugPrint(
-        '[GoogleAuth] authenticate exception code=${e.code.name} desc=${e.description} details=${e.details}',
-      );
-      if (e.code == GoogleSignInExceptionCode.canceled) {
-        throw Exception('Google sign-in was cancelled');
-      }
-      throw Exception('Google sign-in failed (${e.code.name})');
+    } catch (e) {
+      debugPrint('[GoogleAuth] signIn exception: $e');
+      rethrow;
+    }
+    if (googleUser == null) {
+      throw Exception('Google sign-in was cancelled');
     }
     debugPrint('[GoogleAuth] Google account selected: ${googleUser.email}');
 

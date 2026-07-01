@@ -254,6 +254,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     final title = (widget.storyTitle?.isNotEmpty ?? false)
         ? widget.storyTitle!
         : 'Chat';
+    final storyDetail = ref.watch(storyDetailProvider(widget.storyId));
 
     return PopScope(
       canPop: false,
