@@ -18,6 +18,8 @@ import 'package:antroph_mobile/features/story/providers/story_session_provider.d
 import 'package:antroph_mobile/features/story/data/stories_cache.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
+import 'package:antroph_mobile/features/subscription/providers/subscription_provider.dart';
+import 'package:antroph_mobile/features/subscription/presentation/revenuecat_actions.dart';
 
 /// Content widget for the story bottom sheet.
 /// Used with [showAppBottomSheet] for consistent sheet styling.
@@ -55,6 +57,14 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
   late bool _isAdded = widget.isAdded;
   late final StorySessionNotifier _storySessionNotifier;
   bool _isAddingToPlaylist = false;
+  bool _didPresentPremiumPrompt = false;
+  late final StorySessionNotifier _storySessionNotifier;
+
+  @override
+  void initState() {
+    super.initState();
+    _storySessionNotifier = ref.read(storySessionProvider.notifier);
+  }
 
   @override
   void initState() {
@@ -89,6 +99,17 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
     final isPremium = widget.isPremium || (detail?.isPremium ?? false);
     final tags = detail?.tags ?? const <String>[];
 
+    final isSubscribedAsync = ref.watch(isSubscribedProvider);
+    final isSubscribed = isSubscribedAsync.asData?.value ?? false;
+
+    final isLocked = isPremium && !isSubscribed;
+    if (!_didPresentPremiumPrompt && isSubscribedAsync.hasValue && isLocked) {
+      _didPresentPremiumPrompt = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _handlePremiumUnlock();
+      });
+    }
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -119,7 +140,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                       isPremium: isPremium,
                       tags: tags,
                       onAddToPlaylist: _handleAddToPlaylist,
-                      onPlayPressed: _navigateToChat,
+                      onPlayPressed: () => _handlePlayOrUnlock(isLocked),
                     ),
                     const SizedBox(height: 20),
                     TypographyText(
@@ -201,6 +222,30 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
         setState(() => _isAddingToPlaylist = false);
       }
     }
+  }
+
+  Future<void> _handlePlayOrUnlock(bool isLocked) async {
+    if (isLocked) {
+      await _handlePremiumUnlock();
+      return;
+    }
+    await _navigateToChat();
+  }
+
+  Future<void> _handlePremiumUnlock() async {
+    final authResult = await showAuthGuardSheet(
+      context,
+      ref,
+      actionDescription: 'Unlock premium stories',
+    );
+    if (!mounted) return;
+    if (authResult != AuthGuardResult.authenticated &&
+        authResult != AuthGuardResult.loginSuccessful) {
+      return;
+    }
+
+    final openStory = await presentAuraProPaywall(context, ref);
+    if (openStory && mounted) await _navigateToChat();
   }
 
   Future<void> _navigateToChat() async {

@@ -23,36 +23,43 @@ void showToast(
   _toastEntry?.remove();
   _toastEntry = null;
 
-  final overlay = Navigator.maybeOf(context, rootNavigator: true)?.overlay ??
-      Overlay.of(context, rootOverlay: true);
+  final overlay =
+      Navigator.maybeOf(context, rootNavigator: true)?.overlay ??
+      Overlay.maybeOf(context, rootOverlay: true);
 
   if (overlay == null) {
     final theme = Theme.of(context);
     final fg = Colors.white;
     final bg = _toastBackground(resolvedVariant);
-    ScaffoldMessenger.maybeOf(context)
-        ?.showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: bg,
-            content: Text(message, style: theme.textTheme.bodyMedium?.copyWith(color: fg)),
-            duration: duration,
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger
+      ?..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: bg,
+          content: Text(
+            message,
+            style: theme.textTheme.bodyMedium?.copyWith(color: fg),
           ),
-        );
+          duration: duration,
+        ),
+      );
     return;
   }
 
-  _toastEntry = OverlayEntry(
-    builder: (context) => _ToastOverlay(
-      message: message,
-      variant: resolvedVariant,
-    ),
+  final entry = OverlayEntry(
+    builder: (context) =>
+        _ToastOverlay(message: message, variant: resolvedVariant),
   );
-  overlay.insert(_toastEntry!);
+  _toastEntry = entry;
+  overlay.insert(entry);
 
   _toastTimer = Timer(duration, () {
-    _toastEntry?.remove();
+    if (_toastEntry != entry) return;
+    entry.remove();
     _toastEntry = null;
+    _toastTimer = null;
   });
 }
 
@@ -113,7 +120,10 @@ class _ToastOverlay extends StatelessWidget {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   child: Text(
                     message,
                     style: theme.textTheme.bodyMedium?.copyWith(color: fg),

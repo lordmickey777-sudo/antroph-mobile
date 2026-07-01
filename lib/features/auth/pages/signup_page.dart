@@ -101,9 +101,13 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
     ref.listen(authControllerProvider, (previous, next) {
-      if (next.hasError && mounted) {
-        final msg = next.error?.toString() ?? 'Unexpected error';
-        showToast(context, msg);
+      final nextError = next.error?.toString();
+      final previousError = previous?.error?.toString();
+      if (next.hasError &&
+          mounted &&
+          nextError != null &&
+          nextError != previousError) {
+        showToast(context, nextError);
       }
       final user = next.value;
       final prevUser = previous?.value;
@@ -121,7 +125,12 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: ContentWidth.form),
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(horizontalPadding, 36, horizontalPadding, 24),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                36,
+                horizontalPadding,
+                24,
+              ),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -134,7 +143,11 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                       fontWeight: FontWeight.w600,
                     ),
                     const SizedBox(height: 36),
-                    AuthInput(controller: _nameCtrl, hint: 'Full Name', icon: Icons.person_outline),
+                    AuthInput(
+                      controller: _nameCtrl,
+                      hint: 'Full Name',
+                      icon: Icons.person_outline,
+                    ),
                     const SizedBox(height: 20),
                     AuthInput(
                       controller: _emailCtrl,
@@ -149,7 +162,8 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                       hint: 'Password',
                       icon: Icons.lock_outline,
                       obscure: _obscure,
-                      onToggleObscure: () => setState(() => _obscure = !_obscure),
+                      onToggleObscure: () =>
+                          setState(() => _obscure = !_obscure),
                       validator: _validatePassword,
                     ),
                     const SizedBox(height: 12),
@@ -160,7 +174,11 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
                       hasDigit: _hasDigit,
                     ),
                     const SizedBox(height: 28),
-                    AuthButton(label: 'Register', onTap: _submit, loading: loading),
+                    AuthButton(
+                      label: 'Register',
+                      onTap: _submit,
+                      loading: loading,
+                    ),
                     const SizedBox(height: 20),
                     const OrDivider(),
                     const SizedBox(height: 20),
@@ -321,7 +339,9 @@ class _WebViewPageState extends State<_WebViewPage> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xFF101214))
       ..setNavigationDelegate(
-        NavigationDelegate(onPageFinished: (_) => setState(() => _isLoading = false)),
+        NavigationDelegate(
+          onPageFinished: (_) => setState(() => _isLoading = false),
+        ),
       )
       ..loadRequest(Uri.parse(widget.url));
   }
@@ -341,7 +361,9 @@ class _WebViewPageState extends State<_WebViewPage> {
           WebViewWidget(controller: _controller),
           if (_isLoading)
             const Positioned.fill(
-              child: ShimmerWebViewPlaceholder(backgroundColor: Color(0xFF101214)),
+              child: ShimmerWebViewPlaceholder(
+                backgroundColor: Color(0xFF101214),
+              ),
             ),
         ],
       ),
