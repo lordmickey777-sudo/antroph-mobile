@@ -55,9 +55,16 @@ class StorySheetContent extends ConsumerStatefulWidget {
 
 class _StorySheetContentState extends ConsumerState<StorySheetContent> {
   late bool _isAdded = widget.isAdded;
+  late final StorySessionNotifier _storySessionNotifier;
   bool _isAddingToPlaylist = false;
   bool _didPresentPremiumPrompt = false;
   late final StorySessionNotifier _storySessionNotifier;
+
+  @override
+  void initState() {
+    super.initState();
+    _storySessionNotifier = ref.read(storySessionProvider.notifier);
+  }
 
   @override
   void initState() {

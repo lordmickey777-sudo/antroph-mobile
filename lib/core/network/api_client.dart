@@ -30,9 +30,12 @@ class ApiClient {
     final d = Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 20),
-        headers: {'Accept': 'application/json', 'Content-Type': 'application/json'},
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 45),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
       ),
     );
     d.interceptors.add(
@@ -48,14 +51,17 @@ class ApiClient {
           handler.next(options);
         },
         onError: (e, handler) async {
-          _log.e('HTTP ${e.response?.statusCode} ${e.requestOptions.uri}', error: e);
           final status = e.response?.statusCode;
           final req = e.requestOptions;
           final skipAuth = req.extra['skipAuth'] == true;
           final alreadyRetried = req.extra['retried'] == true;
           final hasRefresh = _refreshToken != null && _refreshToken!.isNotEmpty;
 
-          if (!skipAuth && status == 401 && !alreadyRetried && hasRefresh && _onRefresh != null) {
+          if (!skipAuth &&
+              status == 401 &&
+              !alreadyRetried &&
+              hasRefresh &&
+              _onRefresh != null) {
             try {
               // Ensure a single refresh runs at a time
               _refreshing ??= _onRefresh!.call(_refreshToken!);
@@ -84,7 +90,8 @@ class ApiClient {
                   queryParameters: req.queryParameters,
                   sendTimeout: req.sendTimeout,
                   receiveTimeout: req.receiveTimeout,
-                  extra: Map<String, dynamic>.from(req.extra)..['retried'] = true,
+                  extra: Map<String, dynamic>.from(req.extra)
+                    ..['retried'] = true,
                 );
                 final response = await d.fetch(newReq);
                 return handler.resolve(response);
@@ -94,6 +101,10 @@ class ApiClient {
             } finally {
               _refreshing = null;
             }
+          }
+          final suppressErrorLog = req.extra['suppressErrorLog'] == true;
+          if (!suppressErrorLog) {
+            _log.e('HTTP ${e.response?.statusCode} ${req.uri}', error: e);
           }
           handler.next(e);
         },
@@ -115,7 +126,11 @@ class ApiClient {
 
 extension ApiClientAuth on ApiClient {
   /// Configure the in-memory tokens used for auth header.
-  void setAuthTokens({String? accessToken, String? refreshToken, String? tokenType}) {
+  void setAuthTokens({
+    String? accessToken,
+    String? refreshToken,
+    String? tokenType,
+  }) {
     _accessToken = accessToken;
     _refreshToken = refreshToken;
     if (tokenType != null && tokenType.isNotEmpty) {
