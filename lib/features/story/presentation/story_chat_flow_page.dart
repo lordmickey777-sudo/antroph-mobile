@@ -435,6 +435,18 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         }.contains(phase);
     final isGroupQuizSession =
         isQuizSession && session?.interactiveState['session_type'] == 'group';
+    final showQuestionGenerationOverlay =
+        isGroupQuizSession &&
+        session != null &&
+        (phase == 'generation_failed' || state.isRetryingGeneration);
+    final questionGenerationRetrying =
+        state.isRetryingGeneration ||
+        (state.isLoading && phase == 'generation_failed');
+    final disableQuizGameControls =
+        isGroupQuizSession &&
+        (phase == 'generation_failed' || state.isRetryingGeneration);
+    final questionGenerationError =
+        (session?.interactiveState['generation_error'] as String?)?.trim();
     final isDark = context.isDarkMode;
     final mutedSurface = isDark
         ? const Color(0xFF1A1A1A)
@@ -564,7 +576,10 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                 ),
               )
             else if (session != null)
-              _QuizGameBottomBar(onCall: widget.onCall),
+              _QuizGameBottomBar(
+                onCall: widget.onCall,
+                disabled: disableQuizGameControls,
+              ),
           ],
         ),
         if (isGroupQuizSession && session != null)
@@ -578,7 +593,157 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
               ),
             ),
           ),
+        if (showQuestionGenerationOverlay)
+          Positioned.fill(
+            child: _QuestionGenerationOverlay(
+              isLoading: questionGenerationRetrying,
+              message: questionGenerationError?.isNotEmpty == true
+                  ? questionGenerationError!
+                  : 'The next question could not be loaded.',
+              onRetry: questionGenerationRetrying
+                  ? null
+                  : () => unawaited(notifier.retryGeneration()),
+            ),
+          ),
       ],
+    );
+  }
+}
+
+class _QuestionGenerationOverlay extends StatelessWidget {
+  const _QuestionGenerationOverlay({
+    required this.isLoading,
+    required this.message,
+    required this.onRetry,
+  });
+
+  final bool isLoading;
+  final String message;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final surface = isDark ? const Color(0xFF111214) : Colors.white;
+    final subdued = isDark ? Colors.white70 : const Color(0xFF5F6368);
+    final border = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+
+    return Material(
+      color: Colors.black.withValues(alpha: isDark ? 0.62 : 0.38),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+            decoration: BoxDecoration(
+              color: surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.46 : 0.20),
+                  blurRadius: 30,
+                  offset: const Offset(0, 18),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.18)
+                              : Colors.black.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      child: isLoading
+                          ? const Padding(
+                              padding: EdgeInsets.all(11),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Color(0xFF2563EB),
+                              ),
+                            )
+                          : const Icon(
+                              CupertinoIcons.exclamationmark_triangle_fill,
+                              color: Color(0xFF111827),
+                              size: 22,
+                            ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isLoading
+                                ? 'Retrying question'
+                                : 'Question failed to load',
+                            style: TextStyle(
+                              color: context.primaryTextColor,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              height: 1.15,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            isLoading
+                                ? 'Loading the next question...'
+                                : message,
+                            style: TextStyle(
+                              color: subdued,
+                              fontSize: 13,
+                              height: 1.35,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: onRetry,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: isLoading
+                          ? (isDark
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : Colors.black.withValues(alpha: 0.08))
+                          : Colors.white,
+                      foregroundColor: isLoading ? subdued : Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      isLoading ? 'Retrying...' : 'Retry',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -759,9 +924,10 @@ class _LeavingGameDialog extends StatelessWidget {
 }
 
 class _QuizGameBottomBar extends StatelessWidget {
-  const _QuizGameBottomBar({required this.onCall});
+  const _QuizGameBottomBar({required this.onCall, this.disabled = false});
 
   final VoidCallback onCall;
+  final bool disabled;
 
   @override
   Widget build(BuildContext context) {
@@ -769,78 +935,84 @@ class _QuizGameBottomBar extends StatelessWidget {
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(28, 10, 28, 14),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              height: 44,
-              decoration: BoxDecoration(
-                color: const Color(0xF0131415),
-                borderRadius: BorderRadius.circular(999),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.20),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
+      child: IgnorePointer(
+        ignoring: disabled,
+        child: Opacity(
+          opacity: disabled ? 0.72 : 1,
+          child: Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xF0131415),
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.20),
+                        blurRadius: 18,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
                   ),
-                ],
+                  padding: const EdgeInsets.only(left: 16, right: 8),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Message',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.42),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.white.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.paperplane_fill,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              padding: const EdgeInsets.only(left: 16, right: 8),
-              child: Row(
-                children: [
-                  Text(
-                    'Message',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.42),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
+              const SizedBox(width: 10),
+              GestureDetector(
+                onTap: onCall,
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF24D11F),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : Colors.white.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      CupertinoIcons.paperplane_fill,
-                      color: Colors.white,
-                      size: 18,
-                    ),
+                  child: const Icon(
+                    Icons.call_rounded,
+                    color: Colors.white,
+                    size: 25,
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(width: 10),
-          GestureDetector(
-            onTap: onCall,
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: const Color(0xFF24D11F),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 14,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.call_rounded,
-                color: Colors.white,
-                size: 25,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -21,6 +21,7 @@ class InteractiveStoryState {
     this.localQuizSelections = const <String, String>{},
     this.streamingAssistantText,
     this.recentStreamedAssistantText,
+    this.isRetryingGeneration = false,
     this.error,
   });
 
@@ -31,6 +32,7 @@ class InteractiveStoryState {
   final Map<String, String> localQuizSelections;
   final String? streamingAssistantText;
   final String? recentStreamedAssistantText;
+  final bool isRetryingGeneration;
   final String? error;
 
   InteractiveStoryState copyWith({
@@ -41,6 +43,7 @@ class InteractiveStoryState {
     Map<String, String>? localQuizSelections,
     Object? streamingAssistantText = _unset,
     Object? recentStreamedAssistantText = _unset,
+    bool? isRetryingGeneration,
     Object? error = _unset,
   }) {
     return InteractiveStoryState(
@@ -55,6 +58,7 @@ class InteractiveStoryState {
       recentStreamedAssistantText: recentStreamedAssistantText == _unset
           ? this.recentStreamedAssistantText
           : recentStreamedAssistantText as String?,
+      isRetryingGeneration: isRetryingGeneration ?? this.isRetryingGeneration,
       error: error == _unset ? this.error : error as String?,
     );
   }
@@ -177,19 +181,35 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
   Future<void> retryGeneration() async {
     final sessionId = state.session?.sessionId;
     if (sessionId == null || sessionId.isEmpty || state.isLoading) return;
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(
+      isLoading: true,
+      isRetryingGeneration: true,
+      error: null,
+    );
     try {
       final repo = ref.read(storiesRepositoryProvider);
       final session = await repo.retryInteractiveQuizGeneration(sessionId);
       if (_isDisposed) return;
-      state = state.copyWith(session: session, isLoading: false);
+      state = state.copyWith(
+        session: session,
+        isLoading: false,
+        isRetryingGeneration: _shouldKeepGenerationRetryOverlay(session),
+      );
       _scheduleWaitingRefresh();
     } on ApiError catch (e) {
       if (_isDisposed) return;
-      state = state.copyWith(isLoading: false, error: e.message);
+      state = state.copyWith(
+        isLoading: false,
+        isRetryingGeneration: false,
+        error: e.message,
+      );
     } catch (e) {
       if (_isDisposed) return;
-      state = state.copyWith(isLoading: false, error: '$e');
+      state = state.copyWith(
+        isLoading: false,
+        isRetryingGeneration: false,
+        error: '$e',
+      );
     }
   }
 
@@ -471,7 +491,12 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         final session = InteractiveSessionState.fromJson(
           snapshot.cast<String, dynamic>(),
         );
-        state = state.copyWith(session: session);
+        state = state.copyWith(
+          session: session,
+          isRetryingGeneration:
+              state.isRetryingGeneration &&
+              _shouldKeepGenerationRetryOverlay(session),
+        );
         _scheduleWaitingRefresh();
       }
       return;
@@ -530,6 +555,20 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
               (payload['round'] as num?)?.toInt() ?? nextState['current_round']
           ..['question'] = null
           ..['result'] = null;
+        break;
+      case 'generation_failed':
+        nextState
+          ..['phase'] = 'generation_failed'
+          ..['current_round'] =
+              (payload['round'] as num?)?.toInt() ?? nextState['current_round']
+          ..['generation_error'] =
+              payload['message'] ??
+              payload['error'] ??
+              nextState['generation_error'] ??
+              'Question generation failed. The host can retry.'
+          ..['current_question_id'] = null
+          ..['question'] = null
+          ..['expires_at'] = null;
         break;
       case 'quiz_waiting_for_players':
         nextState
@@ -614,13 +653,17 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         )
         ? current.events
         : [...current.events, sessionEvent];
+    final nextSession = current.copyWith(
+      interactiveState: nextState,
+      events: nextEvents,
+      currentTurn: nextTurn,
+      lastSeq: seq > current.lastSeq ? seq : current.lastSeq,
+    );
     state = state.copyWith(
-      session: current.copyWith(
-        interactiveState: nextState,
-        events: nextEvents,
-        currentTurn: nextTurn,
-        lastSeq: seq > current.lastSeq ? seq : current.lastSeq,
-      ),
+      session: nextSession,
+      isRetryingGeneration:
+          state.isRetryingGeneration &&
+          _shouldKeepGenerationRetryOverlay(nextSession),
       streamingAssistantText: eventType == 'interactive_turn'
           ? null
           : state.streamingAssistantText,
@@ -677,7 +720,12 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       final repo = ref.read(storiesRepositoryProvider);
       final session = await repo.fetchInteractiveSession(sessionId);
       if (_isDisposed) return;
-      state = state.copyWith(session: session);
+      state = state.copyWith(
+        session: session,
+        isRetryingGeneration:
+            state.isRetryingGeneration &&
+            _shouldKeepGenerationRetryOverlay(session),
+      );
     } catch (_) {
       // Keep the current UI state and try again while it is still waiting.
     } finally {
@@ -716,6 +764,12 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       return DateTime.tryParse(hasTimezone ? value : '${value}Z')?.toUtc();
     }
     return null;
+  }
+
+  bool _shouldKeepGenerationRetryOverlay(InteractiveSessionState session) {
+    final phase = session.interactiveState['phase'] as String?;
+    return phase == 'generating_question' ||
+        phase == 'question_generation_started';
   }
 
   InteractiveSessionState _mergeResponseIntoSession(

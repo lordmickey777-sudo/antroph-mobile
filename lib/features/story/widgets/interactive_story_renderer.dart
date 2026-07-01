@@ -104,19 +104,6 @@ class InteractiveStoryRenderer extends StatelessWidget {
               onLeave: onLeave,
             ),
           )
-        else if (isQuizSession && phase == 'generation_failed')
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _QuizStatusBlock(
-              icon: CupertinoIcons.exclamationmark_triangle_fill,
-              title: 'Question failed to load',
-              body:
-                  (session.interactiveState['generation_error'] as String?) ??
-                  'The host can retry the question.',
-              actionLabel: 'Retry',
-              onAction: onRetryGeneration,
-            ),
-          )
         else if (isQuizSession &&
             (phase == 'generating_question' ||
                 phase == 'question_generation_started' ||
@@ -378,15 +365,6 @@ class _QuizTranscriptItem {
         .map((event) => (event.payload['round'] as num?)?.toInt())
         .whereType<int>()
         .toSet();
-    final retriedFailedRounds = events
-        .where(
-          (event) =>
-              event.eventType == 'question_generation_started' &&
-              event.payload['retry'] == true,
-        )
-        .map((event) => (event.payload['round'] as num?)?.toInt())
-        .whereType<int>()
-        .toSet();
     final items = <_QuizTranscriptItem>[];
     final questionIds = <String>{};
     final resultQuestionIds = <String>{};
@@ -468,22 +446,6 @@ class _QuizTranscriptItem {
           );
           break;
         case 'generation_failed':
-          final round = (event.payload['round'] as num?)?.toInt();
-          if (round != null &&
-              (retriedFailedRounds.contains(round) ||
-                  startedRounds.contains(round))) {
-            break;
-          }
-          items.add(
-            _QuizTranscriptItem(
-              kind: _QuizTranscriptItemKind.status,
-              seq: event.seq,
-              event: event,
-              statusTitle: 'Question failed to load',
-              statusBody: 'The host can retry the question.',
-              statusIcon: CupertinoIcons.exclamationmark_triangle_fill,
-            ),
-          );
           break;
         case 'question_started':
           final question = _LiveQuizQuestion.fromPayload(
@@ -696,21 +658,6 @@ class _QuizTranscriptItem {
               waitingForQuestion ||
               waitingAfterResult ||
               waitingForFinalResults,
-        ),
-      );
-    }
-
-    if (phase == 'generation_failed' &&
-        (items.isEmpty || items.last.kind != _QuizTranscriptItemKind.status)) {
-      items.add(
-        _QuizTranscriptItem(
-          kind: _QuizTranscriptItemKind.status,
-          seq: session.lastSeq + 5,
-          statusTitle: 'Question failed to load',
-          statusBody:
-              (session.interactiveState['generation_error'] as String?) ??
-              'The host can retry the question.',
-          statusIcon: CupertinoIcons.exclamationmark_triangle_fill,
         ),
       );
     }
@@ -1757,13 +1704,29 @@ class _QuizStatusContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isFailure = title == 'Question failed to load';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             if (icon != null) ...[
-              Icon(icon, color: const Color(0xFF2563EB), size: 20),
+              if (isFailure)
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.28),
+                    ),
+                  ),
+                  child: Icon(icon, color: const Color(0xFF111827), size: 18),
+                )
+              else
+                Icon(icon, color: const Color(0xFF2563EB), size: 20),
               const SizedBox(width: 8),
             ],
             Expanded(
@@ -3329,25 +3292,39 @@ class _QuizStatusBlock extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.body,
-    this.actionLabel,
-    this.onAction,
   });
 
   final IconData icon;
   final String title;
   final String body;
-  final String? actionLabel;
-  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
+    final isFailure = title == 'Question failed to load';
+
     return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: const Color(0xFF2563EB), size: 21),
+              if (isFailure)
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: context.isDarkMode
+                          ? Colors.white.withValues(alpha: 0.16)
+                          : Colors.black.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: Icon(icon, color: const Color(0xFF111827), size: 19),
+                )
+              else
+                Icon(icon, color: const Color(0xFF2563EB), size: 21),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -3370,10 +3347,6 @@ class _QuizStatusBlock extends StatelessWidget {
               height: 1.35,
             ),
           ),
-          if (actionLabel != null && onAction != null) ...[
-            const SizedBox(height: 14),
-            FilledButton(onPressed: onAction, child: Text(actionLabel!)),
-          ],
         ],
       ),
     );
