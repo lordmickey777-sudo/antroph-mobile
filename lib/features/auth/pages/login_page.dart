@@ -76,6 +76,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Future<void> _handleAuthenticatedUser() async {
     final nextRoute = await AppSetupRouteService.resolveAuthenticatedRoute();
     if (!mounted) return;
+    showToast(context, 'Login successful', success: true);
     context.go(nextRoute);
   }
 

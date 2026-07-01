@@ -158,6 +158,11 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
       if (mounted && user != null && user != prevUser) {
         // Save email and pop with success
         EmailStorageService.saveLastEmail(user.email);
+        showToast(
+          context,
+          _showLogin ? 'Login successful' : 'Account created successfully',
+          success: true,
+        );
         Navigator.of(context).pop(AuthGuardResult.loginSuccessful);
       }
     });
