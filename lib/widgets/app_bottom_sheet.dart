@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 /// [context] - Build context
 /// [builder] - Builder function that receives a scroll controller for nested scrolling
 /// [enableDrag] - Whether the sheet can be dismissed by dragging
+/// [dismissOnOverlayTap] - Whether tapping outside the sheet dismisses it
 /// [backgroundColor] - Background color of the sheet (defaults to theme surface color)
 Future<T?> showAppBottomSheet<T>({
   required BuildContext context,
@@ -15,6 +16,7 @@ Future<T?> showAppBottomSheet<T>({
   )
   builder,
   bool enableDrag = true,
+  bool dismissOnOverlayTap = true,
   Color? backgroundColor,
 }) {
   final theme = Theme.of(context);
@@ -22,26 +24,44 @@ Future<T?> showAppBottomSheet<T>({
   final baseTextStyle = (theme.textTheme.bodyMedium ?? const TextStyle())
       .copyWith(decoration: TextDecoration.none);
 
-  return showCupertinoSheet<T>(
-    context: context,
-    enableDrag: enableDrag,
-    pageBuilder: (context) => Theme(
-      data: theme,
-      child: CupertinoTheme(
-        data: cupertinoTheme.copyWith(brightness: theme.brightness),
-        child: DefaultTextStyle(
-          style: baseTextStyle,
-          child: IconTheme(
-            data: theme.iconTheme,
-            child: _SheetScaffold(
-              backgroundColor: backgroundColor,
-              builder: builder,
+  return Navigator.of(context, rootNavigator: true).push<T>(
+    _AppCupertinoSheetRoute<T>(
+      dismissOnOverlayTap: dismissOnOverlayTap,
+      enableDrag: enableDrag,
+      builder: (context) => Theme(
+        data: theme,
+        child: CupertinoTheme(
+          data: cupertinoTheme.copyWith(brightness: theme.brightness),
+          child: DefaultTextStyle(
+            style: baseTextStyle,
+            child: IconTheme(
+              data: theme.iconTheme,
+              child: _SheetScaffold(
+                backgroundColor: backgroundColor,
+                builder: builder,
+              ),
             ),
           ),
         ),
       ),
     ),
   );
+}
+
+class _AppCupertinoSheetRoute<T> extends CupertinoSheetRoute<T> {
+  _AppCupertinoSheetRoute({
+    required super.builder,
+    required this.dismissOnOverlayTap,
+    super.enableDrag,
+  });
+
+  final bool dismissOnOverlayTap;
+
+  @override
+  bool get barrierDismissible => dismissOnOverlayTap;
+
+  @override
+  String? get barrierLabel => 'Dismiss';
 }
 
 /// Internal scaffold that styles the sheet surface and fills the available height.

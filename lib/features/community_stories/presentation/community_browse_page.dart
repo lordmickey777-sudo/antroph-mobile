@@ -8,6 +8,7 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
+import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 
 import '../providers/community_stories_providers.dart';
 import '../models/community_story_model.dart';
@@ -283,6 +284,14 @@ class _CommunityStoryDetail extends StatelessWidget {
                   builder: (ctx, ref, _) {
                     return AppPillButton(
                       onPressed: () async {
+                        var launchMode = InteractiveStoryLaunchMode.create;
+                        String? joinCode;
+                        if (story.interactionMode == 'group') {
+                          final result = await showGroupGameLauncherSheet(ctx);
+                          if (!ctx.mounted || result == null) return;
+                          launchMode = result.mode;
+                          joinCode = result.joinCode;
+                        }
                         final authResult = await showAuthGuardSheet(
                           ctx,
                           ref,
@@ -302,16 +311,16 @@ class _CommunityStoryDetail extends StatelessWidget {
                               storyId: story.id,
                               storySubtitle: story.description,
                               storyImage: story.coverImageUrl,
+                              interactiveLaunchMode: launchMode,
+                              joinCode: joinCode,
                             ),
                           ),
                         );
                       },
                       icon: CupertinoIcons.play_fill,
                       label: 'Continue',
-                      backgroundColor:
-                          isDark ? Colors.white : Colors.black,
-                      foregroundColor:
-                          isDark ? Colors.black : Colors.white,
+                      backgroundColor: isDark ? Colors.white : Colors.black,
+                      foregroundColor: isDark ? Colors.black : Colors.white,
                       padding: const EdgeInsets.symmetric(
                         vertical: 14,
                         horizontal: 28,

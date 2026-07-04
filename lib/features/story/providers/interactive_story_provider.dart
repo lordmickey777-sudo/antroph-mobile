@@ -555,6 +555,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
               (payload['round'] as num?)?.toInt() ?? nextState['current_round']
           ..['question'] = null
           ..['result'] = null;
+        nextState.remove('generation_error');
         break;
       case 'generation_failed':
         nextState
@@ -599,6 +600,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
               nextState['eligible_count'] ??
               ((nextState['eligible_participant_ids'] as List?)?.length ?? 0);
           nextState['scores'] = payload['scores'] ?? nextState['scores'];
+          nextState.remove('generation_error');
         }
         break;
       case 'answer_received':

@@ -27,7 +27,8 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
 
   String? _validateEmail(String? v) => AuthValidators.email(v);
-  String? _validateCode(String? v) => !_requested ? null : AuthValidators.resetToken(v);
+  String? _validateCode(String? v) =>
+      !_requested ? null : AuthValidators.resetToken(v);
   String? _validatePassword(String? v) {
     if (!_requested) return null; // Only validate after request step.
     return AuthValidators.newPassword(v);
@@ -40,24 +41,38 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
     return null;
   }
 
+  String _firstFormError() {
+    return _validateEmail(_emailCtrl.text) ??
+        _validateCode(_codeCtrl.text) ??
+        _validatePassword(_passwordCtrl.text) ??
+        _validateConfirm(_confirmCtrl.text) ??
+        'Please fix the highlighted fields';
+  }
+
   Future<void> _requestCode() async {
     if (!_formKey.currentState!.validate()) {
-      showToast(context, 'Fix form errors');
+      showToast(context, _firstFormError());
       return;
     }
     final ctrl = ref.read(authControllerProvider.notifier);
     try {
       final msg = await ctrl.sendResetCode(email: _emailCtrl.text.trim());
+      if (!mounted) return;
       setState(() => _requested = true);
-      showToast(context, msg.isNotEmpty ? msg : 'Reset code sent if account exists', success: true);
+      showToast(
+        context,
+        msg.isNotEmpty ? msg : 'Reset code sent if account exists',
+        success: true,
+      );
     } catch (e) {
+      if (!mounted) return;
       showToast(context, e.toString());
     }
   }
 
   Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) {
-      showToast(context, 'Fix form errors');
+      showToast(context, _firstFormError());
       return;
     }
     final ctrl = ref.read(authControllerProvider.notifier);
@@ -67,9 +82,15 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
         token: _codeCtrl.text.trim(),
         newPassword: _passwordCtrl.text,
       );
-      showToast(context, msg.isNotEmpty ? msg : 'Password reset', success: true);
-      if (mounted) context.goNamed('login');
+      if (!mounted) return;
+      showToast(
+        context,
+        msg.isNotEmpty ? msg : 'Password reset',
+        success: true,
+      );
+      context.goNamed('login');
     } catch (e) {
+      if (!mounted) return;
       showToast(context, e.toString());
     }
   }

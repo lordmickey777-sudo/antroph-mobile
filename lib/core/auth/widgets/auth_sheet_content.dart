@@ -37,6 +37,7 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
   final _loginPasswordCtrl = TextEditingController();
   bool _loginObscure = true;
   final _loginFormKey = GlobalKey<FormState>();
+  bool _loginSubmitting = false;
 
   // Signup form controllers
   final _signupNameCtrl = TextEditingController();
@@ -99,16 +100,31 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
     return null;
   }
 
+  String _firstLoginFormError() {
+    return _validateEmail(_loginEmailCtrl.text) ??
+        _validatePassword(_loginPasswordCtrl.text) ??
+        'Please fix the highlighted fields';
+  }
+
   Future<void> _submitLogin() async {
+    if (_loginSubmitting) return;
     if (!_loginFormKey.currentState!.validate()) {
-      if (mounted) showToast(context, 'Please fix the form errors');
+      if (mounted) showToast(context, _firstLoginFormError());
       return;
     }
+    setState(() => _loginSubmitting = true);
     final controller = ref.read(authControllerProvider.notifier);
-    await controller.login(
-      email: _loginEmailCtrl.text.trim(),
-      password: _loginPasswordCtrl.text,
-    );
+    try {
+      await controller.login(
+        email: _loginEmailCtrl.text.trim(),
+        password: _loginPasswordCtrl.text,
+      );
+      if (mounted) {
+        showToast(context, 'Login successful', success: true);
+      }
+    } finally {
+      if (mounted) setState(() => _loginSubmitting = false);
+    }
   }
 
   Future<void> _submitSignup() async {
@@ -158,16 +174,15 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
       if (mounted && user != null && user != prevUser) {
         // Save email and pop with success
         EmailStorageService.saveLastEmail(user.email);
-        showToast(
-          context,
-          _showLogin ? 'Login successful' : 'Account created successfully',
-          success: true,
-        );
+        if (!_showLogin) {
+          showToast(context, 'Account created successfully', success: true);
+        }
         Navigator.of(context).pop(AuthGuardResult.loginSuccessful);
       }
     });
 
     final loading = authState.isLoading;
+    final loginLoading = loading || _loginSubmitting;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black87;
     final secondaryTextColor = isDark ? Colors.white54 : Colors.black54;
@@ -241,7 +256,7 @@ class _AuthSheetContentState extends ConsumerState<AuthSheetContent> {
                       onToggleObscure: () =>
                           setState(() => _loginObscure = !_loginObscure),
                       onSubmit: _submitLogin,
-                      loading: loading,
+                      loading: loginLoading,
                       validateEmail: _validateEmail,
                       validatePassword: _validatePassword,
                     )

@@ -1,8 +1,10 @@
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
@@ -36,6 +38,7 @@ class StorySheetContent extends ConsumerStatefulWidget {
     this.views,
     this.isAdded = false,
     this.isPremium = false,
+    this.activeGameCode,
   });
 
   final String storyId;
@@ -48,6 +51,7 @@ class StorySheetContent extends ConsumerStatefulWidget {
   final int? views;
   final bool isAdded;
   final bool isPremium;
+  final String? activeGameCode;
 
   @override
   ConsumerState<StorySheetContent> createState() => _StorySheetContentState();
@@ -145,6 +149,10 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                     ),
 
                     const SizedBox(height: 16),
+                    if ((widget.activeGameCode ?? '').trim().isNotEmpty) ...[
+                      _ActiveGameCodeCard(code: widget.activeGameCode!.trim()),
+                      const SizedBox(height: 16),
+                    ],
                     detailAsync.when(
                       loading: () => const _StoryDetailShimmer(),
                       error: (err, _) => Padding(
@@ -222,6 +230,22 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
       await _handlePremiumUnlock();
       return;
     }
+    StoryDetailDto? detail = ref
+        .read(storyDetailProvider(widget.storyId))
+        .asData
+        ?.value;
+    if (detail == null) {
+      try {
+        detail = await ref.read(storyDetailProvider(widget.storyId).future);
+      } catch (_) {
+        detail = null;
+      }
+      if (!mounted) return;
+    }
+    if (detail?.interactionMode == 'group') {
+      await _showGroupGameLauncher();
+      return;
+    }
     await _navigateToChat();
   }
 
@@ -241,7 +265,16 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
     if (openStory && mounted) await _navigateToChat();
   }
 
-  Future<void> _navigateToChat() async {
+  Future<void> _showGroupGameLauncher() async {
+    final result = await showGroupGameLauncherSheet(context);
+    if (!mounted || result == null) return;
+    await _navigateToChat(launchMode: result.mode, joinCode: result.joinCode);
+  }
+
+  Future<void> _navigateToChat({
+    InteractiveStoryLaunchMode launchMode = InteractiveStoryLaunchMode.create,
+    String? joinCode,
+  }) async {
     // Check auth first
     final authResult = await showAuthGuardSheet(
       context,
@@ -263,6 +296,402 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
           storySubtitle: widget.subtitle,
           storyImage: widget.imageAsset,
           isAddedToPlaylist: _isAdded,
+          interactiveLaunchMode: launchMode,
+          joinCode: joinCode,
+        ),
+      ),
+    );
+  }
+}
+
+class _ActiveGameCodeCard extends StatelessWidget {
+  const _ActiveGameCodeCard({required this.code});
+
+  final String code;
+
+  Future<void> _copy(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: code));
+    if (context.mounted) {
+      showToast(context, 'Game code copied', success: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final bg = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.05);
+    final border = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : Colors.black.withValues(alpha: 0.08);
+
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: () => _copy(context),
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF22C55E).withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  CupertinoIcons.link,
+                  color: Color(0xFF22C55E),
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TypographyText(
+                      'Game code',
+                      variant: TypographyVariant.body2,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    const SizedBox(height: 4),
+                    TypographyText(
+                      code,
+                      variant: TypographyVariant.h3,
+                      color: isDark ? Colors.white : Colors.black,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                CupertinoIcons.doc_on_doc,
+                color: isDark ? Colors.white70 : Colors.black54,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<GroupGameLaunchResult?> showGroupGameLauncherSheet(
+  BuildContext context,
+) {
+  return showModalBottomSheet<GroupGameLaunchResult>(
+    context: context,
+    isScrollControlled: true,
+    isDismissible: true,
+    enableDrag: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => const _GroupGameLauncherSheet(),
+  );
+}
+
+class GroupGameLaunchResult {
+  const GroupGameLaunchResult({required this.mode, this.joinCode});
+
+  final InteractiveStoryLaunchMode mode;
+  final String? joinCode;
+}
+
+class _GroupGameLauncherSheet extends StatefulWidget {
+  const _GroupGameLauncherSheet();
+
+  @override
+  State<_GroupGameLauncherSheet> createState() =>
+      _GroupGameLauncherSheetState();
+}
+
+class _GroupGameLauncherSheetState extends State<_GroupGameLauncherSheet> {
+  final _codeController = TextEditingController();
+  bool _showCodeInput = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _codeController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  void _createGame() {
+    Navigator.of(
+      context,
+    ).pop(const GroupGameLaunchResult(mode: InteractiveStoryLaunchMode.create));
+  }
+
+  void _submitCode() {
+    final code = _codeController.text.trim().toUpperCase();
+    if (code.isEmpty) return;
+    Navigator.of(context).pop(
+      GroupGameLaunchResult(
+        mode: InteractiveStoryLaunchMode.joinByCode,
+        joinCode: code,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final keyboard = MediaQuery.of(context).viewInsets.bottom;
+    final canJoin = _codeController.text.trim().isNotEmpty;
+    final surface = isDark ? const Color(0xFF111315) : Colors.white;
+    final mutedText = isDark ? Colors.white60 : Colors.black54;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => Navigator.of(context).maybePop(),
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(bottom: keyboard),
+        child: SafeArea(
+          top: false,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = math.min(constraints.maxWidth, 520.0);
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {},
+                  child: Container(
+                    width: width,
+                    margin: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                    decoration: BoxDecoration(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.28),
+                          blurRadius: 32,
+                          offset: const Offset(0, 16),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 42,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.18)
+                                  : Colors.black.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        TypographyText(
+                          'Group game',
+                          variant: TypographyVariant.h3,
+                          color: isDark ? Colors.white : Colors.black,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        const SizedBox(height: 8),
+                        TypographyText(
+                          'Create a room as host or join friends with their code.',
+                          variant: TypographyVariant.body2,
+                          color: mutedText,
+                          fontSize: 14,
+                        ),
+                        const SizedBox(height: 22),
+                        _GroupGameLauncherTile(
+                          icon: CupertinoIcons.sparkles,
+                          logoAsset: 'assets/images/app_logo.png',
+                          title: 'Create game',
+                          subtitle: 'Start a new room and share the code.',
+                          onTap: _createGame,
+                        ),
+                        const SizedBox(height: 12),
+                        _GroupGameLauncherTile(
+                          icon: CupertinoIcons.link,
+                          title: 'Join with code',
+                          subtitle: 'Enter a room code from the host.',
+                          onTap: () => setState(() => _showCodeInput = true),
+                          isSelected: _showCodeInput,
+                        ),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          child: !_showCodeInput
+                              ? const SizedBox.shrink()
+                              : Padding(
+                                  padding: const EdgeInsets.only(top: 14),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextField(
+                                          controller: _codeController,
+                                          autofocus: true,
+                                          textCapitalization:
+                                              TextCapitalization.characters,
+                                          textInputAction: TextInputAction.go,
+                                          onSubmitted: (_) => _submitCode(),
+                                          decoration: InputDecoration(
+                                            hintText: 'Room code',
+                                            filled: true,
+                                            fillColor: isDark
+                                                ? Colors.white.withValues(
+                                                    alpha: 0.08,
+                                                  )
+                                                : Colors.black.withValues(
+                                                    alpha: 0.05,
+                                                  ),
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
+                                              borderSide: BorderSide.none,
+                                            ),
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                  horizontal: 16,
+                                                  vertical: 14,
+                                                ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      IconButton.filled(
+                                        onPressed: canJoin ? _submitCode : null,
+                                        icon: const Icon(
+                                          CupertinoIcons.arrow_right,
+                                        ),
+                                        tooltip: 'Join game',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupGameLauncherTile extends StatelessWidget {
+  const _GroupGameLauncherTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.logoAsset,
+    this.isSelected = false,
+  });
+
+  final IconData icon;
+  final String? logoAsset;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool isSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final accent = isSelected ? const Color(0xFF22C55E) : null;
+    return Material(
+      color: isDark
+          ? Colors.white.withValues(alpha: isSelected ? 0.12 : 0.07)
+          : Colors.black.withValues(alpha: isSelected ? 0.08 : 0.04),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color:
+                      accent?.withValues(alpha: 0.18) ??
+                      (isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.white),
+                  shape: BoxShape.circle,
+                ),
+                child: logoAsset == null
+                    ? Icon(
+                        icon,
+                        color:
+                            accent ?? (isDark ? Colors.white : Colors.black87),
+                        size: 21,
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.all(7),
+                        child: Image.asset(
+                          logoAsset!,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Icon(
+                            icon,
+                            color:
+                                accent ??
+                                (isDark ? Colors.white : Colors.black87),
+                            size: 21,
+                          ),
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TypographyText(
+                      title,
+                      variant: TypographyVariant.body1,
+                      color: isDark ? Colors.white : Colors.black87,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    const SizedBox(height: 3),
+                    TypographyText(
+                      subtitle,
+                      variant: TypographyVariant.body2,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                      fontSize: 13,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(CupertinoIcons.chevron_right, size: 18),
+            ],
+          ),
         ),
       ),
     );

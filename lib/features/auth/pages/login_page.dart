@@ -25,6 +25,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _obscure = true;
   final _formKey = GlobalKey<FormState>();
   bool _hasLoadedEmail = false;
+  bool _loginSubmitting = false;
+  bool _handledLoginSuccess = false;
 
   @override
   void initState() {
@@ -58,25 +60,48 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     return null;
   }
 
+  String _firstFormError() {
+    return _validateEmail(_emailCtrl.text) ??
+        _validatePassword(_passwordCtrl.text) ??
+        'Please fix the highlighted fields';
+  }
+
   Future<void> _submit() async {
+    if (_loginSubmitting) return;
     if (!_formKey.currentState!.validate()) {
       // Form errors can be hard to see with custom inputs; surface a toast.
       if (mounted) {
-        showToast(context, 'Please fix the form errors');
+        showToast(context, _firstFormError());
       }
       return;
     }
+    setState(() => _loginSubmitting = true);
     final controller = ref.read(authControllerProvider.notifier);
-    await controller.login(
-      email: _emailCtrl.text.trim(),
-      password: _passwordCtrl.text,
-    );
+    try {
+      await controller.login(
+        email: _emailCtrl.text.trim(),
+        password: _passwordCtrl.text,
+      );
+      final authState = ref.read(authControllerProvider);
+      if (!mounted || authState.hasError || authState.value == null) return;
+      if (mounted) {
+        showToast(context, 'Login successful', success: true);
+      }
+      await _handleAuthenticatedUser();
+    } finally {
+      if (mounted) setState(() => _loginSubmitting = false);
+    }
   }
 
   Future<void> _handleAuthenticatedUser() async {
+    if (_handledLoginSuccess) return;
+    _handledLoginSuccess = true;
     final nextRoute = await AppSetupRouteService.resolveAuthenticatedRoute();
     if (!mounted) return;
-    showToast(context, 'Login successful', success: true);
+    final user = ref.read(authControllerProvider).value;
+    if (user != null) {
+      EmailStorageService.saveLastEmail(user.email);
+    }
     context.go(nextRoute);
   }
 
@@ -96,13 +121,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       // Navigate when we have a non-null user and it changed from previous
       final user = next.value;
       final prevUser = previous?.value;
-      if (mounted && user != null && user != prevUser) {
-        // Remember last successful email for next time
-        EmailStorageService.saveLastEmail(user.email);
+      if (mounted && !_loginSubmitting && user != null && user != prevUser) {
+        showToast(context, 'Login successful', success: true);
         _handleAuthenticatedUser();
       }
     });
-    final loading = authState.isLoading;
+    final loading = authState.isLoading || _loginSubmitting;
     final horizontalPadding = AppPadding.form.of(context);
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,

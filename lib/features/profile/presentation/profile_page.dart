@@ -369,6 +369,16 @@ class _ProfileMenuState extends ConsumerState<_ProfileMenu> {
                         );
                         try {
                           await controller.logout();
+                          if (context.mounted) {
+                            showToast(
+                              context,
+                              'Logged out successfully',
+                              success: true,
+                            );
+                            await Future<void>.delayed(
+                              const Duration(milliseconds: 650),
+                            );
+                          }
                         } catch (e) {
                           if (context.mounted) {
                             showToast(context, e.toString());

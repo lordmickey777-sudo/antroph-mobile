@@ -879,6 +879,14 @@ class _CommunityStoriesSliver extends ConsumerWidget {
     WidgetRef ref,
     CommunityStoryDto story,
   ) async {
+    var launchMode = InteractiveStoryLaunchMode.create;
+    String? joinCode;
+    if (story.interactionMode == 'group') {
+      final result = await showGroupGameLauncherSheet(context);
+      if (!context.mounted || result == null) return;
+      launchMode = result.mode;
+      joinCode = result.joinCode;
+    }
     final authResult = await showAuthGuardSheet(
       context,
       ref,
@@ -896,6 +904,8 @@ class _CommunityStoriesSliver extends ConsumerWidget {
           storyId: story.id,
           storySubtitle: story.description,
           storyImage: story.coverImageUrl,
+          interactiveLaunchMode: launchMode,
+          joinCode: joinCode,
         ),
       ),
     );

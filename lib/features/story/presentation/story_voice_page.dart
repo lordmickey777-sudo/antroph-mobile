@@ -5,6 +5,7 @@ import 'package:antroph_mobile/features/home/presentation/voice_chat_screen.dart
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
+import 'package:antroph_mobile/features/story/providers/interactive_story_provider.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:flutter/cupertino.dart';
@@ -80,17 +81,21 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
   }
 
   void _openStoryDetails(BuildContext context) {
+    final session = ref.read(interactiveStoryProvider).session;
     showAppBottomSheet(
       context: context,
       builder: (_, scrollController) => StorySheetContent(
         storyId: widget.storyId,
-        title: (widget.storyTitle?.isNotEmpty ?? false) ? widget.storyTitle! : 'Story',
+        title: (widget.storyTitle?.isNotEmpty ?? false)
+            ? widget.storyTitle!
+            : 'Story',
         subtitle: widget.storySubtitle ?? '',
         imageAsset: (widget.storyImage?.isNotEmpty ?? false)
             ? widget.storyImage!
             : 'assets/images/default.png',
         mascotConfig: widget.mascotConfig,
         isAdded: widget.isAddedToPlaylist,
+        activeGameCode: session?.joinCode,
         scrollController: scrollController,
       ),
     );
@@ -118,12 +123,15 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
       if (next.isBusy) return;
       if (!next.isSessionReady) return;
       if (next.isRecording) return;
-      final becameReady = !(prev?.isSessionReady ?? false) && next.isSessionReady;
+      final becameReady =
+          !(prev?.isSessionReady ?? false) && next.isSessionReady;
       if (!becameReady) return;
       unawaited(voiceController.startRecording());
     });
 
-    final title = (widget.storyTitle?.isNotEmpty ?? false) ? widget.storyTitle! : 'Aura';
+    final title = (widget.storyTitle?.isNotEmpty ?? false)
+        ? widget.storyTitle!
+        : 'Aura';
 
     return WillPopScope(
       onWillPop: _handleBack,
@@ -150,7 +158,11 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Color(0xF8000000), Color(0x90000000), Color(0x00000000)],
+                  colors: [
+                    Color(0xF8000000),
+                    Color(0x90000000),
+                    Color(0x00000000),
+                  ],
                   stops: [0.0, 0.6, 1.0],
                 ),
               ),

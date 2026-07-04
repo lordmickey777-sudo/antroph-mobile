@@ -20,6 +20,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+enum InteractiveStoryLaunchMode { create, joinByCode }
+
 class StoryChatFlowPage extends ConsumerStatefulWidget {
   const StoryChatFlowPage({
     super.key,
@@ -31,6 +33,8 @@ class StoryChatFlowPage extends ConsumerStatefulWidget {
     this.storyImage,
     this.isAddedToPlaylist = false,
     this.voicePageBuilder,
+    this.interactiveLaunchMode = InteractiveStoryLaunchMode.create,
+    this.joinCode,
   });
 
   final String storyId;
@@ -41,6 +45,8 @@ class StoryChatFlowPage extends ConsumerStatefulWidget {
   final String? storyImage;
   final bool isAddedToPlaylist;
   final WidgetBuilder? voicePageBuilder;
+  final InteractiveStoryLaunchMode interactiveLaunchMode;
+  final String? joinCode;
 
   @override
   ConsumerState<StoryChatFlowPage> createState() => _StoryChatFlowPageState();
@@ -102,6 +108,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
   }
 
   void _openStoryDetails(BuildContext context) {
+    final session = ref.read(interactiveStoryProvider).session;
     showAppBottomSheet(
       context: context,
       builder: (_, scrollController) => StorySheetContent(
@@ -115,6 +122,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
             : 'assets/images/default.png',
         mascotConfig: widget.mascotConfig,
         isAdded: widget.isAddedToPlaylist,
+        activeGameCode: session?.joinCode,
         scrollController: scrollController,
       ),
     );
@@ -324,6 +332,8 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
                 return _InteractiveStoryTab(
                   storyId: widget.storyId,
                   interactionMode: detail.interactionMode,
+                  launchMode: widget.interactiveLaunchMode,
+                  joinCode: widget.joinCode,
                   onCall: _openVoicePage,
                   onLeave: _leaveGame,
                 );
@@ -343,12 +353,16 @@ class _InteractiveStoryTab extends ConsumerStatefulWidget {
   const _InteractiveStoryTab({
     required this.storyId,
     required this.interactionMode,
+    required this.launchMode,
+    this.joinCode,
     required this.onCall,
     required this.onLeave,
   });
 
   final String storyId;
   final String interactionMode;
+  final InteractiveStoryLaunchMode launchMode;
+  final String? joinCode;
   final VoidCallback onCall;
   final Future<void> Function() onLeave;
 
@@ -361,6 +375,8 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   final _textController = TextEditingController();
   bool _canSend = false;
   bool _started = false;
+  String? _lastGenerationFailureKey;
+  String? _stickyGenerationError;
 
   @override
   void initState() {
@@ -381,6 +397,12 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   void _start() {
     if (_started) return;
     _started = true;
+    final code = widget.joinCode?.trim() ?? '';
+    if (widget.launchMode == InteractiveStoryLaunchMode.joinByCode &&
+        code.isNotEmpty) {
+      unawaited(ref.read(interactiveStoryProvider.notifier).joinByCode(code));
+      return;
+    }
     unawaited(
       ref
           .read(interactiveStoryProvider.notifier)
@@ -398,6 +420,41 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     unawaited(ref.read(interactiveStoryProvider.notifier).submitText(text));
   }
 
+  void _handleGenerationFailure(InteractiveStoryState next) {
+    final session = next.session;
+    final interactiveState = session?.interactiveState;
+    final phase = interactiveState?['phase'] as String?;
+    if (session == null || interactiveState == null) return;
+
+    if (phase != 'generation_failed') {
+      if (!next.isRetryingGeneration &&
+          (_stickyGenerationError != null ||
+              _lastGenerationFailureKey != null)) {
+        setState(() {
+          _stickyGenerationError = null;
+          _lastGenerationFailureKey = null;
+        });
+      }
+      return;
+    }
+
+    final message =
+        (interactiveState['generation_error'] as String?)?.trim().isNotEmpty ==
+            true
+        ? (interactiveState['generation_error'] as String).trim()
+        : 'The next question could not be loaded.';
+    final failureKey =
+        '${session.sessionId}:${interactiveState['current_round']}:$message';
+
+    if (_stickyGenerationError != message) {
+      setState(() => _stickyGenerationError = message);
+    }
+    if (_lastGenerationFailureKey == failureKey) return;
+
+    _lastGenerationFailureKey = failureKey;
+    showToast(context, message, success: false);
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<InteractiveStoryState>(interactiveStoryProvider, (
@@ -405,6 +462,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
       next,
     ) {
       if (!mounted) return;
+      _handleGenerationFailure(next);
       final error = next.error;
       if (error != null &&
           error.isNotEmpty &&
@@ -446,6 +504,10 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         (phase == 'generation_failed' || state.isRetryingGeneration);
     final questionGenerationError =
         (session?.interactiveState['generation_error'] as String?)?.trim();
+    final effectiveQuestionGenerationError =
+        questionGenerationError?.isNotEmpty == true
+        ? questionGenerationError!
+        : _stickyGenerationError;
     final isDark = context.isDarkMode;
     final mutedSurface = isDark
         ? const Color(0xFF1A1A1A)
@@ -596,8 +658,8 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
           Positioned.fill(
             child: _QuestionGenerationOverlay(
               isLoading: questionGenerationRetrying,
-              message: questionGenerationError?.isNotEmpty == true
-                  ? questionGenerationError!
+              message: effectiveQuestionGenerationError?.isNotEmpty == true
+                  ? effectiveQuestionGenerationError!
                   : 'The next question could not be loaded.',
               onRetry: questionGenerationRetrying
                   ? null
@@ -700,7 +762,7 @@ class _QuestionGenerationOverlay extends StatelessWidget {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            isLoading
+                            message.trim().isEmpty
                                 ? 'Loading the next question...'
                                 : message,
                             style: TextStyle(

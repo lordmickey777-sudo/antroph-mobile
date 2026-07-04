@@ -7,6 +7,8 @@ enum ToastVariant { success, error, info }
 OverlayEntry? _toastEntry;
 Timer? _toastTimer;
 
+const _toastLogoAsset = 'assets/images/app_logo.png';
+
 void showToast(
   BuildContext context,
   String message, {
@@ -38,9 +40,10 @@ void showToast(
         SnackBar(
           behavior: SnackBarBehavior.floating,
           backgroundColor: bg,
-          content: Text(
-            message,
-            style: theme.textTheme.bodyMedium?.copyWith(color: fg),
+          content: _ToastContent(
+            message: message,
+            foreground: fg,
+            textStyle: theme.textTheme.bodyMedium,
           ),
           duration: duration,
         ),
@@ -122,12 +125,12 @@ class _ToastOverlay extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
-                    vertical: 12,
+                    vertical: 8,
                   ),
-                  child: Text(
-                    message,
-                    style: theme.textTheme.bodyMedium?.copyWith(color: fg),
-                    textAlign: TextAlign.center,
+                  child: _ToastContent(
+                    message: message,
+                    foreground: fg,
+                    textStyle: theme.textTheme.bodyMedium,
                   ),
                 ),
               ),
@@ -135,6 +138,51 @@ class _ToastOverlay extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ToastContent extends StatelessWidget {
+  const _ToastContent({
+    required this.message,
+    required this.foreground,
+    required this.textStyle,
+  });
+
+  final String message;
+  final Color foreground;
+  final TextStyle? textStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Image.asset(
+            _toastLogoAsset,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) =>
+                Icon(Icons.notifications_rounded, color: foreground, size: 16),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            message,
+            style: textStyle?.copyWith(color: foreground),
+            textAlign: TextAlign.left,
+          ),
+        ),
+      ],
     );
   }
 }
