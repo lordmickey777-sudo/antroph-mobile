@@ -488,6 +488,11 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
           error != (previous?.error ?? '')) {
         showToast(context, error, success: false);
         ref.read(interactiveStoryProvider.notifier).clearError();
+        if (widget.launchMode == InteractiveStoryLaunchMode.joinPublic &&
+            next.session == null &&
+            Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
       }
     });
 
@@ -542,7 +547,13 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
           children: [
             Expanded(
               child: session == null
-                  ? const _StorySessionLoadingShell()
+                  ? _StorySessionLoadingShell(
+                      title:
+                          widget.launchMode ==
+                              InteractiveStoryLaunchMode.joinPublic
+                          ? 'SEARCHING...'
+                          : 'LOADING...',
+                    )
                   : RefreshIndicator(
                       onRefresh: notifier.refresh,
                       child: InteractiveStoryRenderer(
@@ -1106,7 +1117,9 @@ class _QuizGameBottomBar extends StatelessWidget {
 }
 
 class _StorySessionLoadingShell extends StatelessWidget {
-  const _StorySessionLoadingShell();
+  const _StorySessionLoadingShell({this.title = 'LOADING...'});
+
+  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -1115,7 +1128,7 @@ class _StorySessionLoadingShell extends StatelessWidget {
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
-          child: const _GameLoadingGraphic(),
+          child: _GameLoadingGraphic(title: title),
         ),
       ),
     );
@@ -1123,7 +1136,9 @@ class _StorySessionLoadingShell extends StatelessWidget {
 }
 
 class _GameLoadingGraphic extends StatefulWidget {
-  const _GameLoadingGraphic();
+  const _GameLoadingGraphic({required this.title});
+
+  final String title;
 
   @override
   State<_GameLoadingGraphic> createState() => _GameLoadingGraphicState();
@@ -1156,7 +1171,10 @@ class _GameLoadingGraphicState extends State<_GameLoadingGraphic>
         animation: _controller,
         builder: (context, _) {
           return CustomPaint(
-            painter: _GameLoadingPainter(progress: _controller.value),
+            painter: _GameLoadingPainter(
+              progress: _controller.value,
+              title: widget.title,
+            ),
           );
         },
       ),
@@ -1165,9 +1183,10 @@ class _GameLoadingGraphicState extends State<_GameLoadingGraphic>
 }
 
 class _GameLoadingPainter extends CustomPainter {
-  const _GameLoadingPainter({required this.progress});
+  const _GameLoadingPainter({required this.progress, required this.title});
 
   final double progress;
+  final String title;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1182,7 +1201,7 @@ class _GameLoadingPainter extends CustomPainter {
 
     final textPainter = TextPainter(
       text: TextSpan(
-        text: 'LOADING...',
+        text: title,
         style: TextStyle(
           color: const Color(0xFF111111),
           fontSize: size.width * 0.105,
