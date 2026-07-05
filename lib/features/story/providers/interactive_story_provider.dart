@@ -22,6 +22,7 @@ class InteractiveStoryState {
     this.streamingAssistantText,
     this.recentStreamedAssistantText,
     this.isRetryingGeneration = false,
+    this.isAdvancingQuestion = false,
     this.error,
   });
 
@@ -33,6 +34,7 @@ class InteractiveStoryState {
   final String? streamingAssistantText;
   final String? recentStreamedAssistantText;
   final bool isRetryingGeneration;
+  final bool isAdvancingQuestion;
   final String? error;
 
   InteractiveStoryState copyWith({
@@ -44,6 +46,7 @@ class InteractiveStoryState {
     Object? streamingAssistantText = _unset,
     Object? recentStreamedAssistantText = _unset,
     bool? isRetryingGeneration,
+    bool? isAdvancingQuestion,
     Object? error = _unset,
   }) {
     return InteractiveStoryState(
@@ -59,6 +62,7 @@ class InteractiveStoryState {
           ? this.recentStreamedAssistantText
           : recentStreamedAssistantText as String?,
       isRetryingGeneration: isRetryingGeneration ?? this.isRetryingGeneration,
+      isAdvancingQuestion: isAdvancingQuestion ?? this.isAdvancingQuestion,
       error: error == _unset ? this.error : error as String?,
     );
   }
@@ -91,6 +95,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     required String storyId,
     required String interactionMode,
     String? sessionType,
+    String? roomType,
   }) async {
     if (state.isLoading) return;
     final existing = state.session;
@@ -105,6 +110,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         deviceId: _deviceId,
         sessionType:
             sessionType ?? (interactionMode == 'group' ? 'group' : 'solo'),
+        roomType: roomType,
       );
       if (_isDisposed) return;
       state = InteractiveStoryState(session: session);
@@ -123,6 +129,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     required String storyId,
     required String interactionMode,
     String? sessionType,
+    String? roomType,
   }) async {
     await _disconnectRoomSocket();
     if (_isDisposed) return;
@@ -131,7 +138,35 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       storyId: storyId,
       interactionMode: interactionMode,
       sessionType: sessionType,
+      roomType: roomType,
     );
+  }
+
+  Future<void> joinPublic({
+    required String storyId,
+    String? displayName,
+  }) async {
+    if (state.isLoading) return;
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final repo = ref.read(storiesRepositoryProvider);
+      final session = await repo.joinPublicInteractiveRoom(
+        storyId: storyId,
+        deviceType: _deviceType,
+        deviceId: _deviceId,
+        displayName: displayName,
+      );
+      if (_isDisposed) return;
+      state = InteractiveStoryState(session: session);
+      unawaited(_connectRoomSocket(session.sessionId));
+      _scheduleWaitingRefresh();
+    } on ApiError catch (e) {
+      if (_isDisposed) return;
+      state = state.copyWith(isLoading: false, error: e.message);
+    } catch (e) {
+      if (_isDisposed) return;
+      state = state.copyWith(isLoading: false, error: '$e');
+    }
   }
 
   Future<void> joinByCode(String joinCode, {String? displayName}) async {
@@ -210,6 +245,30 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         isRetryingGeneration: false,
         error: '$e',
       );
+    }
+  }
+
+  Future<void> advanceQuestion() async {
+    final sessionId = state.session?.sessionId;
+    if (sessionId == null ||
+        sessionId.isEmpty ||
+        state.isLoading ||
+        state.isAdvancingQuestion) {
+      return;
+    }
+    state = state.copyWith(isAdvancingQuestion: true, error: null);
+    try {
+      final repo = ref.read(storiesRepositoryProvider);
+      final session = await repo.advanceInteractiveSession(sessionId);
+      if (_isDisposed) return;
+      state = state.copyWith(session: session, isAdvancingQuestion: false);
+      _scheduleWaitingRefresh();
+    } on ApiError catch (e) {
+      if (_isDisposed) return;
+      state = state.copyWith(isAdvancingQuestion: false, error: e.message);
+    } catch (e) {
+      if (_isDisposed) return;
+      state = state.copyWith(isAdvancingQuestion: false, error: '$e');
     }
   }
 
@@ -382,6 +441,58 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     }
   }
 
+  Future<void> submitPlayerChat(String text) async {
+    final sessionId = state.session?.sessionId;
+    final trimmed = text.trim();
+    if (sessionId == null || sessionId.isEmpty || trimmed.isEmpty) return;
+    final key =
+        '${state.session?.lastSeq ?? 0}-player_chat-${DateTime.now().millisecondsSinceEpoch}';
+    final pendingMessage = PendingInteractiveTextMessage(
+      clientId: key,
+      text: trimmed,
+    );
+
+    state = state.copyWith(
+      pendingInputKeys: {...state.pendingInputKeys, key},
+      pendingTextMessages: [...state.pendingTextMessages, pendingMessage],
+      error: null,
+    );
+
+    try {
+      final repo = ref.read(storiesRepositoryProvider);
+      final response = await repo.submitInteractiveInput(
+        sessionId: sessionId,
+        input: InteractiveInput(
+          inputType: 'player_chat',
+          text: trimmed,
+          idempotencyKey: key,
+        ),
+      );
+      if (_isDisposed) return;
+      final current = state.session;
+      if (current == null) return;
+      state = state.copyWith(
+        session: _mergeResponseIntoSession(current, response),
+        pendingInputKeys: {...state.pendingInputKeys}..remove(key),
+        pendingTextMessages: _pendingTextMessagesExcluding(key),
+      );
+    } on ApiError catch (e) {
+      if (_isDisposed) return;
+      state = state.copyWith(
+        pendingInputKeys: {...state.pendingInputKeys}..remove(key),
+        pendingTextMessages: _pendingTextMessagesExcluding(key),
+        error: e.message,
+      );
+    } catch (e) {
+      if (_isDisposed) return;
+      state = state.copyWith(
+        pendingInputKeys: {...state.pendingInputKeys}..remove(key),
+        pendingTextMessages: _pendingTextMessagesExcluding(key),
+        error: '$e',
+      );
+    }
+  }
+
   void clear() {
     unawaited(_disconnectRoomSocket());
     state = const InteractiveStoryState();
@@ -541,6 +652,14 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         break;
       case 'solo_user_message':
         _consumePendingTextByValue(payload['text'] as String?);
+        break;
+      case 'player_chat_message':
+        final clientId = payload['client_id'] as String?;
+        if (clientId != null && clientId.isNotEmpty) {
+          _consumePendingTextByClientId(clientId);
+        } else {
+          _consumePendingTextByValue(payload['text'] as String?);
+        }
         break;
       case 'interactive_turn':
         recentStreamedAssistantText = state.streamingAssistantText?.trim();
@@ -824,6 +943,12 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     return state.pendingTextMessages
         .where((message) => message.clientId != clientId)
         .toList();
+  }
+
+  void _consumePendingTextByClientId(String clientId) {
+    final nextMessages = _pendingTextMessagesExcluding(clientId);
+    if (nextMessages.length == state.pendingTextMessages.length) return;
+    state = state.copyWith(pendingTextMessages: nextMessages);
   }
 
   void _consumePendingTextByValue(String? rawValue) {

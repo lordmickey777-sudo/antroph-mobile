@@ -440,6 +440,12 @@ class _GroupGameLauncherSheetState extends State<_GroupGameLauncherSheet> {
     ).pop(const GroupGameLaunchResult(mode: InteractiveStoryLaunchMode.create));
   }
 
+  void _joinPublicRoom() {
+    Navigator.of(context).pop(
+      const GroupGameLaunchResult(mode: InteractiveStoryLaunchMode.joinPublic),
+    );
+  }
+
   void _submitCode() {
     final code = _codeController.text.trim().toUpperCase();
     if (code.isEmpty) return;
@@ -509,7 +515,7 @@ class _GroupGameLauncherSheetState extends State<_GroupGameLauncherSheet> {
                         ),
                         const SizedBox(height: 20),
                         TypographyText(
-                          'Group game',
+                          'Join room',
                           variant: TypographyVariant.h3,
                           color: isDark ? Colors.white : Colors.black,
                           fontSize: 22,
@@ -517,7 +523,7 @@ class _GroupGameLauncherSheetState extends State<_GroupGameLauncherSheet> {
                         ),
                         const SizedBox(height: 8),
                         TypographyText(
-                          'Create a room as host or join friends with their code.',
+                          'Jump into a public room or play privately with a custom code.',
                           variant: TypographyVariant.body2,
                           color: mutedText,
                           fontSize: 14,
@@ -526,14 +532,21 @@ class _GroupGameLauncherSheetState extends State<_GroupGameLauncherSheet> {
                         _GroupGameLauncherTile(
                           icon: CupertinoIcons.sparkles,
                           logoAsset: 'assets/images/app_logo.png',
-                          title: 'Create game',
-                          subtitle: 'Start a new room and share the code.',
+                          title: 'Join public room',
+                          subtitle: 'Match into any vacant room at random.',
+                          onTap: _joinPublicRoom,
+                        ),
+                        const SizedBox(height: 12),
+                        _GroupGameLauncherTile(
+                          icon: CupertinoIcons.person_2_fill,
+                          title: 'Create custom room',
+                          subtitle: 'Start a private room and share the code.',
                           onTap: _createGame,
                         ),
                         const SizedBox(height: 12),
                         _GroupGameLauncherTile(
                           icon: CupertinoIcons.link,
-                          title: 'Join with code',
+                          title: 'Join custom room',
                           subtitle: 'Enter a room code from the host.',
                           onTap: () => setState(() => _showCodeInput = true),
                           isSelected: _showCodeInput,

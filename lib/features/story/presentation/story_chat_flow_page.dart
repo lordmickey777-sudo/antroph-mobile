@@ -20,7 +20,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-enum InteractiveStoryLaunchMode { create, joinByCode }
+enum InteractiveStoryLaunchMode { create, joinByCode, joinPublic }
 
 class StoryChatFlowPage extends ConsumerStatefulWidget {
   const StoryChatFlowPage({
@@ -398,6 +398,14 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     if (_started) return;
     _started = true;
     final code = widget.joinCode?.trim() ?? '';
+    if (widget.launchMode == InteractiveStoryLaunchMode.joinPublic) {
+      unawaited(
+        ref
+            .read(interactiveStoryProvider.notifier)
+            .joinPublic(storyId: widget.storyId),
+      );
+      return;
+    }
     if (widget.launchMode == InteractiveStoryLaunchMode.joinByCode &&
         code.isNotEmpty) {
       unawaited(ref.read(interactiveStoryProvider.notifier).joinByCode(code));
@@ -417,7 +425,18 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
     _textController.clear();
-    unawaited(ref.read(interactiveStoryProvider.notifier).submitText(text));
+    final session = ref.read(interactiveStoryProvider).session;
+    final state = session?.interactiveState ?? const <String, dynamic>{};
+    final isGroupQuizChat =
+        state['template'] == 'quiz' &&
+        state['session_type'] == 'group' &&
+        state['phase'] == 'showing_results';
+    final notifier = ref.read(interactiveStoryProvider.notifier);
+    unawaited(
+      isGroupQuizChat
+          ? notifier.submitPlayerChat(text)
+          : notifier.submitText(text),
+    );
   }
 
   void _handleGenerationFailure(InteractiveStoryState next) {
@@ -492,6 +511,8 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         }.contains(phase);
     final isGroupQuizSession =
         isQuizSession && session?.interactiveState['session_type'] == 'group';
+    final isGroupQuizChatPhase =
+        isGroupQuizSession && phase == 'showing_results';
     final showQuestionGenerationOverlay =
         isGroupQuizSession &&
         session != null &&
@@ -533,8 +554,11 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                         streamingAssistantText: state.streamingAssistantText,
                         recentStreamedAssistantText:
                             state.recentStreamedAssistantText,
+                        isAdvancingQuestion: state.isAdvancingQuestion,
                         onRetryGeneration: () =>
                             unawaited(notifier.retryGeneration()),
+                        onAdvanceQuestion: () =>
+                            unawaited(notifier.advanceQuestion()),
                         onReplay: () => unawaited(
                           notifier.restart(
                             storyId: widget.storyId,
@@ -558,7 +582,8 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                       ),
                     ),
             ),
-            if (session != null && (!isQuizSession || isSoloQuizTextPhase))
+            if (session != null &&
+                (!isQuizSession || isSoloQuizTextPhase || isGroupQuizChatPhase))
               AnimatedPadding(
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeOut,
@@ -593,6 +618,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                                   'Discuss first or quiz now?',
                                 'timer_selection' => 'Timed or untimed?',
                                 'post_question_prompt' => 'Reply here',
+                                'showing_results' => 'Message the room',
                                 _ => 'Message',
                               },
                               hintStyle: TextStyle(

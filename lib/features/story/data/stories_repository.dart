@@ -161,6 +161,7 @@ class StoriesRepository {
     String deviceType = 'mobile',
     String? deviceId,
     String? sessionType,
+    String? roomType,
     String? hostDisplayName,
     int? maxParticipants,
   }) async {
@@ -171,8 +172,31 @@ class StoriesRepository {
           'device_type': deviceType,
           if (deviceId != null) 'device_id': deviceId,
           if (sessionType != null) 'session_type': sessionType,
+          if (roomType != null) 'room_type': roomType,
           if (hostDisplayName != null) 'host_display_name': hostDisplayName,
           if (maxParticipants != null) 'max_participants': maxParticipants,
+        },
+        options: Options(receiveTimeout: const Duration(seconds: 45)),
+      );
+      return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<InteractiveSessionState> joinPublicInteractiveRoom({
+    required String storyId,
+    String deviceType = 'mobile',
+    String? deviceId,
+    String? displayName,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/stories/$storyId/public-room/join',
+        data: {
+          'device_type': deviceType,
+          if (deviceId != null) 'device_id': deviceId,
+          if (displayName != null) 'display_name': displayName,
         },
         options: Options(receiveTimeout: const Duration(seconds: 45)),
       );
@@ -282,6 +306,17 @@ class StoriesRepository {
       final res = await _dio.post(
         '/story-sessions/$sessionId/retry-generation',
       );
+      return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<InteractiveSessionState> advanceInteractiveSession(
+    String sessionId,
+  ) async {
+    try {
+      final res = await _dio.post('/story-sessions/$sessionId/advance');
       return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
