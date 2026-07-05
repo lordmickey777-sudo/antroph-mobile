@@ -10,6 +10,7 @@ import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/story/models/story_detail.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
+import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:flutter/cupertino.dart';
@@ -52,6 +53,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     with WidgetsBindingObserver, RouteAware {
   ModalRoute<void>? _modalRoute;
   bool _storySessionStarted = false;
+  bool _showContinueOverlay = false;
+  bool _pausedForRoute = false;
+  bool _pausedForLifecycle = false;
   String? _lastPrecachedMascotId;
   VoiceChatController? _voiceController;
 
@@ -131,8 +135,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
         title: (detail?.title.isNotEmpty ?? false)
             ? detail!.title
             : (widget.storyTitle?.isNotEmpty ?? false)
-                ? widget.storyTitle!
-                : 'Story',
+            ? widget.storyTitle!
+            : 'Story',
         subtitle: (detail?.description.isNotEmpty ?? false)
             ? detail!.description
             : (widget.storySubtitle ?? ''),
@@ -190,25 +194,69 @@ class _ChatPageState extends ConsumerState<ChatPage>
     super.dispose();
   }
 
+  void _pauseStoryForReturn() {
+    ref.read(voiceChatControllerProvider.notifier).pauseStorySession();
+  }
+
+  void _showContinuePrompt() {
+    if (!mounted) return;
+    setState(() => _showContinueOverlay = true);
+  }
+
+  Future<void> _continueSpeaking() async {
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    setState(() {
+      _showContinueOverlay = false;
+      _pausedForRoute = false;
+      _pausedForLifecycle = false;
+    });
+    if (widget.isStoryMode) {
+      await voiceController.resumePausedSession();
+      return;
+    }
+
+    ref.read(chatControllerProvider.notifier).resume();
+    final voiceState = ref.read(voiceChatControllerProvider);
+    if (!voiceState.isBusy && !voiceState.isMuted) {
+      voiceController.startRecording();
+    }
+  }
+
+  void _dismissContinuePrompt() {
+    setState(() {
+      _showContinueOverlay = false;
+      _pausedForRoute = false;
+      _pausedForLifecycle = false;
+    });
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       if (!widget.isStoryMode) {
+        _pausedForLifecycle = true;
         ref.read(chatControllerProvider.notifier).pause();
       }
       if (widget.isStoryMode) {
-        voiceController.pauseStorySession();
+        _pausedForLifecycle = true;
+        _pauseStoryForReturn();
       } else {
         voiceController.stopPlayback();
       }
     } else if (state == AppLifecycleState.resumed) {
       if (!widget.isStoryMode) {
-        ref.read(chatControllerProvider.notifier).resume();
+        if (_pausedForLifecycle) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _showContinuePrompt();
+          });
+        }
       }
-      if (widget.isStoryMode) {
-        voiceController.resumePausedSession();
+      if (widget.isStoryMode && _pausedForLifecycle) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showContinuePrompt();
+        });
       }
     }
   }
@@ -216,11 +264,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void didPushNext() {
     if (!widget.isStoryMode) {
+      _pausedForRoute = true;
       ref.read(chatControllerProvider.notifier).pause();
     }
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
     if (widget.isStoryMode) {
-      voiceController.pauseStorySession();
+      _pausedForRoute = true;
+      _pauseStoryForReturn();
     } else {
       voiceController.stopPlayback();
     }
@@ -229,10 +279,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void didPopNext() {
     if (!widget.isStoryMode) {
-      ref.read(chatControllerProvider.notifier).resume();
+      if (_pausedForRoute) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showContinuePrompt();
+        });
+      }
     }
-    if (widget.isStoryMode) {
-      ref.read(voiceChatControllerProvider.notifier).resumePausedSession();
+    if (widget.isStoryMode && _pausedForRoute) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showContinuePrompt();
+      });
     }
   }
 
@@ -294,13 +350,123 @@ class _ChatPageState extends ConsumerState<ChatPage>
             const SizedBox(width: 8),
           ],
         ),
-        body: SafeArea(
-          child: VoiceChatScreen(
-            isStoryMode: widget.isStoryMode,
-            mascotConfig: mascotConfig,
-            expressionStream: voiceController.mascotExpressionStream,
-            onOpenChat: () =>
-                _openChatSheet(context, voiceController, voiceState),
+        body: Stack(
+          children: [
+            SafeArea(
+              child: VoiceChatScreen(
+                isStoryMode: widget.isStoryMode,
+                mascotConfig: mascotConfig,
+                expressionStream: voiceController.mascotExpressionStream,
+                onOpenChat: () =>
+                    _openChatSheet(context, voiceController, voiceState),
+              ),
+            ),
+            if (_showContinueOverlay)
+              _ContinueSpeakingOverlay(
+                onContinue: _continueSpeaking,
+                onDismiss: _dismissContinuePrompt,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ContinueSpeakingOverlay extends StatelessWidget {
+  const _ContinueSpeakingOverlay({
+    required this.onContinue,
+    required this.onDismiss,
+  });
+
+  final VoidCallback onContinue;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final panelColor = isDark ? const Color(0xFF171717) : Colors.white;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : Colors.black.withValues(alpha: 0.08);
+    final mutedText = isDark ? Colors.white70 : Colors.black54;
+
+    return Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black.withValues(alpha: 0.52),
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+                decoration: BoxDecoration(
+                  color: panelColor,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: context.actionButtonBackground,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        CupertinoIcons.mic_fill,
+                        color: context.actionButtonForeground,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TypographyText(
+                      'Continue speaking with Aura?',
+                      variant: TypographyVariant.h4,
+                      color: context.primaryTextColor,
+                      textAlign: TextAlign.center,
+                      fontWeight: FontWeight.w800,
+                    ),
+                    const SizedBox(height: 8),
+                    TypographyText(
+                      'Your conversation was paused while you were away.',
+                      variant: TypographyVariant.body2,
+                      color: mutedText,
+                      textAlign: TextAlign.center,
+                      fontSize: 13,
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: AppPillButton(
+                            label: 'No',
+                            onPressed: onDismiss,
+                            backgroundColor: isDark
+                                ? Colors.white.withValues(alpha: 0.09)
+                                : Colors.black.withValues(alpha: 0.06),
+                            foregroundColor: context.primaryTextColor,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: AppPillButton(
+                            label: 'Yes',
+                            icon: CupertinoIcons.play_fill,
+                            onPressed: onContinue,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -326,4 +492,3 @@ class _ChatButton extends StatelessWidget {
     );
   }
 }
-

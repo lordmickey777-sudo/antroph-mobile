@@ -312,6 +312,17 @@ class StoriesRepository {
     }
   }
 
+  Future<InteractiveSessionState> advanceInteractiveSession(
+    String sessionId,
+  ) async {
+    try {
+      final res = await _dio.post('/story-sessions/$sessionId/advance');
+      return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
   Future<void> leaveInteractiveSession(String sessionId) async {
     try {
       final res = await _dio.post(

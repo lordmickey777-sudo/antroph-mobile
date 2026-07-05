@@ -913,6 +913,9 @@ class _CommunityStoriesSliver extends ConsumerWidget {
 
   void _openCommunityStory(BuildContext context, CommunityStoryDto story) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final title = _capitalizeFirstLetter(story.title);
+    final description = _capitalizeFirstLetter(story.description ?? '');
+    final creatorName = _capitalizeFirstLetter(story.creatorName ?? '');
 
     showAppBottomSheet(
       context: context,
@@ -927,52 +930,51 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child:
-                        story.coverImageUrl != null &&
-                            story.coverImageUrl!.isNotEmpty
-                        ? Image.network(
-                            story.coverImageUrl!,
-                            width: double.infinity,
-                            height: 200,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Image.asset(
+                    child: AspectRatio(
+                      aspectRatio: 0.85,
+                      child:
+                          story.coverImageUrl != null &&
+                              story.coverImageUrl!.isNotEmpty
+                          ? Image.network(
+                              story.coverImageUrl!,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Image.asset(
+                                'assets/images/default.png',
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : Image.asset(
                               'assets/images/default.png',
                               width: double.infinity,
-                              height: 200,
                               fit: BoxFit.cover,
                             ),
-                          )
-                        : Image.asset(
-                            'assets/images/default.png',
-                            width: double.infinity,
-                            height: 200,
-                            fit: BoxFit.cover,
-                          ),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    story.title,
+                    title,
                     style: TextStyle(
                       color: isDark ? Colors.white : Colors.black,
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  if (story.creatorName != null) ...[
+                  if (creatorName.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'by ${story.creatorName}',
+                      'By $creatorName',
                       style: TextStyle(
                         color: isDark ? Colors.white70 : Colors.black54,
                         fontSize: 14,
                       ),
                     ),
                   ],
-                  if (story.description != null &&
-                      story.description!.isNotEmpty) ...[
+                  if (description.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Text(
-                      story.description!,
+                      description,
                       style: TextStyle(
                         color: isDark ? Colors.white70 : Colors.black54,
                         fontSize: 15,
@@ -1039,6 +1041,12 @@ class _CommunityStoriesSliver extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _capitalizeFirstLetter(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return '';
+  return trimmed[0].toUpperCase() + trimmed.substring(1);
 }
 
 class _CommunityStoriesSliverShimmer extends StatelessWidget {

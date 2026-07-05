@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
+import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/blurred_fade_image.dart';
@@ -217,7 +218,8 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
       ref.invalidate(storiesHomeSectionsProvider);
     } catch (err) {
       if (!mounted) return;
-      showToast(context, 'Failed to add story: $err');
+      final message = err is ApiError ? err.message : err.toString();
+      showToast(context, 'Failed to add story: $message');
     } finally {
       if (mounted) {
         setState(() => _isAddingToPlaylist = false);

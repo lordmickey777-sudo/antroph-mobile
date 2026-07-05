@@ -22,16 +22,21 @@ class SmoothCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resolvedBorder = borderColor ??
+    final resolvedBorder =
+        borderColor ??
         (Theme.of(context).brightness == Brightness.dark
             ? Colors.white.withValues(alpha: 0.15)
             : Colors.black.withValues(alpha: 0.1));
 
-    return SmoothClipRRect(
-      smoothness: smoothness,
+    return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      side: BorderSide(color: resolvedBorder, width: borderWidth),
-      child: child,
+      clipBehavior: Clip.antiAlias,
+      child: SmoothClipRRect(
+        smoothness: smoothness,
+        borderRadius: BorderRadius.circular(radius),
+        side: BorderSide(color: resolvedBorder, width: borderWidth),
+        child: child,
+      ),
     );
   }
 }

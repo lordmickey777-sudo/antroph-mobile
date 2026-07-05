@@ -565,8 +565,11 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                         streamingAssistantText: state.streamingAssistantText,
                         recentStreamedAssistantText:
                             state.recentStreamedAssistantText,
+                        isAdvancingQuestion: state.isAdvancingQuestion,
                         onRetryGeneration: () =>
                             unawaited(notifier.retryGeneration()),
+                        onAdvanceQuestion: () =>
+                            unawaited(notifier.advanceQuestion()),
                         onReplay: () => unawaited(
                           notifier.restart(
                             storyId: widget.storyId,

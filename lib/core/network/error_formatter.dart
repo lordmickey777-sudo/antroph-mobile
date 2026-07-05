@@ -5,6 +5,9 @@ class ApiError {
   final int? statusCode;
   final DioException? raw;
   const ApiError({required this.message, this.statusCode, this.raw});
+
+  @override
+  String toString() => message;
 }
 
 class ErrorFormatter {

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smooth_corner/smooth_corner.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
+import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
@@ -63,7 +64,8 @@ class _MyStoriesPageState extends ConsumerState<MyStoriesPage> {
       }
     } catch (e) {
       if (mounted) {
-        showToast(context, e.toString(), success: false);
+        final message = e is ApiError ? e.message : e.toString();
+        showToast(context, 'Failed to delete story: $message', success: false);
       }
     } finally {
       if (mounted) setState(() => _deleting = false);
@@ -76,9 +78,7 @@ class _MyStoriesPageState extends ConsumerState<MyStoriesPage> {
         status == 'rejected' ||
         status == 'pending_update') {
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => StoryEditorPage(storyId: story.id),
-        ),
+        MaterialPageRoute(builder: (_) => StoryEditorPage(storyId: story.id)),
       );
     } else {
       Navigator.of(context).push(
@@ -108,18 +108,12 @@ class _MyStoriesPageState extends ConsumerState<MyStoriesPage> {
           color: context.primaryTextColor,
         ),
         leading: IconButton(
-          icon: Icon(
-            CupertinoIcons.back,
-            color: context.primaryTextColor,
-          ),
+          icon: Icon(CupertinoIcons.back, color: context.primaryTextColor),
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
           IconButton(
-            icon: Icon(
-              Icons.add_rounded,
-              color: context.primaryTextColor,
-            ),
+            icon: Icon(Icons.add_rounded, color: context.primaryTextColor),
             onPressed: () async {
               HapticFeedback.lightImpact();
               final result = await showAuthGuardSheet(
@@ -203,8 +197,9 @@ class _MyStoriesPageState extends ConsumerState<MyStoriesPage> {
                 return CommunityStoryGridCard(
                   story: story,
                   onTap: () => _navigateToStory(story),
-                  onLongPress:
-                      _canDelete(story) ? () => _confirmDelete(story) : null,
+                  onLongPress: _canDelete(story)
+                      ? () => _confirmDelete(story)
+                      : null,
                 );
               },
             ),
@@ -245,8 +240,9 @@ class _MyStoriesPageState extends ConsumerState<MyStoriesPage> {
                 const Expanded(
                   child: ShimmerBox(
                     radius: 0,
-                    borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(16)),
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
                   ),
                 ),
                 Padding(
