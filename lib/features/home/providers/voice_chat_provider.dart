@@ -1149,7 +1149,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _client.send({
         'type': 'response.create',
         'response': {
-          'modalities': ['text', 'audio'],
+          'modalities': ['audio'],
           'output_audio_format': _outputAudioFormat,
           'voice': _outputVoice,
           'input': [
@@ -1996,7 +1996,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         phase: state.isStoryMode ? RealtimeVoicePhase.processing : state.phase,
       );
 
-      final modalities = textOnly ? ['text'] : ['text', 'audio'];
+      final modalities = textOnly ? ['text'] : ['audio'];
       final response = <String, dynamic>{
         'modalities': modalities,
         'input': [
