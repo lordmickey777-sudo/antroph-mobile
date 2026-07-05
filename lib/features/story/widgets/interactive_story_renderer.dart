@@ -17,10 +17,8 @@ class InteractiveStoryRenderer extends StatelessWidget {
     required this.onChoice,
     required this.onQuizAnswer,
     required this.onRetryGeneration,
-    this.onAdvanceQuestion,
     required this.onReplay,
     required this.onLeave,
-    this.isAdvancingQuestion = false,
     this.pendingKeys = const <String>{},
     this.pendingTextMessages = const <PendingInteractiveTextMessage>[],
     this.localQuizSelections = const <String, String>{},
@@ -33,10 +31,8 @@ class InteractiveStoryRenderer extends StatelessWidget {
   final ValueChanged<String> onChoice;
   final QuizAnswerCallback onQuizAnswer;
   final VoidCallback onRetryGeneration;
-  final VoidCallback? onAdvanceQuestion;
   final VoidCallback onReplay;
   final VoidCallback onLeave;
-  final bool isAdvancingQuestion;
   final Set<String> pendingKeys;
   final List<PendingInteractiveTextMessage> pendingTextMessages;
   final Map<String, String> localQuizSelections;
@@ -62,10 +58,8 @@ class InteractiveStoryRenderer extends StatelessWidget {
         onChoice: onChoice,
         onQuizAnswer: onQuizAnswer,
         onRetryGeneration: onRetryGeneration,
-        onAdvanceQuestion: onAdvanceQuestion,
         onReplay: onReplay,
         onLeave: onLeave,
-        isAdvancingQuestion: isAdvancingQuestion,
       );
     }
     String? busyOptionId;
@@ -157,10 +151,8 @@ class _QuizTranscriptView extends StatefulWidget {
     required this.onChoice,
     required this.onQuizAnswer,
     required this.onRetryGeneration,
-    this.onAdvanceQuestion,
     required this.onReplay,
     required this.onLeave,
-    required this.isAdvancingQuestion,
   });
 
   final InteractiveSessionState session;
@@ -173,10 +165,8 @@ class _QuizTranscriptView extends StatefulWidget {
   final ValueChanged<String> onChoice;
   final QuizAnswerCallback onQuizAnswer;
   final VoidCallback onRetryGeneration;
-  final VoidCallback? onAdvanceQuestion;
   final VoidCallback onReplay;
   final VoidCallback onLeave;
-  final bool isAdvancingQuestion;
 
   @override
   State<_QuizTranscriptView> createState() => _QuizTranscriptViewState();
@@ -255,8 +245,6 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
       pendingTextMessages: widget.pendingTextMessages,
       localQuizSelections: widget.localQuizSelections,
       streamingAssistantText: widget.streamingAssistantText,
-      canAdvanceQuestion: _canCurrentUserAdvance(session, widget.currentUserId),
-      isAdvancingQuestion: widget.isAdvancingQuestion,
     );
 
     return ListView(
@@ -282,7 +270,6 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
               onChoice: widget.onChoice,
               onQuizAnswer: widget.onQuizAnswer,
               onRetryGeneration: widget.onRetryGeneration,
-              onAdvanceQuestion: widget.onAdvanceQuestion,
               onReplay: widget.onReplay,
               onLeave: widget.onLeave,
               onTextRevealTick: _scrollToBottom,
@@ -322,7 +309,6 @@ class _QuizTranscriptItem {
     this.userText,
     this.userLabel,
     this.userParticipant,
-    this.statusActionLabel,
     this.statusIcon = CupertinoIcons.info_circle_fill,
     this.choicePrompt,
     this.choiceOptions = const <InteractiveOption>[],
@@ -343,7 +329,6 @@ class _QuizTranscriptItem {
   final String? userText;
   final String? userLabel;
   final StoryParticipant? userParticipant;
-  final String? statusActionLabel;
   final IconData? statusIcon;
   final String? choicePrompt;
   final List<InteractiveOption> choiceOptions;
@@ -368,7 +353,6 @@ class _QuizTranscriptItem {
       userText: userText,
       userLabel: userLabel,
       userParticipant: userParticipant,
-      statusActionLabel: statusActionLabel,
       statusIcon: statusIcon,
       choicePrompt: choicePrompt,
       choiceOptions: choiceOptions,
@@ -386,8 +370,6 @@ class _QuizTranscriptItem {
     required List<PendingInteractiveTextMessage> pendingTextMessages,
     required Map<String, String> localQuizSelections,
     String? streamingAssistantText,
-    bool canAdvanceQuestion = false,
-    bool isAdvancingQuestion = false,
   }) {
     final events = _dedupeEvents(session.events)
       ..sort((a, b) => a.seq.compareTo(b.seq));
@@ -726,19 +708,12 @@ class _QuizTranscriptItem {
             waitingForPlayers ||
             checkingAnswers) &&
         (items.isEmpty || items.last.kind != _QuizTranscriptItemKind.status)) {
-      final manualAdvance = waitingAfterResult || waitingForFinalResults;
       items.add(
         _QuizTranscriptItem(
           kind: _QuizTranscriptItemKind.status,
           seq: session.lastSeq + 4,
-          statusTitle: manualAdvance
-              ? canAdvanceQuestion
-                    ? (isAdvancingQuestion
-                          ? 'Loading next question'
-                          : waitingForFinalResults
-                          ? 'Ready for final results'
-                          : 'Ready for next question')
-                    : 'Waiting for host'
+          statusTitle: waitingAfterResult
+              ? 'Aura is getting the next question ready'
               : waitingForPlayers
               ? 'Waiting for players'
               : waitingForFinalResults
@@ -746,24 +721,14 @@ class _QuizTranscriptItem {
               : checkingAnswers
               ? 'Checking answers'
               : 'Aura is getting the next question ready',
-          statusBody: manualAdvance
-              ? (canAdvanceQuestion
-                    ? 'Players can keep chatting, or load the next timed question.'
-                    : 'Players can keep chatting while the host decides when to continue.')
-              : (checkingAnswers || waitingForPlayers)
+          statusBody: (checkingAnswers || waitingForPlayers)
               ? _lobbyText(session)
               : '',
           statusIcon: CupertinoIcons.person_3_fill,
-          statusActionLabel:
-              manualAdvance && canAdvanceQuestion && !isAdvancingQuestion
-              ? (waitingForFinalResults
-                    ? 'Show final results'
-                    : 'Load next question')
-              : null,
           showLoading:
               waitingForQuestion ||
-              (waitingAfterResult && isAdvancingQuestion) ||
-              (waitingForFinalResults && isAdvancingQuestion),
+              waitingAfterResult ||
+              waitingForFinalResults,
         ),
       );
     }
@@ -980,7 +945,6 @@ class _QuizTranscriptRow extends StatelessWidget {
     required this.onChoice,
     required this.onQuizAnswer,
     required this.onRetryGeneration,
-    this.onAdvanceQuestion,
     required this.onReplay,
     required this.onLeave,
     required this.onTextRevealTick,
@@ -995,7 +959,6 @@ class _QuizTranscriptRow extends StatelessWidget {
   final ValueChanged<String> onChoice;
   final QuizAnswerCallback onQuizAnswer;
   final VoidCallback onRetryGeneration;
-  final VoidCallback? onAdvanceQuestion;
   final VoidCallback onReplay;
   final VoidCallback onLeave;
   final VoidCallback onTextRevealTick;
@@ -1067,15 +1030,10 @@ class _QuizTranscriptRow extends StatelessWidget {
                 icon: item.statusIcon,
                 title: item.statusTitle ?? 'Game update',
                 body: item.statusBody ?? _lobbyText(session),
-                actionLabel:
-                    item.statusActionLabel ??
-                    (item.statusTitle == 'Question failed to load'
-                        ? 'Retry'
-                        : null),
-                onAction:
-                    item.statusActionLabel != null && onAdvanceQuestion != null
-                    ? onAdvanceQuestion
-                    : item.statusTitle == 'Question failed to load'
+                actionLabel: item.statusTitle == 'Question failed to load'
+                    ? 'Retry'
+                    : null,
+                onAction: item.statusTitle == 'Question failed to load'
                     ? onRetryGeneration
                     : null,
               ),
@@ -3746,26 +3704,6 @@ String _participantName(List<StoryParticipant> participants, String? id) {
     if (participant.id == id) return _displayName(participant);
   }
   return 'Player';
-}
-
-bool _canCurrentUserAdvance(
-  InteractiveSessionState session,
-  String? currentUserId,
-) {
-  if ((session.interactiveState['session_type'] as String?) != 'group') {
-    return false;
-  }
-  if (currentUserId == null || currentUserId.isEmpty) {
-    return session.participants.length <= 1;
-  }
-  for (final participant in session.participants) {
-    if (participant.userId == currentUserId &&
-        participant.status == 'active' &&
-        participant.role == 'host') {
-      return true;
-    }
-  }
-  return false;
 }
 
 StoryParticipant? _participantById(

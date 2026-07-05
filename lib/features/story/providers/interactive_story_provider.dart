@@ -22,7 +22,6 @@ class InteractiveStoryState {
     this.streamingAssistantText,
     this.recentStreamedAssistantText,
     this.isRetryingGeneration = false,
-    this.isAdvancingQuestion = false,
     this.error,
   });
 
@@ -34,7 +33,6 @@ class InteractiveStoryState {
   final String? streamingAssistantText;
   final String? recentStreamedAssistantText;
   final bool isRetryingGeneration;
-  final bool isAdvancingQuestion;
   final String? error;
 
   InteractiveStoryState copyWith({
@@ -46,7 +44,6 @@ class InteractiveStoryState {
     Object? streamingAssistantText = _unset,
     Object? recentStreamedAssistantText = _unset,
     bool? isRetryingGeneration,
-    bool? isAdvancingQuestion,
     Object? error = _unset,
   }) {
     return InteractiveStoryState(
@@ -62,7 +59,6 @@ class InteractiveStoryState {
           ? this.recentStreamedAssistantText
           : recentStreamedAssistantText as String?,
       isRetryingGeneration: isRetryingGeneration ?? this.isRetryingGeneration,
-      isAdvancingQuestion: isAdvancingQuestion ?? this.isAdvancingQuestion,
       error: error == _unset ? this.error : error as String?,
     );
   }
@@ -245,30 +241,6 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         isRetryingGeneration: false,
         error: '$e',
       );
-    }
-  }
-
-  Future<void> advanceQuestion() async {
-    final sessionId = state.session?.sessionId;
-    if (sessionId == null ||
-        sessionId.isEmpty ||
-        state.isLoading ||
-        state.isAdvancingQuestion) {
-      return;
-    }
-    state = state.copyWith(isAdvancingQuestion: true, error: null);
-    try {
-      final repo = ref.read(storiesRepositoryProvider);
-      final session = await repo.advanceInteractiveSession(sessionId);
-      if (_isDisposed) return;
-      state = state.copyWith(session: session, isAdvancingQuestion: false);
-      _scheduleWaitingRefresh();
-    } on ApiError catch (e) {
-      if (_isDisposed) return;
-      state = state.copyWith(isAdvancingQuestion: false, error: e.message);
-    } catch (e) {
-      if (_isDisposed) return;
-      state = state.copyWith(isAdvancingQuestion: false, error: '$e');
     }
   }
 
