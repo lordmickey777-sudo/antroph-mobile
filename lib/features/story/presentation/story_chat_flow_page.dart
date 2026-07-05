@@ -1490,14 +1490,20 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         ),
       );
     }
-    final hasAiText = voiceState.aiResponse?.isNotEmpty ?? false;
+    final liveAiText = voiceState.aiResponse?.trim() ?? '';
+    final liveAiAlreadyInHistory =
+        liveAiText.isNotEmpty &&
+        voiceState.conversationHistory.any(
+          (item) => item.isAssistant && item.content.trim() == liveAiText,
+        );
+    final hasAiText = liveAiText.isNotEmpty && !liveAiAlreadyInHistory;
     final awaitingAi = voiceState.isProcessing || voiceState.isConnecting;
-    if (hasAiText || awaitingAi) {
+    if (hasAiText || (awaitingAi && !liveAiAlreadyInHistory)) {
       messages.add(
         ChatMessageModel(
           id: 'story_live_ai',
           role: ChatRole.assistant,
-          message: voiceState.aiResponse ?? '',
+          message: hasAiText ? liveAiText : '',
           ts: DateTime.now(),
           streaming: awaitingAi || voiceState.isPlaying || !hasAiText,
         ),

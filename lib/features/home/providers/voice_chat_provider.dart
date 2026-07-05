@@ -1478,7 +1478,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _log.i('Conversation item: $payload');
     final item = ConversationItem.fromJson(payload);
     if (item.content.isEmpty) return;
-    final history = [...state.conversationHistory, item];
+    final history = _appendConversationItem(state.conversationHistory, item);
     _log.i(
       '[ChatDebug] conversation.item append role=${item.role} '
       'contentLen=${item.content.length} history.len=${history.length}',
@@ -1519,19 +1519,33 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       items.add(ConversationItem(role: role, content: message));
     }
     final before = state.conversationHistory;
-    final merged = _mergeConversationHistory(before, items);
+    final merged = _mergeConversationHistory(before, _normalizeHistory(items));
     _log.i(
       '[ChatDebug] merge: local=${before.map((e) => e.role).toList()} '
       'incoming=${items.map((e) => e.role).toList()} '
       'merged=${merged.map((e) => e.role).toList()}',
     );
-    state = state.copyWith(conversationHistory: merged);
+    final liveAi = state.aiResponse?.trim() ?? '';
+    final liveUser = state.userTranscription?.trim() ?? '';
+    final historyHasLiveAi =
+        liveAi.isNotEmpty &&
+        merged.any((e) => e.isAssistant && e.content.trim() == liveAi);
+    final historyHasLiveUser =
+        liveUser.isNotEmpty &&
+        merged.any((e) => e.isUser && e.content.trim() == liveUser);
+    state = state.copyWith(
+      conversationHistory: merged,
+      clearAiResponse: historyHasLiveAi,
+      clearUserTranscription: historyHasLiveUser,
+    );
   }
 
   List<ConversationItem> _mergeConversationHistory(
     List<ConversationItem> local,
     List<ConversationItem> incoming,
   ) {
+    local = _normalizeHistory(local);
+    incoming = _normalizeHistory(incoming);
     if (incoming.isEmpty) return local;
     if (local.isEmpty) return incoming;
 
@@ -1574,7 +1588,39 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     }
 
     // Fallback to incoming snapshot when histories diverge.
-    return incoming;
+    return _normalizeHistory(incoming);
+  }
+
+  List<ConversationItem> _appendConversationItem(
+    List<ConversationItem> history,
+    ConversationItem item,
+  ) {
+    if (_hasRecentConversationItem(history, item, window: 1)) {
+      return _normalizeHistory(history);
+    }
+    return _normalizeHistory([...history, item]);
+  }
+
+  bool _hasRecentConversationItem(
+    List<ConversationItem> history,
+    ConversationItem item, {
+    int window = 1,
+  }) {
+    final start = math.max(0, history.length - window);
+    for (var i = history.length - 1; i >= start; i--) {
+      if (_sameConversationItem(history[i], item)) return true;
+    }
+    return false;
+  }
+
+  List<ConversationItem> _normalizeHistory(List<ConversationItem> history) {
+    final normalized = <ConversationItem>[];
+    for (final item in history) {
+      if (item.content.trim().isEmpty) continue;
+      if (_hasRecentConversationItem(normalized, item, window: 1)) continue;
+      normalized.add(item);
+    }
+    return normalized;
   }
 
   int _commonPrefixLength(List<ConversationItem> a, List<ConversationItem> b) {
@@ -1633,25 +1679,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (userText == null && aiText == null) return;
     if ((userText?.isEmpty ?? true) && (aiText?.isEmpty ?? true)) return;
 
-    final history = [...state.conversationHistory];
+    var history = [...state.conversationHistory];
     if (userText != null && userText.isNotEmpty) {
-      // Avoid duplicate if server already sent this via conversation.item.create
-      final alreadyHasUser =
-          history.isNotEmpty &&
-          history.last.isUser &&
-          history.last.content == userText;
-      if (!alreadyHasUser) {
-        history.add(ConversationItem(role: 'user', content: userText));
-      }
+      final item = ConversationItem(role: 'user', content: userText);
+      history = _appendConversationItem(history, item);
     }
     if (aiText != null && aiText.isNotEmpty) {
-      final alreadyHasAi =
-          history.isNotEmpty &&
-          history.last.isAssistant &&
-          history.last.content == aiText;
-      if (!alreadyHasAi) {
-        history.add(ConversationItem(role: 'assistant', content: aiText));
-      }
+      final item = ConversationItem(role: 'assistant', content: aiText);
+      history = _appendConversationItem(history, item);
     }
     state = state.copyWith(
       conversationHistory: history,
@@ -1984,7 +2019,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       if (!textOnly) _enableAudio();
       _aiTextBuffer.clear();
+      final optimisticHistory = textOnly
+          ? _appendConversationItem(
+              state.conversationHistory,
+              ConversationItem(role: 'user', content: trimmed),
+            )
+          : state.conversationHistory;
       state = state.copyWith(
+        conversationHistory: optimisticHistory,
         isProcessing: true,
         isConnecting: false,
         isRecording: false,
@@ -2016,15 +2058,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       _client.send({'type': 'response.create', 'response': response});
 
-      // For text-only sends, push user message to history immediately
-      // since _saveCompletedTurn relies on userTranscription (voice only).
       if (textOnly) {
-        final history = [...state.conversationHistory];
-        history.add(ConversationItem(role: 'user', content: trimmed));
-        state = state.copyWith(conversationHistory: history);
         _log.i(
-          '[ChatDebug] textOnly user msg appended. history.len=${history.length} '
-          'tail=${history.map((e) => '${e.role}:${e.content.length}c').toList()}',
+          '[ChatDebug] textOnly user msg appended. history.len=${optimisticHistory.length} '
+          'tail=${optimisticHistory.map((e) => '${e.role}:${e.content.length}c').toList()}',
         );
       }
     } catch (e, st) {
