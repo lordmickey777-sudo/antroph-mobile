@@ -706,7 +706,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     await _configureAudioSession(_VoiceAudioSessionMode.recording);
     await _stopRecorder();
     _recorder ??= FlutterSoundRecorder();
-    
+
     // Use our own flag to track initialization to avoid version-specific enum errors
     if (!_isRecorderInitialized) {
       await _recorder!.openRecorder();
@@ -1328,13 +1328,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         if (_ignoreIncomingAudioUntilNextResponse) {
           break;
         }
-        final text = payload['text'] as String? ?? '';
+        final text = _firstString([payload['delta'], payload['text']]) ?? '';
         if (text.isNotEmpty) {
           _aiTextBuffer.write(text);
           state = state.copyWith(
             isRecording: false,
             aiResponse: _aiTextBuffer.toString(),
-            isProcessing: false,
+            isProcessing: true,
             isConnecting: false,
             isUserSpeaking: false,
             phase: state.isStoryMode
@@ -1383,12 +1383,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           if (_ignoreIncomingAudioUntilNextResponse) {
             break;
           }
-          final text = payload['text'] as String? ?? '';
+          final text = _firstString([payload['delta'], payload['text']]) ?? '';
           if (text.isNotEmpty) {
             _aiTextBuffer.write(text);
             state = state.copyWith(
               aiResponse: _aiTextBuffer.toString(),
-              isProcessing: false,
+              isProcessing: true,
               isConnecting: false,
               isUserSpeaking: false,
             );
