@@ -310,6 +310,61 @@ void main() {
   });
 
   testWidgets(
+    'InteractiveStoryRenderer does not wait for host after solo result',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(400, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final session = InteractiveSessionState.fromJson({
+        'session_id': 'session-1',
+        'story_id': 'story-1',
+        'interaction_mode': 'interactive',
+        'ai_role': 'host',
+        'interactive_state': {
+          'template': 'quiz',
+          'phase': 'showing_results',
+          'session_type': 'solo',
+          'current_round': 3,
+          'total_rounds': 3,
+          'result': {
+            'question_id': 'q1',
+            'correct_option_id': 'ssd',
+            'explanation': 'An SSD keeps files after power is off.',
+            'answered_count': 1,
+            'eligible_count': 1,
+            'answers': const [],
+            'standings': const [],
+          },
+        },
+        'participants': const [],
+        'events': const [],
+        'last_seq': 1,
+        'is_completed': false,
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: InteractiveStoryRenderer(
+              session: session,
+              onChoice: (_) {},
+              onQuizAnswer: (_, _) {},
+              onRetryGeneration: () {},
+              onReplay: () {},
+              onLeave: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.text('Waiting for host'), findsNothing);
+      expect(find.text('Calculating results...'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'InteractiveStoryRenderer shows untimed solo options after question reveal',
     (tester) async {
       final session = InteractiveSessionState.fromJson({

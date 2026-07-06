@@ -120,15 +120,13 @@ class StoriesRepository {
   }
 
   /// Fetch detailed story information by ID.
-  /// Public endpoint; no auth required.
+  /// Public endpoint, but send auth when available so creators can preview
+  /// their own unpublished community stories.
   Future<StoryDetailDto> fetchStoryDetail(String storyId) async {
     try {
       final res = await _dio.get(
         '/stories/$storyId',
-        options: Options(
-          receiveTimeout: const Duration(seconds: 60),
-          extra: const {'skipAuth': true},
-        ),
+        options: Options(receiveTimeout: const Duration(seconds: 60)),
       );
       final data = res.data as Map<String, dynamic>;
       return StoryDetailDto.fromJson(data);

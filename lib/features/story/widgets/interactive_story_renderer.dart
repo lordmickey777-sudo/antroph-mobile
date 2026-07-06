@@ -726,7 +726,10 @@ class _QuizTranscriptItem {
             waitingForPlayers ||
             checkingAnswers) &&
         (items.isEmpty || items.last.kind != _QuizTranscriptItemKind.status)) {
-      final manualAdvance = waitingAfterResult || waitingForFinalResults;
+      final isGroupSession =
+          (session.interactiveState['session_type'] as String?) == 'group';
+      final manualAdvance =
+          isGroupSession && (waitingAfterResult || waitingForFinalResults);
       items.add(
         _QuizTranscriptItem(
           kind: _QuizTranscriptItemKind.status,
@@ -753,13 +756,19 @@ class _QuizTranscriptItem {
               : (checkingAnswers || waitingForPlayers)
               ? _lobbyText(session)
               : '',
-          statusIcon: manualAdvance ? null : CupertinoIcons.person_3_fill,
+          statusIcon: manualAdvance
+              ? null
+              : waitingForPlayers
+              ? CupertinoIcons.person_3_fill
+              : CupertinoIcons.sparkles,
           statusActionLabel:
               manualAdvance && canAdvanceQuestion && !isAdvancingQuestion
               ? (waitingForFinalResults ? 'Show final results' : 'Continue')
               : null,
           showLoading:
               waitingForQuestion ||
+              (!isGroupSession &&
+                  (waitingAfterResult || waitingForFinalResults)) ||
               (waitingAfterResult && isAdvancingQuestion) ||
               (waitingForFinalResults && isAdvancingQuestion),
         ),

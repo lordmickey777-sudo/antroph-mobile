@@ -196,6 +196,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   bool _socketOpen = false;
   bool _audioEnabled = true;
   bool _isRecorderInitialized = false;
+  Future<void>? _micCaptureStartFuture;
+  Future<void> _recorderOperation = Future.value();
   String? _pendingStorySessionId;
   final Set<String> _syncedStorySessionIds = <String>{};
   Future<bool>? _microphonePermissionFuture;
@@ -703,32 +705,48 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   Future<void> _startMicCapture() async {
-    await _configureAudioSession(_VoiceAudioSessionMode.recording);
-    await _stopRecorder();
-    _recorder ??= FlutterSoundRecorder();
-
-    // Use our own flag to track initialization to avoid version-specific enum errors
-    if (!_isRecorderInitialized) {
-      await _recorder!.openRecorder();
-      _isRecorderInitialized = true;
+    final inFlight = _micCaptureStartFuture;
+    if (inFlight != null) {
+      await inFlight;
+      return;
     }
 
-    await _micStreamSubscription?.cancel();
-    await _micStreamController?.close();
-    _micStreamController = StreamController<Uint8List>();
-    _micStreamSubscription = _micStreamController!.stream.listen(
-      _handleMicChunk,
-      onError: (err, st) =>
-          unawaited(_handleSocketError(err, st is StackTrace ? st : null)),
-    );
+    final startFuture = _runRecorderOperation(() async {
+      await _configureAudioSession(_VoiceAudioSessionMode.recording);
+      await _stopRecorderUnlocked();
+      _recorder ??= FlutterSoundRecorder();
 
-    await _recorder!.startRecorder(
-      toStream: _micStreamController!.sink,
-      codec: Codec.pcm16,
-      numChannels: 1,
-      sampleRate: _sampleRate,
-      bitRate: _sampleRate * 16,
-    );
+      // Use our own flag to track initialization to avoid version-specific enum errors.
+      if (!_isRecorderInitialized) {
+        await _recorder!.openRecorder();
+        _isRecorderInitialized = true;
+      }
+
+      await _micStreamSubscription?.cancel();
+      await _micStreamController?.close();
+      _micStreamController = StreamController<Uint8List>();
+      _micStreamSubscription = _micStreamController!.stream.listen(
+        _handleMicChunk,
+        onError: (err, st) =>
+            unawaited(_handleSocketError(err, st is StackTrace ? st : null)),
+      );
+
+      await _recorder!.startRecorder(
+        toStream: _micStreamController!.sink,
+        codec: Codec.pcm16,
+        numChannels: 1,
+        sampleRate: _sampleRate,
+        bitRate: _sampleRate * 16,
+      );
+    });
+    _micCaptureStartFuture = startFuture;
+    try {
+      await startFuture;
+    } finally {
+      if (identical(_micCaptureStartFuture, startFuture)) {
+        _micCaptureStartFuture = null;
+      }
+    }
   }
 
   Future<void> _startBargeInMonitoring() async {
@@ -1002,6 +1020,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   Future<void> _stopRecorder() async {
+    _micCaptureStartFuture = null;
+    await _runRecorderOperation(_stopRecorderUnlocked);
+  }
+
+  Future<void> _stopRecorderUnlocked() async {
     _cancelSilenceTimer();
     _cancelMaxRecordingTimer();
     _cancelSpeechIndicatorTimer();
@@ -1024,6 +1047,12 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _micStreamController = null;
     _clearPendingMicChunks();
     _emitMicLevelValue(0.0);
+  }
+
+  Future<T> _runRecorderOperation<T>(Future<T> Function() operation) {
+    final next = _recorderOperation.then((_) => operation());
+    _recorderOperation = next.then<void>((_) {}, onError: (_) {});
+    return next;
   }
 
   void _emitMicLevelValue(double value) {
@@ -2238,6 +2267,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   /// Stop recorder without sending (for mute)
   Future<void> _stopRecorderOnly() async {
+    _micCaptureStartFuture = null;
+    await _runRecorderOperation(_stopRecorderOnlyUnlocked);
+  }
+
+  Future<void> _stopRecorderOnlyUnlocked() async {
     _cancelSilenceTimer();
     _cancelSpeechIndicatorTimer();
     _setUserSpeaking(false);
