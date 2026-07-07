@@ -41,6 +41,7 @@ class _HomePageState extends State<HomePage> {
     final horizontalPadding = AppPadding.horizontal.of(context);
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Stack(
         alignment: Alignment.center,
         children: [

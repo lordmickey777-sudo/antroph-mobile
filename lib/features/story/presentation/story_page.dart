@@ -36,8 +36,24 @@ class StoryPage extends ConsumerStatefulWidget {
 
 class _StoryPageState extends ConsumerState<StoryPage>
     with AutomaticKeepAliveClientMixin {
+  late final TextEditingController _searchController;
+  String _draftSearchQuery = '';
+  String _activeSearchQuery = '';
+
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Future<void> _refreshStoriesHome() async {
     await CommunityStoriesCacheService.clear(categoryId: null);
@@ -67,13 +83,32 @@ class _StoryPageState extends ConsumerState<StoryPage>
           return _ErrorView(message: msg, onRetry: _refreshStoriesHome);
         },
         data: (data) {
-          final sections = data.sections;
-          final featuredStories = data.featuredStories;
-          final continueStories =
+          final query = _normalizeSearchQuery(_activeSearchQuery);
+          final draftQuery = _normalizeSearchQuery(_draftSearchQuery);
+          final rawContinueStories =
               asyncContinue.asData?.value ?? const <ContinuePlayingDto>[];
+          final hasSearch = query.isNotEmpty;
+          final suggestions = draftQuery == query
+              ? const <_SearchSuggestion>[]
+              : _buildSearchSuggestions(
+                  sections: data.sections,
+                  featuredStories: data.featuredStories,
+                  continueStories: rawContinueStories,
+                  query: draftQuery,
+                );
+          final sections = _filterStorySections(data.sections, query);
+          final featuredStories = _filterFeaturedStories(
+            data.featuredStories,
+            query,
+          );
+          final continueStories = _filterContinueStories(
+            rawContinueStories,
+            query,
+          );
           if (sections.isEmpty &&
               featuredStories.isEmpty &&
-              continueStories.isEmpty) {
+              continueStories.isEmpty &&
+              !hasSearch) {
             return _EmptyView(onRefresh: _refreshStoriesHome);
           }
 
@@ -85,26 +120,24 @@ class _StoryPageState extends ConsumerState<StoryPage>
               slivers: [
                 CupertinoSliverRefreshControl(onRefresh: _refreshStoriesHome),
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                    child: SafeArea(
-                      bottom: false,
-                      child: Row(
-                        children: [
-                          Image.asset(
-                            'assets/images/app_logo.png',
-                            width: 38,
-                            height: 38,
-                          ),
-                          const SizedBox(width: 2),
-                          TypographyText(
-                            'Explore',
-                            variant: TypographyVariant.h3,
-                            color: isDark ? Colors.white : Colors.black,
-                          ),
-                        ],
-                      ),
-                    ),
+                  child: _StoryHomeHeader(
+                    controller: _searchController,
+                    draftQuery: _draftSearchQuery,
+                    activeQuery: _activeSearchQuery,
+                    suggestions: suggestions,
+                    isDark: isDark,
+                    onChanged: (value) => setState(() {
+                      _draftSearchQuery = value;
+                    }),
+                    onSearch: _applyDraftSearch,
+                    onSuggestionSelected: _applySearchSuggestion,
+                    onClear: () {
+                      _searchController.clear();
+                      setState(() {
+                        _draftSearchQuery = '';
+                        _activeSearchQuery = '';
+                      });
+                    },
                   ),
                 ),
                 if (continueStories.isNotEmpty)
@@ -124,7 +157,7 @@ class _StoryPageState extends ConsumerState<StoryPage>
                     section: section,
                     onTap: (card) => _playStoryCard(context, ref, card),
                   ),
-                _CommunityStoriesSliver(),
+                _CommunityStoriesSliver(searchQuery: query),
                 const SliverToBoxAdapter(child: SizedBox(height: 120)),
               ],
             ),
@@ -241,6 +274,372 @@ class _StoryPageState extends ConsumerState<StoryPage>
           storyImage: image,
           mascotConfig: mascotConfig,
           isAddedToPlaylist: isAddedToPlaylist,
+        ),
+      ),
+    );
+  }
+
+  void _applyDraftSearch() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _activeSearchQuery = _searchController.text);
+  }
+
+  void _applySearchSuggestion(String suggestion) {
+    _searchController.text = suggestion;
+    _searchController.selection = TextSelection.collapsed(
+      offset: suggestion.length,
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _draftSearchQuery = suggestion;
+      _activeSearchQuery = suggestion;
+    });
+  }
+}
+
+class _StoryHomeHeader extends StatelessWidget {
+  const _StoryHomeHeader({
+    required this.controller,
+    required this.draftQuery,
+    required this.activeQuery,
+    required this.suggestions,
+    required this.isDark,
+    required this.onChanged,
+    required this.onSearch,
+    required this.onSuggestionSelected,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final String draftQuery;
+  final String activeQuery;
+  final List<_SearchSuggestion> suggestions;
+  final bool isDark;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onSearch;
+  final ValueChanged<String> onSuggestionSelected;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: 94,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Image.asset(
+                          'assets/images/app_logo.png',
+                          width: 38,
+                          height: 38,
+                        ),
+                        const SizedBox(width: 2),
+                        TypographyText(
+                          'Explore',
+                          variant: TypographyVariant.h3,
+                          color: isDark ? Colors.white : Colors.black,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    _StorySearchField(
+                      controller: controller,
+                      isDark: isDark,
+                      hasQuery:
+                          draftQuery.trim().isNotEmpty ||
+                          activeQuery.trim().isNotEmpty,
+                      onChanged: onChanged,
+                      onSearch: onSearch,
+                      onClear: onClear,
+                    ),
+                  ],
+                ),
+              ),
+              if (suggestions.isNotEmpty)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 102,
+                  child: _SearchSuggestionsDropdown(
+                    suggestions: suggestions,
+                    isDark: isDark,
+                    onSelected: onSuggestionSelected,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StorySearchField extends StatelessWidget {
+  const _StorySearchField({
+    required this.controller,
+    required this.isDark,
+    required this.hasQuery,
+    required this.onChanged,
+    required this.onSearch,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final bool isDark;
+  final bool hasQuery;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onSearch;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    const fieldHeight = 42.0;
+    const iconButtonSize = 30.0;
+    const horizontalInset = 6.0;
+    const leftTextInset = 44.0;
+    const rightTextInset = 74.0;
+    const slideDuration = Duration(milliseconds: 850);
+    const slideCurve = Curves.easeInOutSine;
+    final backgroundColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final iconColor = isDark ? Colors.white54 : Colors.black45;
+    final actionBackgroundColor = hasQuery
+        ? (isDark ? Colors.white : Colors.black)
+        : Colors.transparent;
+    final actionForegroundColor = hasQuery
+        ? (isDark ? Colors.black : Colors.white)
+        : iconColor;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final slideDistance =
+            constraints.maxWidth - (horizontalInset * 2) - iconButtonSize;
+        final iconOffset = hasQuery
+            ? slideDistance.clamp(0.0, double.infinity)
+            : 0.0;
+
+        return Container(
+          height: fieldHeight,
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            children: [
+              Positioned(
+                left: horizontalInset,
+                top: (fieldHeight - iconButtonSize) / 2,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween<double>(end: iconOffset),
+                  duration: slideDuration,
+                  curve: slideCurve,
+                  builder: (context, offset, child) {
+                    return Transform.translate(
+                      offset: Offset(offset, 0),
+                      child: child,
+                    );
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    width: iconButtonSize,
+                    height: iconButtonSize,
+                    decoration: BoxDecoration(
+                      color: actionBackgroundColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      onPressed: hasQuery ? onSearch : null,
+                      padding: EdgeInsets.zero,
+                      icon: IconTheme(
+                        data: IconTheme.of(context).copyWith(
+                          color: actionForegroundColor,
+                          size: hasQuery ? 15 : 18,
+                        ),
+                        child: const Icon(CupertinoIcons.search),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              AnimatedPositioned(
+                duration: slideDuration,
+                curve: slideCurve,
+                left: hasQuery ? 14 : leftTextInset,
+                right: hasQuery ? rightTextInset : 12,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: TextField(
+                    controller: controller,
+                    onChanged: onChanged,
+                    onSubmitted: (_) => onSearch(),
+                    keyboardType: TextInputType.text,
+                    textInputAction: TextInputAction.search,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    decoration: InputDecoration(
+                      isCollapsed: true,
+                      border: InputBorder.none,
+                      hintText: 'Search stories or categories',
+                      hintStyle: TextStyle(
+                        color: iconColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                right: hasQuery ? iconButtonSize + 10 : -iconButtonSize,
+                top: (fieldHeight - iconButtonSize) / 2,
+                child: IgnorePointer(
+                  ignoring: !hasQuery,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 150),
+                    opacity: hasQuery ? 1 : 0,
+                    child: AppCircleIconButton(
+                      onPressed: onClear,
+                      icon: CupertinoIcons.xmark,
+                      size: iconButtonSize,
+                      iconSize: 13,
+                      backgroundColor: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.06),
+                      foregroundColor: isDark ? Colors.white70 : Colors.black54,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SearchSuggestionsDropdown extends StatelessWidget {
+  const _SearchSuggestionsDropdown({
+    required this.suggestions,
+    required this.isDark,
+    required this.onSelected,
+  });
+
+  final List<_SearchSuggestion> suggestions;
+  final bool isDark;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final backgroundColor = isDark ? const Color(0xFF202526) : Colors.white;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    final primaryColor = isDark ? Colors.white : Colors.black87;
+    final secondaryColor = isDark ? Colors.white54 : Colors.black45;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.24 : 0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var index = 0; index < suggestions.length; index++) ...[
+            _SearchSuggestionTile(
+              suggestion: suggestions[index],
+              primaryColor: primaryColor,
+              secondaryColor: secondaryColor,
+              onTap: () => onSelected(suggestions[index].value),
+            ),
+            if (index != suggestions.length - 1)
+              Divider(height: 1, color: borderColor),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchSuggestionTile extends StatelessWidget {
+  const _SearchSuggestionTile({
+    required this.suggestion,
+    required this.primaryColor,
+    required this.secondaryColor,
+    required this.onTap,
+  });
+
+  final _SearchSuggestion suggestion;
+  final Color primaryColor;
+  final Color secondaryColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = suggestion.type == _SearchSuggestionType.category
+        ? CupertinoIcons.square_grid_2x2
+        : CupertinoIcons.book;
+    final label = suggestion.type == _SearchSuggestionType.category
+        ? 'Category'
+        : 'Story';
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        child: Row(
+          children: [
+            Icon(icon, size: 17, color: secondaryColor),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TypographyText(
+                suggestion.value,
+                variant: TypographyVariant.body2,
+                color: primaryColor,
+                fontWeight: FontWeight.w600,
+                maxLines: 1,
+              ),
+            ),
+            const SizedBox(width: 10),
+            TypographyText(
+              label,
+              variant: TypographyVariant.body2,
+              color: secondaryColor,
+              fontSize: 12,
+            ),
+          ],
         ),
       ),
     );
@@ -372,6 +771,20 @@ class _FeaturedStoriesCarouselState extends State<_FeaturedStoriesCarousel> {
     _autoAdvanceTimer?.cancel();
     _pageController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FeaturedStoriesCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.stories.length != oldWidget.stories.length) {
+      if (_currentPage >= widget.stories.length) {
+        _currentPage = 0;
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(0);
+        }
+      }
+      _startAutoAdvanceTimer();
+    }
   }
 
   void _startAutoAdvanceTimer() {
@@ -795,7 +1208,9 @@ class _StoryImageShimmer extends StatelessWidget {
 }
 
 class _CommunityStoriesSliver extends ConsumerWidget {
-  const _CommunityStoriesSliver();
+  const _CommunityStoriesSliver({required this.searchQuery});
+
+  final String searchQuery;
 
   static const double _cardWidth = 200;
   static const double _cardHeight = 240;
@@ -810,7 +1225,8 @@ class _CommunityStoriesSliver extends ConsumerWidget {
           const SliverToBoxAdapter(child: _CommunityStoriesSliverShimmer()),
       error: (_, __) => const SliverToBoxAdapter(child: SizedBox.shrink()),
       data: (stories) {
-        if (stories.isEmpty) {
+        final filteredStories = _filterCommunityStories(stories, searchQuery);
+        if (filteredStories.isEmpty) {
           return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
 
@@ -853,10 +1269,10 @@ class _CommunityStoriesSliver extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   scrollDirection: Axis.horizontal,
                   physics: const BouncingScrollPhysics(),
-                  itemCount: stories.length,
+                  itemCount: filteredStories.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 12),
                   itemBuilder: (context, index) {
-                    final story = stories[index];
+                    final story = filteredStories[index];
                     return _CommunityStoryCompactCard(
                       story: story,
                       width: _cardWidth,
@@ -1047,6 +1463,155 @@ String _capitalizeFirstLetter(String value) {
   final trimmed = value.trim();
   if (trimmed.isEmpty) return '';
   return trimmed[0].toUpperCase() + trimmed.substring(1);
+}
+
+String _normalizeSearchQuery(String value) {
+  return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+}
+
+enum _SearchSuggestionType { category, story }
+
+class _SearchSuggestion {
+  const _SearchSuggestion({required this.value, required this.type});
+
+  final String value;
+  final _SearchSuggestionType type;
+}
+
+List<_SearchSuggestion> _buildSearchSuggestions({
+  required List<StorySectionDto> sections,
+  required List<FeaturedStoryDto> featuredStories,
+  required List<ContinuePlayingDto> continueStories,
+  required String query,
+}) {
+  if (query.isEmpty) return const [];
+
+  final suggestions = <_SearchSuggestion>[];
+  final seen = <String>{};
+
+  void add(String value, _SearchSuggestionType type) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return;
+    final normalized = _normalizeSearchQuery(trimmed);
+    if (!normalized.contains(query)) return;
+    final key = '${type.name}:$normalized';
+    if (!seen.add(key)) return;
+    suggestions.add(_SearchSuggestion(value: trimmed, type: type));
+  }
+
+  for (final section in sections) {
+    add(section.title, _SearchSuggestionType.category);
+    for (final story in section.items) {
+      add(story.title, _SearchSuggestionType.story);
+    }
+  }
+
+  for (final story in featuredStories) {
+    add(story.title, _SearchSuggestionType.story);
+  }
+
+  for (final story in continueStories) {
+    add(story.title, _SearchSuggestionType.story);
+  }
+
+  return suggestions.take(5).toList();
+}
+
+bool _matchesQuery(String query, Iterable<String?> values) {
+  if (query.isEmpty) return true;
+  return values.any((value) {
+    final normalized = _normalizeSearchQuery(value ?? '');
+    return normalized.isNotEmpty && normalized.contains(query);
+  });
+}
+
+List<StorySectionDto> _filterStorySections(
+  List<StorySectionDto> sections,
+  String query,
+) {
+  if (query.isEmpty) return sections;
+  return sections
+      .map((section) {
+        final categoryMatches = _matchesQuery(query, [section.title]);
+        if (categoryMatches) return section;
+
+        final items = section.items
+            .where((story) => _matchesStoryCard(story, query))
+            .toList();
+        return StorySectionDto(title: section.title, items: items);
+      })
+      .where((section) => section.items.isNotEmpty)
+      .toList();
+}
+
+List<FeaturedStoryDto> _filterFeaturedStories(
+  List<FeaturedStoryDto> stories,
+  String query,
+) {
+  if (query.isEmpty) return stories;
+  return stories
+      .where(
+        (story) => _matchesQuery(query, [
+          story.title,
+          story.description,
+          story.author,
+          story.aiRole,
+          story.interactionMode,
+          story.riveElement?.name,
+          story.riveElement?.category,
+        ]),
+      )
+      .toList();
+}
+
+List<ContinuePlayingDto> _filterContinueStories(
+  List<ContinuePlayingDto> stories,
+  String query,
+) {
+  if (query.isEmpty) return stories;
+  return stories
+      .where((story) => _matchesQuery(query, [story.title, story.description]))
+      .toList();
+}
+
+List<CommunityStoryDto> _filterCommunityStories(
+  List<CommunityStoryDto> stories,
+  String query,
+) {
+  if (query.isEmpty) return stories;
+  return stories
+      .where((story) => _matchesCommunityStory(story, query))
+      .toList();
+}
+
+bool _matchesStoryCard(StoryCardDto story, String query) {
+  return _matchesQuery(query, [
+    story.title,
+    story.subtitle,
+    story.aiRole,
+    story.interactionMode,
+    story.riveElement?.name,
+    story.riveElement?.category,
+  ]);
+}
+
+bool _matchesCommunityStory(CommunityStoryDto story, String query) {
+  return _matchesQuery(query, [
+    story.title,
+    story.description,
+    story.author,
+    story.creatorName,
+    story.categoryId,
+    story.difficulty,
+    story.tone,
+    story.interactionMode,
+    story.aiRole,
+    story.riveElement?.name,
+    story.riveElement?.category,
+    ...story.tags,
+    ...story.themes,
+    ...story.characters,
+  ]);
 }
 
 class _CommunityStoriesSliverShimmer extends StatelessWidget {

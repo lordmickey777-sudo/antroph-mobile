@@ -102,9 +102,10 @@ class SocialAuthService {
       throw Exception('Google did not return an ID token');
     }
 
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isIOS) {
       debugPrint(
-        '[GoogleAuth] using Firebase REST token exchange fast path (android)',
+        '[GoogleAuth] using Firebase REST token exchange fast path '
+        '(${Platform.operatingSystem})',
       );
       final token = await _exchangeGoogleIdTokenForFirebaseToken(
         googleAuth.idToken!,

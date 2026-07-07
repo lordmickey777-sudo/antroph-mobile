@@ -93,17 +93,18 @@ Prerequisites: macOS, Xcode, CocoaPods, and valid provisioning profiles / signin
 
 ```sh
 cd ios && pod install && cd -
+```
 
 **Archive for App Store/TestFlight (via Xcode)**
 
-1) `flutter build ios --release`
+1) `flutter build ios --release --dart-define=API_BASE_URL=https://antrophbackend.nitoons.com`
 2) Open workspace: `open ios/Runner.xcworkspace`
 3) In Xcode: Product ➜ Archive ➜ distribute via Organizer.
 
 **Build IPA via Flutter CLI**
 
 ```sh
-flutter build ipa --export-method app-store
+flutter build ipa --export-method app-store --dart-define=API_BASE_URL=https://antrophbackend.nitoons.com
 # Artifact: build/ios/ipa/Runner.ipa
 ```
 
@@ -114,6 +115,7 @@ Notes:
 
 Optional environment at build time:
 
+- API_BASE_URL: Pin this for TestFlight/App Store archives so release builds use the same backend as Android.
 - SENTRY_DSN: Provide at compile-time to enable Sentry (otherwise it runs without Sentry)
 
 ```sh
