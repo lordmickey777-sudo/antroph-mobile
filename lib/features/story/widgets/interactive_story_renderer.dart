@@ -49,7 +49,7 @@ class InteractiveStoryRenderer extends StatelessWidget {
     final blocks = turn?.blocks ?? const <InteractiveBlock>[];
     final liveQuiz = _LiveQuizQuestion.fromState(session.interactiveState);
     final phase = (session.interactiveState['phase'] as String?) ?? '';
-    final isQuizSession = session.interactiveState['template'] == 'quiz';
+    final isQuizSession = _isQuizSession(session);
     if (isQuizSession) {
       return _QuizTranscriptView(
         session: session,
@@ -82,8 +82,10 @@ class InteractiveStoryRenderer extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
       children: [
-        _SessionHeader(session: session),
-        const SizedBox(height: 14),
+        if (_shouldShowSessionHeader(session)) ...[
+          _SessionHeader(session: session),
+          const SizedBox(height: 14),
+        ],
         if (liveQuiz != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
@@ -143,6 +145,36 @@ class InteractiveStoryRenderer extends StatelessWidget {
       ],
     );
   }
+}
+
+bool _isQuizSession(InteractiveSessionState session) {
+  final state = session.interactiveState;
+  if (state['template'] == 'quiz') return true;
+  final phase = (state['phase'] as String?) ?? '';
+  final sessionType = (state['session_type'] as String?) ?? '';
+  if (sessionType != 'solo') return false;
+  return const {
+    'topic_selection',
+    'mode_selection',
+    'discussion',
+    'timer_selection',
+    'generating_question',
+    'question_generation_started',
+    'question_active',
+    'finalizing_question',
+    'showing_results',
+    'post_question_prompt',
+    'completed',
+  }.contains(phase);
+}
+
+bool _shouldShowSessionHeader(InteractiveSessionState session) {
+  final state = session.interactiveState;
+  if ((state['session_type'] as String?) == 'solo') return false;
+  if ((state['session_type'] as String?) == 'group') return false;
+  if (session.interactionMode == 'interactive') return false;
+  if (session.interactionMode == 'group') return false;
+  return true;
 }
 
 class _QuizTranscriptView extends StatefulWidget {

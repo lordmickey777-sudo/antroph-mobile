@@ -299,6 +299,7 @@ void main() {
         ),
       ),
     );
+    await tester.pump(const Duration(milliseconds: 900));
 
     final aiPosition = tester.getTopLeft(
       find.text('What topic do you want to discuss?'),
@@ -308,6 +309,160 @@ void main() {
     expect(find.text('Computer science'), findsOneWidget);
     expect(pendingPosition.dy, greaterThan(aiPosition.dy));
   });
+
+  testWidgets(
+    'InteractiveStoryRenderer treats solo quiz phases as quiz when template is missing',
+    (tester) async {
+      final session = InteractiveSessionState.fromJson({
+        'session_id': 'session-1',
+        'story_id': 'story-1',
+        'interaction_mode': 'interactive',
+        'ai_role': 'host',
+        'interactive_state': {'phase': 'discussion', 'session_type': 'solo'},
+        'participants': [
+          {
+            'id': 'participant-1',
+            'role': 'host',
+            'status': 'active',
+            'score': 0,
+          },
+        ],
+        'events': [
+          {
+            'id': 'event-1',
+            'session_id': 'session-1',
+            'seq': 1,
+            'actor_type': 'ai',
+            'event_type': 'interactive_turn',
+            'payload': {
+              'type': 'interactive_turn.v1',
+              'session_id': 'session-1',
+              'turn_id': 'turn-1',
+              'seq': 1,
+              'speaker': {'type': 'ai', 'role': 'host'},
+              'blocks': [
+                {'kind': 'text', 'text': 'Let us unpack backend for frontend.'},
+              ],
+            },
+          },
+        ],
+        'last_seq': 1,
+        'is_completed': false,
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: InteractiveStoryRenderer(
+              session: session,
+              onChoice: (_) {},
+              onQuizAnswer: (_, _) {},
+              onRetryGeneration: () {},
+              onReplay: () {},
+              onLeave: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 900));
+
+      expect(find.text('Let us unpack backend for frontend.'), findsOneWidget);
+      expect(find.text('host'), findsNothing);
+      expect(find.text('1'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'InteractiveStoryRenderer never shows generic room header for game fallback',
+    (tester) async {
+      InteractiveSessionState fallbackSession({
+        required String interactionMode,
+        required String sessionType,
+        required String text,
+      }) => InteractiveSessionState.fromJson({
+        'session_id': 'session-1',
+        'story_id': 'story-1',
+        'interaction_mode': interactionMode,
+        'ai_role': 'host',
+        'interactive_state': {
+          'phase': 'unknown_transient_phase',
+          'session_type': sessionType,
+        },
+        'participants': [
+          {
+            'id': 'participant-1',
+            'role': 'host',
+            'status': 'active',
+            'score': 0,
+          },
+        ],
+        'current_turn': {
+          'type': 'interactive_turn.v1',
+          'session_id': 'session-1',
+          'turn_id': 'turn-1',
+          'seq': 1,
+          'speaker': {'type': 'ai', 'role': 'host'},
+          'blocks': [
+            {'kind': 'text', 'text': text},
+          ],
+        },
+        'last_seq': 1,
+        'is_completed': false,
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: InteractiveStoryRenderer(
+              session: fallbackSession(
+                interactionMode: 'interactive',
+                sessionType: 'solo',
+                text: 'Solo fallback should not have a room header above it.',
+              ),
+              onChoice: (_) {},
+              onQuizAnswer: (_, _) {},
+              onRetryGeneration: () {},
+              onReplay: () {},
+              onLeave: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.text('Solo fallback should not have a room header above it.'),
+        findsOneWidget,
+      );
+      expect(find.text('host'), findsNothing);
+      expect(find.text('1'), findsNothing);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: InteractiveStoryRenderer(
+              session: fallbackSession(
+                interactionMode: 'group',
+                sessionType: 'group',
+                text: 'Group fallback should not have a room header above it.',
+              ),
+              onChoice: (_) {},
+              onQuizAnswer: (_, _) {},
+              onRetryGeneration: () {},
+              onReplay: () {},
+              onLeave: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.text('Group fallback should not have a room header above it.'),
+        findsOneWidget,
+      );
+      expect(find.text('host'), findsNothing);
+      expect(find.text('1'), findsNothing);
+    },
+  );
 
   testWidgets(
     'InteractiveStoryRenderer does not wait for host after solo result',

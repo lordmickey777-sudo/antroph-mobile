@@ -500,7 +500,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final currentUserId = ref.watch(authControllerProvider).value?.id;
     final notifier = ref.read(interactiveStoryProvider.notifier);
     final session = state.session;
-    final isQuizSession = session?.interactiveState['template'] == 'quiz';
+    final isQuizSession = _isQuizSession(session);
     final phase = (session?.interactiveState['phase'] as String?) ?? '';
     final sessionType =
         (session?.interactiveState['session_type'] as String?) ?? '';
@@ -1114,6 +1114,28 @@ class _QuizGameBottomBar extends StatelessWidget {
       ),
     );
   }
+}
+
+bool _isQuizSession(InteractiveSessionState? session) {
+  if (session == null) return false;
+  final state = session.interactiveState;
+  if (state['template'] == 'quiz') return true;
+  final phase = (state['phase'] as String?) ?? '';
+  final sessionType = (state['session_type'] as String?) ?? '';
+  if (sessionType != 'solo') return false;
+  return const {
+    'topic_selection',
+    'mode_selection',
+    'discussion',
+    'timer_selection',
+    'generating_question',
+    'question_generation_started',
+    'question_active',
+    'finalizing_question',
+    'showing_results',
+    'post_question_prompt',
+    'completed',
+  }.contains(phase);
 }
 
 class _StorySessionLoadingShell extends StatelessWidget {
