@@ -5,8 +5,10 @@ import 'package:antroph_mobile/features/home/presentation/voice_chat_screen.dart
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/home/services/pcm_audio_player.dart';
 import 'package:antroph_mobile/features/home/services/realtime_voice_client.dart';
+import 'package:antroph_mobile/features/home/widgets/chat_bubble.dart';
 import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
 import 'package:antroph_mobile/features/story/presentation/story_voice_page.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,15 +16,14 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('StoryChatFlowPage starts in chat and opens voice page',
-      (tester) async {
+  testWidgets('StoryChatFlowPage starts in chat and opens voice page', (
+    tester,
+  ) async {
     final fake = FakeVoiceChatController();
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          voiceChatControllerProvider.overrideWith(() => fake),
-        ],
+        overrides: [voiceChatControllerProvider.overrideWith(() => fake)],
         child: MaterialApp(
           home: StoryChatFlowPage(
             storyId: 'story_1',
@@ -55,8 +56,39 @@ void main() {
     expect(fake.startRecordingCalls, 1);
   });
 
-  testWidgets('VoiceChatScreen shows Ready for armed story state',
-      (tester) async {
+  testWidgets('StoryChatFlowPage shows Aura bubble immediately after send', (
+    tester,
+  ) async {
+    final fake = FakeVoiceChatController();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [voiceChatControllerProvider.overrideWith(() => fake)],
+        child: MaterialApp(
+          home: StoryChatFlowPage(
+            storyId: 'story_1',
+            storyTitle: 'Test Story',
+            voicePageBuilder: _testVoicePageBuilder,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), 'Tell me more');
+    await tester.pump();
+    await tester.tap(find.byIcon(CupertinoIcons.paperplane_fill));
+    await tester.pump();
+
+    expect(find.text('Tell me more'), findsOneWidget);
+    expect(find.byType(ChatBubble), findsNWidgets(2));
+    expect(fake.state.showPendingAssistantBubble, isTrue);
+    expect(fake.sendTextPromptCalls, 1);
+  });
+
+  testWidgets('VoiceChatScreen shows Ready for armed story state', (
+    tester,
+  ) async {
     final fake = FakeVoiceChatController(
       initialState: const VoiceChatState(
         isStoryMode: true,
@@ -66,15 +98,10 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          voiceChatControllerProvider.overrideWith(() => fake),
-        ],
+        overrides: [voiceChatControllerProvider.overrideWith(() => fake)],
         child: const MaterialApp(
           home: Scaffold(
-            body: VoiceChatScreen(
-              isStoryMode: true,
-              showMascotFace: false,
-            ),
+            body: VoiceChatScreen(isStoryMode: true, showMascotFace: false),
           ),
         ),
       ),
@@ -87,8 +114,9 @@ void main() {
     expect(find.text("Say something when you're ready"), findsNothing);
   });
 
-  testWidgets('VoiceChatScreen shows Listening only while actively recording',
-      (tester) async {
+  testWidgets('VoiceChatScreen shows Mic on only while actively recording', (
+    tester,
+  ) async {
     final fake = FakeVoiceChatController(
       initialState: const VoiceChatState(
         isStoryMode: true,
@@ -99,15 +127,10 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          voiceChatControllerProvider.overrideWith(() => fake),
-        ],
+        overrides: [voiceChatControllerProvider.overrideWith(() => fake)],
         child: const MaterialApp(
           home: Scaffold(
-            body: VoiceChatScreen(
-              isStoryMode: true,
-              showMascotFace: false,
-            ),
+            body: VoiceChatScreen(isStoryMode: true, showMascotFace: false),
           ),
         ),
       ),
@@ -115,7 +138,7 @@ void main() {
 
     await tester.pump();
 
-    expect(find.text('Listening'), findsOneWidget);
+    expect(find.text('Mic on'), findsOneWidget);
     expect(find.text("Say something when you're ready"), findsOneWidget);
   });
 }
@@ -129,14 +152,12 @@ Widget _testVoicePageBuilder(BuildContext context) {
 }
 
 class FakeVoiceChatController extends VoiceChatController {
-  FakeVoiceChatController({
-    this.initialState = const VoiceChatState(),
-  })
-      : super(
-          client: _NoopRealtimeVoiceClient(),
-          player: _NoopAudioChunkPlayer(),
-          voiceUriOverride: Uri.parse('wss://example.com/ws/realtime/voice'),
-        );
+  FakeVoiceChatController({this.initialState = const VoiceChatState()})
+    : super(
+        client: _NoopRealtimeVoiceClient(),
+        player: _NoopAudioChunkPlayer(),
+        voiceUriOverride: Uri.parse('wss://example.com/ws/realtime/voice'),
+      );
 
   final VoiceChatState initialState;
 
@@ -145,6 +166,7 @@ class FakeVoiceChatController extends VoiceChatController {
   int toggleMuteCalls = 0;
   int startRecordingCalls = 0;
   int endStorySessionCalls = 0;
+  int sendTextPromptCalls = 0;
 
   @override
   VoiceChatState build() {
@@ -191,6 +213,20 @@ class FakeVoiceChatController extends VoiceChatController {
   Future<void> startRecording() async {
     startRecordingCalls++;
     state = state.copyWith(isRecording: true);
+  }
+
+  @override
+  Future<void> sendTextPrompt(String prompt, {bool textOnly = false}) async {
+    sendTextPromptCalls++;
+    final trimmed = prompt.trim();
+    state = state.copyWith(
+      conversationHistory: [
+        ...state.conversationHistory,
+        ConversationItem(role: 'user', content: trimmed),
+      ],
+      showPendingAssistantBubble: textOnly,
+      clearAiResponse: true,
+    );
   }
 
   @override

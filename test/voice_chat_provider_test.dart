@@ -63,6 +63,114 @@ void main() {
       expect(container.read(voiceChatControllerProvider).isProcessing, isTrue);
     });
 
+    test(
+      'sendTextPrompt shows pending assistant state before socket connects',
+      () async {
+        final gate = Completer<void>();
+        final slowClient = FakeRealtimeVoiceClient(connectGate: gate);
+        final slowContainer = ProviderContainer(
+          overrides: [
+            voiceChatControllerProvider.overrideWith(
+              () => VoiceChatController(
+                client: slowClient,
+                player: FakeAudioChunkPlayer(),
+                voiceUriOverride: Uri.parse(
+                  'wss://example.com/ws/realtime/voice',
+                ),
+              ),
+            ),
+          ],
+        );
+        final slowSub = slowContainer.listen(
+          voiceChatControllerProvider,
+          (_, __) {},
+          fireImmediately: true,
+        );
+        addTearDown(() {
+          slowSub.close();
+          slowContainer.dispose();
+          slowClient.dispose();
+        });
+
+        final slowController = slowContainer.read(
+          voiceChatControllerProvider.notifier,
+        );
+        final sendFuture = slowController.sendTextPrompt(
+          'Tell me more',
+          textOnly: true,
+        );
+
+        await Future<void>.delayed(Duration.zero);
+
+        final pendingState = slowContainer.read(voiceChatControllerProvider);
+        expect(pendingState.isProcessing, isTrue);
+        expect(pendingState.showPendingAssistantBubble, isTrue);
+        expect(pendingState.conversationHistory.last.content, 'Tell me more');
+        expect(slowClient.sent, isEmpty);
+
+        gate.complete();
+        await sendFuture;
+
+        expect(slowClient.sent, isNotEmpty);
+      },
+    );
+
+    test('text delta clears pending assistant bubble', () async {
+      await controller.sendTextPrompt('Hi', textOnly: true);
+
+      expect(
+        container.read(voiceChatControllerProvider).showPendingAssistantBubble,
+        isTrue,
+      );
+
+      fakeClient.emitJson({'type': 'response.text.delta', 'delta': 'Hello'});
+      await Future<void>.delayed(Duration.zero);
+
+      final state = container.read(voiceChatControllerProvider);
+      expect(state.showPendingAssistantBubble, isFalse);
+      expect(state.aiResponse, 'Hello');
+    });
+
+    test(
+      'sendTextPrompt clears pending assistant bubble on send failure',
+      () async {
+        final failingClient = FakeRealtimeVoiceClient(
+          connectError: StateError('socket unavailable'),
+        );
+        final failingContainer = ProviderContainer(
+          overrides: [
+            voiceChatControllerProvider.overrideWith(
+              () => VoiceChatController(
+                client: failingClient,
+                player: FakeAudioChunkPlayer(),
+                voiceUriOverride: Uri.parse(
+                  'wss://example.com/ws/realtime/voice',
+                ),
+              ),
+            ),
+          ],
+        );
+        final failingSub = failingContainer.listen(
+          voiceChatControllerProvider,
+          (_, __) {},
+          fireImmediately: true,
+        );
+        addTearDown(() {
+          failingSub.close();
+          failingContainer.dispose();
+          failingClient.dispose();
+        });
+
+        await failingContainer
+            .read(voiceChatControllerProvider.notifier)
+            .sendTextPrompt('Try this', textOnly: true);
+
+        final state = failingContainer.read(voiceChatControllerProvider);
+        expect(state.showPendingAssistantBubble, isFalse);
+        expect(state.errorMessage, contains('Failed to send prompt'));
+      },
+    );
+
     test('handles audio and transcript events', () async {
       await controller.sendTextPrompt('Hi');
 
@@ -332,12 +440,14 @@ Future<void> _waitFor(
 }
 
 class FakeRealtimeVoiceClient extends RealtimeVoiceClient {
-  FakeRealtimeVoiceClient();
+  FakeRealtimeVoiceClient({this.connectGate, this.connectError});
 
   final StreamController<RealtimeIncomingMessage> _controller =
       StreamController<RealtimeIncomingMessage>.broadcast();
   final List<Map<String, dynamic>> sent = [];
   final List<Uint8List> sentBinary = [];
+  final Completer<void>? connectGate;
+  final Object? connectError;
   bool _open = false;
   int connectCalls = 0;
 
@@ -350,6 +460,9 @@ class FakeRealtimeVoiceClient extends RealtimeVoiceClient {
   @override
   Future<void> connect(Uri uri, {RealtimeVoiceConfig? config}) async {
     connectCalls++;
+    await connectGate?.future;
+    final error = connectError;
+    if (error != null) throw error;
     _open = true;
   }
 

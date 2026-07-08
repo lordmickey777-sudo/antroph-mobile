@@ -49,6 +49,7 @@ class VoiceChatState {
   final RoomState? roomState;
   final bool isStoryMode;
   final List<ConversationItem> conversationHistory;
+  final bool showPendingAssistantBubble;
 
   // Mute state for continuous listening mode
   final bool isMuted;
@@ -74,6 +75,7 @@ class VoiceChatState {
     this.roomState,
     this.isStoryMode = false,
     this.conversationHistory = const [],
+    this.showPendingAssistantBubble = false,
     this.isMuted = false,
     this.isUserSpeaking = false,
   });
@@ -102,6 +104,7 @@ class VoiceChatState {
     RoomState? roomState,
     bool? isStoryMode,
     List<ConversationItem>? conversationHistory,
+    bool? showPendingAssistantBubble,
     bool clearStorySession = false,
     bool? isMuted,
     bool? isUserSpeaking,
@@ -134,6 +137,8 @@ class VoiceChatState {
       roomState: roomState ?? this.roomState,
       isStoryMode: isStoryMode ?? this.isStoryMode,
       conversationHistory: conversationHistory ?? this.conversationHistory,
+      showPendingAssistantBubble:
+          showPendingAssistantBubble ?? this.showPendingAssistantBubble,
       isMuted: isMuted ?? this.isMuted,
       isUserSpeaking: isUserSpeaking ?? this.isUserSpeaking,
     );
@@ -362,6 +367,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         errorMessage: null,
         clearFace: true,
         conversationHistory: [],
+        showPendingAssistantBubble: false,
       );
 
       await _connectSocket();
@@ -420,6 +426,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         clearAiAudio: true,
         errorMessage: null,
         clearFace: true,
+        showPendingAssistantBubble: false,
       );
 
       await _connectSocket(storySessionId: storySessionId);
@@ -538,6 +545,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       clearStorySession: true,
       phase: RealtimeVoicePhase.idle,
       conversationHistory: [],
+      showPendingAssistantBubble: false,
     );
     _log.i('Story session ended');
   }
@@ -588,6 +596,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         clearAiAudio: true,
         errorMessage: null,
         clearFace: true,
+        showPendingAssistantBubble: false,
         phase: state.isStoryMode ? RealtimeVoicePhase.recording : state.phase,
       );
 
@@ -1296,6 +1305,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           isProcessing: true,
           isConnecting: false,
           isUserSpeaking: false,
+          showPendingAssistantBubble: false,
           phase: state.isStoryMode
               ? RealtimeVoicePhase.processing
               : state.phase,
@@ -1333,6 +1343,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
             isProcessing: false,
             isConnecting: false,
             isUserSpeaking: false,
+            showPendingAssistantBubble: false,
             phase: state.isStoryMode ? RealtimeVoicePhase.playing : state.phase,
           );
         }
@@ -1350,6 +1361,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
             isRecording: false,
             aiResponse: text,
             isUserSpeaking: false,
+            showPendingAssistantBubble: false,
           );
         }
         break;
@@ -1366,6 +1378,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
             isProcessing: true,
             isConnecting: false,
             isUserSpeaking: false,
+            showPendingAssistantBubble: false,
             phase: state.isStoryMode
                 ? RealtimeVoicePhase.processing
                 : state.phase,
@@ -1385,6 +1398,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
           isProcessing: false,
           isConnecting: false,
           isUserSpeaking: false,
+          showPendingAssistantBubble: false,
           phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
         );
         _commitSent = false;
@@ -2042,11 +2056,6 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (trimmed.isEmpty) return;
 
     try {
-      if (!_client.isOpen || !_socketOpen) {
-        await _connectSocket();
-      }
-
-      if (!textOnly) _enableAudio();
       _aiTextBuffer.clear();
       final optimisticHistory = textOnly
           ? _appendConversationItem(
@@ -2061,11 +2070,18 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isRecording: false,
         isPlaying: false,
         isUserSpeaking: false,
+        showPendingAssistantBubble: textOnly,
         clearAiResponse: true,
         errorMessage: null,
         clearFace: true,
         phase: state.isStoryMode ? RealtimeVoicePhase.processing : state.phase,
       );
+
+      if (!_client.isOpen || !_socketOpen) {
+        await _connectSocket();
+      }
+
+      if (!textOnly) _enableAudio();
 
       final modalities = textOnly ? ['text'] : ['audio'];
       final response = <String, dynamic>{
@@ -2099,6 +2115,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         isProcessing: false,
         isConnecting: false,
         isUserSpeaking: false,
+        showPendingAssistantBubble: false,
         phase: state.isStoryMode ? RealtimeVoicePhase.error : state.phase,
         errorMessage: 'Failed to send prompt: $e',
       );
@@ -2179,6 +2196,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       clearAiAudio: true,
       clearFace: true,
       errorMessage: null,
+      showPendingAssistantBubble: false,
       phase: RealtimeVoicePhase.idle,
       isStoryMode: false,
       clearStorySession: true,

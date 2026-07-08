@@ -63,6 +63,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _voiceController = ref.read(voiceChatControllerProvider.notifier);
       _initStorySessionAndChatMode();
     });
@@ -78,8 +79,10 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     var interactionMode = 'narrative';
     try {
       final detail = await ref.read(storyDetailProvider(widget.storyId).future);
+      if (!mounted) return;
       interactionMode = detail.interactionMode;
     } catch (_) {
+      if (!mounted) return;
       interactionMode = 'narrative';
     }
 
@@ -229,9 +232,12 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    if (_voiceController != null) {
-      _voiceController!.endStorySession();
-      _voiceController!.stopPlayback();
+    final voiceController = _voiceController;
+    if (voiceController != null) {
+      Future<void>.microtask(() async {
+        await voiceController.endStorySession();
+        await voiceController.stopPlayback();
+      });
     }
     super.dispose();
   }
@@ -1520,14 +1526,22 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         );
     final hasAiText = liveAiText.isNotEmpty && !liveAiAlreadyInHistory;
     final awaitingAi = voiceState.isProcessing || voiceState.isConnecting;
-    if (hasAiText || (awaitingAi && !liveAiAlreadyInHistory)) {
+    final showPendingAssistant =
+        voiceState.showPendingAssistantBubble && !liveAiAlreadyInHistory;
+    if (hasAiText ||
+        showPendingAssistant ||
+        (awaitingAi && !liveAiAlreadyInHistory)) {
       messages.add(
         ChatMessageModel(
           id: 'story_live_ai',
           role: ChatRole.assistant,
           message: hasAiText ? liveAiText : '',
           ts: DateTime.now(),
-          streaming: awaitingAi || voiceState.isPlaying || !hasAiText,
+          streaming:
+              showPendingAssistant ||
+              awaitingAi ||
+              voiceState.isPlaying ||
+              !hasAiText,
         ),
       );
     }

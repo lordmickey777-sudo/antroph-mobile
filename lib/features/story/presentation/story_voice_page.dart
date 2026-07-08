@@ -45,6 +45,7 @@ class _StoryVoicePageState extends ConsumerState<StoryVoicePage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _voiceController = ref.read(voiceChatControllerProvider.notifier);
       _requestedAutoStart = true;
       unawaited(_ensureConnectedAndMaybeStart());

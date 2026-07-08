@@ -64,12 +64,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _voiceController = ref.read(voiceChatControllerProvider.notifier);
       _autoStartListening();
     });
 
     if (widget.isStoryMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         _initStorySession();
       });
     }
@@ -182,13 +184,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (_modalRoute != null) {
       appRouteObserver.unsubscribe(this);
     }
-    if (_voiceController != null) {
-      if (widget.isStoryMode) {
-        _voiceController!.pauseStorySession();
-        _voiceController!.endStorySession();
-      } else {
-        _voiceController!.stopPlayback();
-      }
+    final voiceController = _voiceController;
+    if (voiceController != null) {
+      final isStoryMode = widget.isStoryMode;
+      Future<void>.microtask(() async {
+        if (isStoryMode) {
+          voiceController.pauseStorySession();
+          await voiceController.endStorySession();
+        } else {
+          await voiceController.stopPlayback();
+        }
+      });
     }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
