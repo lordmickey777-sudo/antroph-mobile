@@ -39,6 +39,7 @@ class _StoryPageState extends ConsumerState<StoryPage>
   late final TextEditingController _searchController;
   String _draftSearchQuery = '';
   String _activeSearchQuery = '';
+  _SearchSuggestion? _activeSearchSuggestion;
 
   @override
   bool get wantKeepAlive => true;
@@ -88,23 +89,28 @@ class _StoryPageState extends ConsumerState<StoryPage>
           final rawContinueStories =
               asyncContinue.asData?.value ?? const <ContinuePlayingDto>[];
           final hasSearch = query.isNotEmpty;
+          final selectedSuggestion = _activeSearchSuggestion;
+          final hasSelectedSuggestion = hasSearch && selectedSuggestion != null;
           final suggestions = draftQuery == query
               ? const <_SearchSuggestion>[]
               : _buildSearchSuggestions(
                   sections: data.sections,
-                  featuredStories: data.featuredStories,
-                  continueStories: rawContinueStories,
                   query: draftQuery,
                 );
-          final sections = _filterStorySections(data.sections, query);
-          final featuredStories = _filterFeaturedStories(
-            data.featuredStories,
-            query,
-          );
-          final continueStories = _filterContinueStories(
-            rawContinueStories,
-            query,
-          );
+          final canSubmitSearch =
+              draftQuery.isNotEmpty && suggestions.isNotEmpty;
+          final sections = hasSelectedSuggestion
+              ? _filterStorySectionsBySuggestion(
+                  data.sections,
+                  selectedSuggestion,
+                )
+              : _filterStorySections(data.sections, query);
+          final featuredStories = hasSelectedSuggestion
+              ? const <FeaturedStoryDto>[]
+              : _filterFeaturedStories(data.featuredStories, query);
+          final continueStories = hasSelectedSuggestion
+              ? const <ContinuePlayingDto>[]
+              : _filterContinueStories(rawContinueStories, query);
           if (sections.isEmpty &&
               featuredStories.isEmpty &&
               continueStories.isEmpty &&
@@ -125,9 +131,11 @@ class _StoryPageState extends ConsumerState<StoryPage>
                     draftQuery: _draftSearchQuery,
                     activeQuery: _activeSearchQuery,
                     suggestions: suggestions,
+                    canSubmitSearch: canSubmitSearch,
                     isDark: isDark,
                     onChanged: (value) => setState(() {
                       _draftSearchQuery = value;
+                      _activeSearchSuggestion = null;
                     }),
                     onSearch: _applyDraftSearch,
                     onSuggestionSelected: _applySearchSuggestion,
@@ -136,6 +144,7 @@ class _StoryPageState extends ConsumerState<StoryPage>
                       setState(() {
                         _draftSearchQuery = '';
                         _activeSearchQuery = '';
+                        _activeSearchSuggestion = null;
                       });
                     },
                   ),
@@ -143,7 +152,9 @@ class _StoryPageState extends ConsumerState<StoryPage>
                 if (continueStories.isNotEmpty)
                   _ContinuePlayingSliver(
                     stories: continueStories,
-                    onTap: (story) => _resumeStory(context, ref, story),
+                    onTap: (story) => hasSearch
+                        ? _openContinueStoryPoster(context, story)
+                        : _resumeStory(context, ref, story),
                   ),
                 if (featuredStories.isNotEmpty)
                   SliverToBoxAdapter(
@@ -153,11 +164,17 @@ class _StoryPageState extends ConsumerState<StoryPage>
                     ),
                   ),
                 for (final section in sections)
-                  _SectionSliver(
-                    section: section,
-                    onTap: (card) => _playStoryCard(context, ref, card),
-                  ),
-                _CommunityStoriesSliver(searchQuery: query),
+                  hasSearch
+                      ? _SearchSectionSliver(
+                          section: section,
+                          onTap: (card) => _playStoryCard(context, ref, card),
+                        )
+                      : _SectionSliver(
+                          section: section,
+                          onTap: (card) => _playStoryCard(context, ref, card),
+                        ),
+                if (!hasSelectedSuggestion)
+                  _CommunityStoriesSliver(searchQuery: query),
                 const SliverToBoxAdapter(child: SizedBox(height: 120)),
               ],
             ),
@@ -226,6 +243,19 @@ class _StoryPageState extends ConsumerState<StoryPage>
     );
   }
 
+  Future<void> _openContinueStoryPoster(
+    BuildContext context,
+    ContinuePlayingDto story,
+  ) async {
+    _openStorySheet(
+      context,
+      storyId: story.storyId,
+      title: story.title,
+      subtitle: story.description,
+      image: story.coverImageUrl,
+    );
+  }
+
   Future<void> _resumeStory(
     BuildContext context,
     WidgetRef ref,
@@ -281,18 +311,22 @@ class _StoryPageState extends ConsumerState<StoryPage>
 
   void _applyDraftSearch() {
     FocusManager.instance.primaryFocus?.unfocus();
-    setState(() => _activeSearchQuery = _searchController.text);
+    setState(() {
+      _activeSearchQuery = _searchController.text;
+      _activeSearchSuggestion = null;
+    });
   }
 
-  void _applySearchSuggestion(String suggestion) {
-    _searchController.text = suggestion;
+  void _applySearchSuggestion(_SearchSuggestion suggestion) {
+    _searchController.text = suggestion.value;
     _searchController.selection = TextSelection.collapsed(
-      offset: suggestion.length,
+      offset: suggestion.value.length,
     );
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
-      _draftSearchQuery = suggestion;
-      _activeSearchQuery = suggestion;
+      _draftSearchQuery = suggestion.value;
+      _activeSearchQuery = suggestion.value;
+      _activeSearchSuggestion = suggestion;
     });
   }
 }
@@ -303,6 +337,7 @@ class _StoryHomeHeader extends StatelessWidget {
     required this.draftQuery,
     required this.activeQuery,
     required this.suggestions,
+    required this.canSubmitSearch,
     required this.isDark,
     required this.onChanged,
     required this.onSearch,
@@ -314,10 +349,11 @@ class _StoryHomeHeader extends StatelessWidget {
   final String draftQuery;
   final String activeQuery;
   final List<_SearchSuggestion> suggestions;
+  final bool canSubmitSearch;
   final bool isDark;
   final ValueChanged<String> onChanged;
   final VoidCallback onSearch;
-  final ValueChanged<String> onSuggestionSelected;
+  final ValueChanged<_SearchSuggestion> onSuggestionSelected;
   final VoidCallback onClear;
 
   @override
@@ -326,60 +362,44 @@ class _StoryHomeHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: SafeArea(
         bottom: false,
-        child: SizedBox(
-          height: 94,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Image.asset(
-                          'assets/images/app_logo.png',
-                          width: 38,
-                          height: 38,
-                        ),
-                        const SizedBox(width: 2),
-                        TypographyText(
-                          'Explore',
-                          variant: TypographyVariant.h3,
-                          color: isDark ? Colors.white : Colors.black,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    _StorySearchField(
-                      controller: controller,
-                      isDark: isDark,
-                      hasQuery:
-                          draftQuery.trim().isNotEmpty ||
-                          activeQuery.trim().isNotEmpty,
-                      onChanged: onChanged,
-                      onSearch: onSearch,
-                      onClear: onClear,
-                    ),
-                  ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Image.asset(
+                  'assets/images/app_logo.png',
+                  width: 38,
+                  height: 38,
                 ),
+                const SizedBox(width: 2),
+                TypographyText(
+                  'Explore',
+                  variant: TypographyVariant.h3,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _StorySearchField(
+              controller: controller,
+              isDark: isDark,
+              hasQuery:
+                  draftQuery.trim().isNotEmpty || activeQuery.trim().isNotEmpty,
+              canSubmitSearch: canSubmitSearch,
+              onChanged: onChanged,
+              onSearch: onSearch,
+              onClear: onClear,
+            ),
+            if (suggestions.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _SearchSuggestionsDropdown(
+                suggestions: suggestions,
+                isDark: isDark,
+                onSelected: onSuggestionSelected,
               ),
-              if (suggestions.isNotEmpty)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 102,
-                  child: _SearchSuggestionsDropdown(
-                    suggestions: suggestions,
-                    isDark: isDark,
-                    onSelected: onSuggestionSelected,
-                  ),
-                ),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -391,6 +411,7 @@ class _StorySearchField extends StatelessWidget {
     required this.controller,
     required this.isDark,
     required this.hasQuery,
+    required this.canSubmitSearch,
     required this.onChanged,
     required this.onSearch,
     required this.onClear,
@@ -399,6 +420,7 @@ class _StorySearchField extends StatelessWidget {
   final TextEditingController controller;
   final bool isDark;
   final bool hasQuery;
+  final bool canSubmitSearch;
   final ValueChanged<String> onChanged;
   final VoidCallback onSearch;
   final VoidCallback onClear;
@@ -417,11 +439,20 @@ class _StorySearchField extends StatelessWidget {
         : Colors.black.withValues(alpha: 0.06);
     final textColor = isDark ? Colors.white : Colors.black87;
     final iconColor = isDark ? Colors.white54 : Colors.black45;
+    final isSearchDisabled = hasQuery && !canSubmitSearch;
     final actionBackgroundColor = hasQuery
-        ? (isDark ? Colors.white : Colors.black)
+        ? canSubmitSearch
+              ? (isDark ? Colors.white : Colors.black)
+              : (isDark
+                    ? Colors.white.withValues(alpha: 0.16)
+                    : Colors.black.withValues(alpha: 0.08))
         : Colors.transparent;
     final actionForegroundColor = hasQuery
-        ? (isDark ? Colors.black : Colors.white)
+        ? canSubmitSearch
+              ? (isDark ? Colors.black : Colors.white)
+              : (isDark
+                    ? Colors.white.withValues(alpha: 0.38)
+                    : Colors.black.withValues(alpha: 0.32))
         : iconColor;
 
     return LayoutBuilder(
@@ -463,15 +494,24 @@ class _StorySearchField extends StatelessWidget {
                       color: actionBackgroundColor,
                       shape: BoxShape.circle,
                     ),
-                    child: IconButton(
-                      onPressed: hasQuery ? onSearch : null,
-                      padding: EdgeInsets.zero,
-                      icon: IconTheme(
-                        data: IconTheme.of(context).copyWith(
-                          color: actionForegroundColor,
-                          size: hasQuery ? 15 : 18,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOutCubic,
+                      opacity: isSearchDisabled ? 0.7 : 1,
+                      child: IconButton(
+                        onPressed: canSubmitSearch ? onSearch : null,
+                        padding: EdgeInsets.zero,
+                        style: IconButton.styleFrom(
+                          disabledForegroundColor: actionForegroundColor,
+                          foregroundColor: actionForegroundColor,
                         ),
-                        child: const Icon(CupertinoIcons.search),
+                        icon: IconTheme(
+                          data: IconTheme.of(context).copyWith(
+                            color: actionForegroundColor,
+                            size: hasQuery ? 15 : 18,
+                          ),
+                          child: const Icon(CupertinoIcons.search),
+                        ),
                       ),
                     ),
                   ),
@@ -488,7 +528,9 @@ class _StorySearchField extends StatelessWidget {
                   child: TextField(
                     controller: controller,
                     onChanged: onChanged,
-                    onSubmitted: (_) => onSearch(),
+                    onSubmitted: (_) {
+                      if (canSubmitSearch) onSearch();
+                    },
                     keyboardType: TextInputType.text,
                     textInputAction: TextInputAction.search,
                     style: TextStyle(
@@ -549,7 +591,7 @@ class _SearchSuggestionsDropdown extends StatelessWidget {
 
   final List<_SearchSuggestion> suggestions;
   final bool isDark;
-  final ValueChanged<String> onSelected;
+  final ValueChanged<_SearchSuggestion> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -581,7 +623,7 @@ class _SearchSuggestionsDropdown extends StatelessWidget {
               suggestion: suggestions[index],
               primaryColor: primaryColor,
               secondaryColor: secondaryColor,
-              onTap: () => onSelected(suggestions[index].value),
+              onTap: () => onSelected(suggestions[index]),
             ),
             if (index != suggestions.length - 1)
               Divider(height: 1, color: borderColor),
@@ -934,6 +976,58 @@ class _SectionSliver extends StatelessWidget {
   }
 }
 
+class _SearchSectionSliver extends StatelessWidget {
+  const _SearchSectionSliver({required this.section, required this.onTap});
+
+  final StorySectionDto section;
+  final Future<void> Function(StoryCardDto) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TypographyText(
+              section.title,
+              variant: TypographyVariant.body1,
+              color: isDark ? Colors.white : Colors.black87,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                const spacing = 12.0;
+                final itemWidth = (constraints.maxWidth - spacing) / 2;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: 14,
+                  children: [
+                    for (final item in section.items)
+                      SizedBox(
+                        width: itemWidth,
+                        child: _StoryCard(
+                          item: item,
+                          onTap: () => onTap(item),
+                          width: itemWidth,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ContinuePlayingSliver extends StatelessWidget {
   const _ContinuePlayingSliver({required this.stories, required this.onTap});
 
@@ -980,17 +1074,18 @@ class _ContinuePlayingSliver extends StatelessWidget {
 }
 
 class _StoryCard extends StatelessWidget {
-  const _StoryCard({required this.item, required this.onTap});
+  const _StoryCard({required this.item, required this.onTap, this.width = 125});
 
   final StoryCardDto item;
   final VoidCallback onTap;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
-        width: 125,
+        width: width,
         child: SmoothCard(
           radius: 24,
           child: AspectRatio(
@@ -1472,16 +1567,21 @@ String _normalizeSearchQuery(String value) {
 enum _SearchSuggestionType { category, story }
 
 class _SearchSuggestion {
-  const _SearchSuggestion({required this.value, required this.type});
+  const _SearchSuggestion({
+    required this.value,
+    required this.type,
+    this.categoryTitle,
+    this.storyId,
+  });
 
   final String value;
   final _SearchSuggestionType type;
+  final String? categoryTitle;
+  final String? storyId;
 }
 
 List<_SearchSuggestion> _buildSearchSuggestions({
   required List<StorySectionDto> sections,
-  required List<FeaturedStoryDto> featuredStories,
-  required List<ContinuePlayingDto> continueStories,
   required String query,
 }) {
   if (query.isEmpty) return const [];
@@ -1489,29 +1589,43 @@ List<_SearchSuggestion> _buildSearchSuggestions({
   final suggestions = <_SearchSuggestion>[];
   final seen = <String>{};
 
-  void add(String value, _SearchSuggestionType type) {
+  void add(
+    String value,
+    _SearchSuggestionType type, {
+    String? categoryTitle,
+    String? storyId,
+  }) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
     final normalized = _normalizeSearchQuery(trimmed);
     if (!normalized.contains(query)) return;
-    final key = '${type.name}:$normalized';
+    final normalizedCategory = _normalizeSearchQuery(categoryTitle ?? '');
+    final normalizedStoryId = _normalizeSearchQuery(storyId ?? '');
+    final key = type == _SearchSuggestionType.story
+        ? '${type.name}:${normalizedStoryId.isEmpty ? normalized : normalizedStoryId}'
+        : '${type.name}:$normalizedCategory:$normalized';
     if (!seen.add(key)) return;
-    suggestions.add(_SearchSuggestion(value: trimmed, type: type));
+    suggestions.add(
+      _SearchSuggestion(
+        value: trimmed,
+        type: type,
+        categoryTitle: categoryTitle,
+        storyId: storyId,
+      ),
+    );
   }
 
   for (final section in sections) {
+    if (_isUtilityStorySection(section.title)) continue;
     add(section.title, _SearchSuggestionType.category);
     for (final story in section.items) {
-      add(story.title, _SearchSuggestionType.story);
+      add(
+        story.title,
+        _SearchSuggestionType.story,
+        categoryTitle: section.title,
+        storyId: story.storyId,
+      );
     }
-  }
-
-  for (final story in featuredStories) {
-    add(story.title, _SearchSuggestionType.story);
-  }
-
-  for (final story in continueStories) {
-    add(story.title, _SearchSuggestionType.story);
   }
 
   return suggestions.take(5).toList();
@@ -1542,6 +1656,55 @@ List<StorySectionDto> _filterStorySections(
       })
       .where((section) => section.items.isNotEmpty)
       .toList();
+}
+
+List<StorySectionDto> _filterStorySectionsBySuggestion(
+  List<StorySectionDto> sections,
+  _SearchSuggestion suggestion,
+) {
+  final value = _normalizeSearchQuery(suggestion.value);
+  if (value.isEmpty) return sections;
+
+  if (suggestion.type == _SearchSuggestionType.category) {
+    return sections
+        .where((section) => _normalizeSearchQuery(section.title) == value)
+        .toList();
+  }
+
+  final category = _normalizeSearchQuery(suggestion.categoryTitle ?? '');
+  final preferredSections = sections.where((section) {
+    if (_isUtilityStorySection(section.title)) return false;
+    if (category.isEmpty) return true;
+    return _normalizeSearchQuery(section.title) == category;
+  }).toList();
+  final candidateSections = preferredSections.isNotEmpty
+      ? preferredSections
+      : sections.where((section) => !_isUtilityStorySection(section.title));
+
+  return candidateSections
+      .map((section) {
+        final items = section.items.where((story) {
+          final suggestionStoryId = suggestion.storyId?.trim();
+          if (suggestionStoryId != null && suggestionStoryId.isNotEmpty) {
+            return story.storyId == suggestionStoryId ||
+                story.id == suggestionStoryId;
+          }
+          return _normalizeSearchQuery(story.title) == value;
+        }).toList();
+        return StorySectionDto(title: section.title, items: items);
+      })
+      .where((section) => section.items.isNotEmpty)
+      .toList();
+}
+
+bool _isUtilityStorySection(String title) {
+  final normalized = _normalizeSearchQuery(title);
+  return normalized.contains('playlist') ||
+      normalized.contains('collection') ||
+      normalized.contains('continue') ||
+      normalized.contains('recommend') ||
+      normalized.contains('trending') ||
+      normalized.contains('popular');
 }
 
 List<FeaturedStoryDto> _filterFeaturedStories(
