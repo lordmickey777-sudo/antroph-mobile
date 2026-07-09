@@ -1057,6 +1057,10 @@ class _CategoryRows extends StatelessWidget {
         normalizedCategory.contains('kitchen')) {
       return Icons.restaurant_menu;
     }
+    if (normalizedCategory.contains('habit') ||
+        normalizedCategory.contains('formation')) {
+      return CupertinoIcons.mic;
+    }
 
     const icons = [
       CupertinoIcons.book,
