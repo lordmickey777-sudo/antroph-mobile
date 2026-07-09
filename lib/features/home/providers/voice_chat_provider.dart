@@ -2150,6 +2150,11 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   void _handleSocketClosed() {
     if (!ref.mounted) return;
     _log.i('Voice websocket closed');
+    final wasStoryMode = state.isStoryMode;
+    final lostStoryConnection =
+        wasStoryMode &&
+        state.phase != RealtimeVoicePhase.idle &&
+        state.phase != RealtimeVoicePhase.closed;
     _socketOpen = false;
     unawaited(_player.stop());
     _disableAudio();
@@ -2164,6 +2169,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isRecording: false,
       isUserSpeaking: false,
       phase: RealtimeVoicePhase.closed,
+      errorMessage: lostStoryConnection
+          ? (state.errorMessage ?? 'Story connection lost. Please retry.')
+          : state.errorMessage,
     );
     _commitSent = false;
   }

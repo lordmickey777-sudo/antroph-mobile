@@ -80,8 +80,9 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
 
   @override
   void dispose() {
-    // Clear session when sheet is closed
-    _storySessionNotifier.clearSession();
+    // Clear after unmount so Riverpod is not mutated while the widget tree is
+    // finalizing.
+    Future<void>.microtask(_storySessionNotifier.clearSession);
     super.dispose();
   }
 

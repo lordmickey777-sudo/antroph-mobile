@@ -13,6 +13,7 @@ class StoryDetailDto {
     required this.tags,
     required this.durationMinutes,
     required this.difficulty,
+    this.context = '',
     required this.isPremium,
     required this.price,
     required this.isPublished,
@@ -40,6 +41,7 @@ class StoryDetailDto {
   final List<String> tags;
   final int durationMinutes;
   final String difficulty;
+  final String context;
   final bool isPremium;
   final num price;
   final bool isPublished;
@@ -66,6 +68,7 @@ class StoryDetailDto {
     tags: ((json['tags'] as List?) ?? const []).whereType<String>().toList(),
     durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 0,
     difficulty: (json['difficulty'] as String?)?.trim() ?? '',
+    context: (json['context'] as String?)?.trim() ?? '',
     isPremium: (json['is_premium'] as bool?) ?? false,
     price: (json['price'] as num?) ?? 0,
     isPublished: (json['is_published'] as bool?) ?? false,
@@ -118,6 +121,7 @@ class StoryDetailDto {
     'tags': tags,
     'duration_minutes': durationMinutes,
     'difficulty': difficulty,
+    'context': context,
     'is_premium': isPremium,
     'price': price,
     'is_published': isPublished,
@@ -144,6 +148,7 @@ class StoryDetailDto {
     List<String>? tags,
     int? durationMinutes,
     String? difficulty,
+    String? context,
     bool? isPremium,
     num? price,
     bool? isPublished,
@@ -174,6 +179,7 @@ class StoryDetailDto {
       tags: tags ?? this.tags,
       durationMinutes: durationMinutes ?? this.durationMinutes,
       difficulty: difficulty ?? this.difficulty,
+      context: context ?? this.context,
       isPremium: isPremium ?? this.isPremium,
       price: price ?? this.price,
       isPublished: isPublished ?? this.isPublished,

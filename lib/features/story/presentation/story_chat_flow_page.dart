@@ -4,10 +4,12 @@ import 'dart:math' as math;
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/features/home/models/chat_models.dart';
+import 'package:antroph_mobile/features/home/models/realtime_voice_bridge_models.dart';
 import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart';
 import 'package:antroph_mobile/features/home/widgets/chat_bubble.dart';
 import 'package:antroph_mobile/features/story/models/interactive_story_models.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
+import 'package:antroph_mobile/features/story/models/story_detail.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 import 'package:antroph_mobile/features/story/presentation/story_voice_page.dart';
 import 'package:antroph_mobile/features/story/providers/interactive_story_provider.dart';
@@ -19,8 +21,20 @@ import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 enum InteractiveStoryLaunchMode { create, joinByCode, joinPublic }
+
+bool _usesDynamicStoryOptions(StoryDetailDto detail) {
+  final template = (detail.interactiveConfig['template'] as String?)?.trim();
+  if (template == 'dynamic_story_menu') return true;
+  final title = detail.title.toLowerCase();
+  if (title.contains('beneath the surface')) return true;
+  final context = detail.context.toLowerCase();
+  return context.contains('three stories to explore') &&
+      context.contains('generate three') &&
+      context.contains('story');
+}
 
 class StoryChatFlowPage extends ConsumerStatefulWidget {
   const StoryChatFlowPage({
@@ -56,6 +70,10 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     with WidgetsBindingObserver {
   bool _sessionStarted = false;
   bool _isLeavingGame = false;
+  bool _isExitingStory = false;
+  bool _connectionErrorDialogOpen = false;
+  int _storyConnectionRetryAttempts = 0;
+  String? _lastReadyStorySessionId;
   VoiceChatController? _voiceController;
 
   @override
@@ -178,8 +196,22 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
       return;
     }
 
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _LeaveGameDialog(
+        title: 'Leave this story?',
+        message:
+            'You will exit the story chat and return to the story details page.',
+        icon: CupertinoIcons.book_fill,
+        iconBackground: Colors.white24,
+        iconColor: Colors.white,
+      ),
+    );
+    if (shouldLeave != true || !mounted) return;
+
     final navigator = Navigator.of(context);
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    _isExitingStory = true;
     await voiceController.endStorySession();
     await voiceController.stopPlayback();
     if (mounted) {
@@ -229,9 +261,47 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     );
   }
 
+  bool _shouldShowStoryConnectionDialog(VoiceChatState state) {
+    if (_isExitingStory || _isLeavingGame || _connectionErrorDialogOpen) {
+      return false;
+    }
+    if (ModalRoute.of(context)?.isCurrent != true) return false;
+    if (_isInteractiveStory()) return false;
+    if (!state.isStoryMode) return false;
+    return state.phase == RealtimeVoicePhase.error ||
+        state.phase == RealtimeVoicePhase.closed;
+  }
+
+  Future<void> _showStoryConnectionErrorDialog(VoiceChatState state) async {
+    if (_connectionErrorDialogOpen || !mounted) return;
+
+    setState(() => _connectionErrorDialogOpen = true);
+    final shouldRetry = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const StoryConnectionErrorDialog(),
+    );
+
+    if (!mounted) return;
+    setState(() => _connectionErrorDialogOpen = false);
+    if (shouldRetry != true) return;
+    if (ModalRoute.of(context)?.isCurrent != true) return;
+
+    _storyConnectionRetryAttempts += 1;
+    final preferredSessionId = (_lastReadyStorySessionId ?? '').trim();
+    final canResumeKnownSession =
+        _storyConnectionRetryAttempts == 1 && preferredSessionId.isNotEmpty;
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    await voiceController.ensureStorySessionConnected(
+      widget.storyId,
+      preferredSessionId: canResumeKnownSession ? preferredSessionId : null,
+    );
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _isExitingStory = true;
     final voiceController = _voiceController;
     if (voiceController != null) {
       Future<void>.microtask(() async {
@@ -257,11 +327,25 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
   Widget build(BuildContext context) {
     ref.listen<VoiceChatState>(voiceChatControllerProvider, (previous, next) {
       if (!mounted) return;
+      if (next.isSessionReady) {
+        _storyConnectionRetryAttempts = 0;
+        _lastReadyStorySessionId = next.storySession?.sessionId;
+      }
       final error = next.errorMessage;
       if (error != null &&
           error.isNotEmpty &&
-          error != (previous?.errorMessage ?? '')) {
-        showToast(context, error);
+          error != (previous?.errorMessage ?? '') &&
+          !_shouldShowStoryConnectionDialog(next)) {
+        showToast(context, next.isStoryMode ? 'Story connection error' : error);
+      }
+      final phaseChanged = next.phase != previous?.phase;
+      final errorChanged = next.errorMessage != previous?.errorMessage;
+      if ((phaseChanged || errorChanged) &&
+          _shouldShowStoryConnectionDialog(next)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_shouldShowStoryConnectionDialog(next)) return;
+          unawaited(_showStoryConnectionErrorDialog(next));
+        });
       }
     });
 
@@ -344,10 +428,16 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
                   onLeave: _leaveGame,
                 );
               }
-              return _StoryTextChatTab(onCall: _openVoicePage);
+              return _StoryTextChatTab(
+                onCall: _openVoicePage,
+                enableStoryOptions: _usesDynamicStoryOptions(detail),
+              );
             },
             loading: () => const _StorySessionLoadingShell(),
-            orElse: () => _StoryTextChatTab(onCall: _openVoicePage),
+            orElse: () => _StoryTextChatTab(
+              onCall: _openVoicePage,
+              enableStoryOptions: false,
+            ),
           ),
         ),
       ),
@@ -853,7 +943,20 @@ class _QuestionGenerationOverlay extends StatelessWidget {
 }
 
 class _LeaveGameDialog extends StatelessWidget {
-  const _LeaveGameDialog();
+  const _LeaveGameDialog({
+    this.title = 'Leave this game?',
+    this.message =
+        'You will exit the live game and return to the story details page.',
+    this.icon = CupertinoIcons.arrow_left_circle_fill,
+    this.iconBackground,
+    this.iconColor = Colors.white,
+  });
+
+  final String title;
+  final String message;
+  final IconData icon;
+  final Color? iconBackground;
+  final Color iconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -893,14 +996,12 @@ class _LeaveGameDialog extends StatelessWidget {
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                    color:
+                        iconBackground ??
+                        const Color(0xFFEF4444).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
-                    CupertinoIcons.arrow_left_circle_fill,
-                    color: Colors.white,
-                    size: 22,
-                  ),
+                  child: Icon(icon, color: iconColor, size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -908,7 +1009,7 @@ class _LeaveGameDialog extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Leave this game?',
+                        title,
                         style: TextStyle(
                           color: context.primaryTextColor,
                           fontSize: 18,
@@ -918,7 +1019,7 @@ class _LeaveGameDialog extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'You will exit the live game and return to the story details page.',
+                        message,
                         style: TextStyle(
                           color: subdued,
                           fontSize: 13,
@@ -974,6 +1075,111 @@ class _LeaveGameDialog extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class StoryConnectionErrorDialog extends StatelessWidget {
+  const StoryConnectionErrorDialog({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final surface = isDark ? const Color(0xFF111214) : Colors.white;
+    final subdued = isDark ? Colors.white70 : const Color(0xFF5F6368);
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.18),
+              blurRadius: 28,
+              offset: const Offset(0, 16),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.wifi_slash,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Connection error',
+                        style: TextStyle(
+                          color: context.primaryTextColor,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          height: 1.15,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Aura lost the story connection. Retry to reconnect and continue.',
+                        style: TextStyle(
+                          color: subdued,
+                          fontSize: 13,
+                          height: 1.35,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Retry',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
             ),
           ],
         ),
@@ -1435,12 +1641,372 @@ class _ActiveParticipantAvatar extends StatelessWidget {
 }
 
 class _StoryTextChatTab extends ConsumerStatefulWidget {
-  const _StoryTextChatTab({required this.onCall});
+  const _StoryTextChatTab({
+    required this.onCall,
+    required this.enableStoryOptions,
+  });
 
   final VoidCallback onCall;
+  final bool enableStoryOptions;
 
   @override
   ConsumerState<_StoryTextChatTab> createState() => _StoryTextChatTabState();
+}
+
+class _ParsedStoryOption {
+  const _ParsedStoryOption({required this.title});
+
+  final String title;
+}
+
+class _ParsedStoryOptions {
+  const _ParsedStoryOptions({required this.displayText, required this.options});
+
+  final String displayText;
+  final List<_ParsedStoryOption> options;
+}
+
+String _cleanStoryOptionTitle(String value) {
+  var title = value.trim();
+  title = title.replaceAll(RegExp(r'\s+'), ' ');
+  title = title.split(RegExp(r'\s+(?:-|–|—)\s+|:\s+')).first.trim();
+  while (title.length >= 2 &&
+      ((title.startsWith('"') && title.endsWith('"')) ||
+          (title.startsWith("'") && title.endsWith("'")) ||
+          (title.startsWith('“') && title.endsWith('”')) ||
+          (title.startsWith('‘') && title.endsWith('’')))) {
+    title = title.substring(1, title.length - 1).trim();
+  }
+  return title;
+}
+
+class _StoryOptionButtons extends StatefulWidget {
+  const _StoryOptionButtons({
+    required this.options,
+    required this.onSelected,
+    required this.onRegenerate,
+    this.selectedTitle,
+    this.disabled = false,
+  });
+
+  final List<_ParsedStoryOption> options;
+  final ValueChanged<_ParsedStoryOption> onSelected;
+  final VoidCallback onRegenerate;
+  final String? selectedTitle;
+  final bool disabled;
+
+  @override
+  State<_StoryOptionButtons> createState() => _StoryOptionButtonsState();
+}
+
+class _StoryOptionButtonsState extends State<_StoryOptionButtons> {
+  _ParsedStoryOption? _draftOption;
+  bool _confirmRegenerate = false;
+
+  @override
+  void didUpdateWidget(covariant _StoryOptionButtons oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final optionsChanged =
+        oldWidget.options.map((option) => option.title).join('|') !=
+        widget.options.map((option) => option.title).join('|');
+    if (optionsChanged || widget.selectedTitle != null) {
+      _draftOption = null;
+      _confirmRegenerate = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedTitle = widget.selectedTitle ?? _draftOption?.title;
+    final optionsDisabled = widget.disabled || widget.selectedTitle != null;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 280),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < widget.options.length; i++) ...[
+              _StoryOptionButton(
+                option: widget.options[i],
+                onSelected: _selectDraftOption,
+                selected: widget.options[i].title == selectedTitle,
+                disabled: optionsDisabled,
+              ),
+              if (i != widget.options.length - 1) const SizedBox(height: 8),
+            ],
+            if (_draftOption != null && widget.selectedTitle == null) ...[
+              const SizedBox(height: 10),
+              _StoryOptionConfirmBar(
+                title: _draftOption!.title,
+                disabled: widget.disabled,
+                onCancel: _clearDraftAction,
+                onConfirm: () => widget.onSelected(_draftOption!),
+              ),
+            ],
+            if (widget.selectedTitle == null) ...[
+              const SizedBox(height: 8),
+              _StoryActionButton(
+                label: 'Try different stories',
+                disabled: widget.disabled,
+                selected: _confirmRegenerate,
+                onPressed: _selectRegenerate,
+              ),
+              if (_confirmRegenerate) ...[
+                const SizedBox(height: 10),
+                _StoryOptionConfirmBar(
+                  title: 'Try different stories',
+                  disabled: widget.disabled,
+                  onCancel: _clearDraftAction,
+                  onConfirm: widget.onRegenerate,
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _selectDraftOption(_ParsedStoryOption option) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _draftOption = option;
+      _confirmRegenerate = false;
+    });
+  }
+
+  void _selectRegenerate() {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _draftOption = null;
+      _confirmRegenerate = true;
+    });
+  }
+
+  void _clearDraftAction() {
+    setState(() {
+      _draftOption = null;
+      _confirmRegenerate = false;
+    });
+  }
+}
+
+class _StoryOptionButton extends StatelessWidget {
+  const _StoryOptionButton({
+    required this.option,
+    required this.onSelected,
+    required this.selected,
+    required this.disabled,
+  });
+
+  final _ParsedStoryOption option;
+  final ValueChanged<_ParsedStoryOption> onSelected;
+  final bool selected;
+  final bool disabled;
+
+  @override
+  Widget build(BuildContext context) {
+    const selectedColor = Color(0xFFF59E0B);
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: disabled ? null : () => onSelected(option),
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          foregroundColor: Colors.white,
+          disabledForegroundColor: Colors.white54,
+          side: BorderSide(
+            color: selectedColor.withValues(
+              alpha: disabled ? 0.42 : (selected ? 0.96 : 0.72),
+            ),
+            width: selected ? 1.35 : 1,
+          ),
+          backgroundColor: selected
+              ? selectedColor.withValues(alpha: 0.18)
+              : const Color(0xF0131415),
+          disabledBackgroundColor: selected
+              ? selectedColor.withValues(alpha: 0.18)
+              : const Color(0xF0131415),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                option.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.white70,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StoryActionButton extends StatelessWidget {
+  const _StoryActionButton({
+    required this.label,
+    required this.disabled,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool disabled;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFFF59E0B);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 190),
+        child: SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: disabled ? null : onPressed,
+            style: OutlinedButton.styleFrom(
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              foregroundColor: Colors.white,
+              disabledForegroundColor: Colors.white54,
+              side: BorderSide(
+                color: accent.withValues(
+                  alpha: disabled ? 0.42 : (selected ? 0.96 : 0.72),
+                ),
+                width: selected ? 1.35 : 1,
+              ),
+              backgroundColor: selected
+                  ? accent.withValues(alpha: 0.18)
+                  : const Color(0xF0131415),
+              disabledBackgroundColor: selected
+                  ? accent.withValues(alpha: 0.18)
+                  : const Color(0xF0131415),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: selected ? Colors.white : Colors.white70,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StoryOptionConfirmBar extends StatelessWidget {
+  const _StoryOptionConfirmBar({
+    required this.title,
+    required this.disabled,
+    required this.onCancel,
+    required this.onConfirm,
+  });
+
+  final String title;
+  final bool disabled;
+  final VoidCallback onCancel;
+  final VoidCallback onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xF0131415),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Confirm $title',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  height: 1.25,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 30,
+              child: TextButton(
+                onPressed: disabled ? null : onCancel,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  foregroundColor: Colors.white70,
+                  disabledForegroundColor: Colors.white30,
+                  textStyle: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                child: const Text('Cancel'),
+              ),
+            ),
+            const SizedBox(width: 4),
+            SizedBox(
+              height: 30,
+              child: FilledButton(
+                onPressed: disabled ? null : onConfirm,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  backgroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.white24,
+                  foregroundColor: const Color(0xFF111111),
+                  disabledForegroundColor: Colors.white54,
+                  textStyle: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                child: disabled
+                    ? const SizedBox(
+                        width: 10,
+                        height: 10,
+                        child: CircularProgressIndicator(strokeWidth: 1.5),
+                      )
+                    : const Text('Confirm'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
@@ -1448,6 +2014,8 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   final _listScrollController = ScrollController();
   bool _canSend = false;
   int _lastMessageCount = 0;
+  String? _confirmedStoryOptionTitle;
+  bool _isSubmittingStoryOption = false;
 
   @override
   void initState() {
@@ -1473,6 +2041,17 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
+    if (voiceState.isProcessing || voiceState.showPendingAssistantBubble) {
+      showToast(context, 'Aura is replying...', variant: ToastVariant.info);
+      return;
+    }
+    if (voiceState.isConnecting ||
+        voiceState.phase == RealtimeVoicePhase.connecting ||
+        voiceState.phase == RealtimeVoicePhase.waitingForReady) {
+      showToast(context, 'Connecting...', variant: ToastVariant.info);
+      return;
+    }
+
     // Keep chat tab silent and mic-off.
     if (!voiceState.isMuted) {
       controller.toggleMute();
@@ -1480,12 +2059,75 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     unawaited(controller.stopPlayback());
 
     if (!voiceState.isSessionReady) {
-      showToast(context, 'Connecting…', variant: ToastVariant.info);
+      showToast(context, 'Reconnecting...', variant: ToastVariant.info);
       return;
     }
 
     _textController.clear();
     unawaited(controller.sendTextPrompt(text, textOnly: true));
+  }
+
+  Future<void> _confirmStoryOption(
+    _ParsedStoryOption option,
+    VoiceChatController controller,
+    VoiceChatState voiceState,
+  ) async {
+    if (_confirmedStoryOptionTitle != null || _isSubmittingStoryOption) return;
+
+    HapticFeedback.mediumImpact();
+    if (!voiceState.isMuted) {
+      controller.toggleMute();
+    }
+    unawaited(controller.stopPlayback());
+
+    if (!voiceState.isSessionReady) {
+      showToast(context, 'Connecting...', variant: ToastVariant.info);
+      return;
+    }
+
+    setState(() {
+      _confirmedStoryOptionTitle = option.title;
+      _isSubmittingStoryOption = true;
+    });
+    try {
+      await controller.sendTextPrompt(
+        'I choose ${option.title}.',
+        textOnly: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmittingStoryOption = false);
+      }
+    }
+  }
+
+  Future<void> _regenerateStoryOptions(
+    VoiceChatController controller,
+    VoiceChatState voiceState,
+  ) async {
+    if (_confirmedStoryOptionTitle != null || _isSubmittingStoryOption) return;
+
+    if (!voiceState.isMuted) {
+      controller.toggleMute();
+    }
+    unawaited(controller.stopPlayback());
+
+    if (!voiceState.isSessionReady) {
+      showToast(context, 'Connecting...', variant: ToastVariant.info);
+      return;
+    }
+
+    setState(() => _isSubmittingStoryOption = true);
+    try {
+      await controller.sendTextPrompt(
+        'Give me three different story options for Beneath the Surface. Use only numbered title lines in the same format. Do not use quotation marks, previews, subtitles, or dash separators.',
+        textOnly: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmittingStoryOption = false);
+      }
+    }
   }
 
   void _scrollToBottom() {
@@ -1502,10 +2144,6 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
 
   List<ChatMessageModel> _buildMessages(VoiceChatState voiceState) {
     final messages = <ChatMessageModel>[];
-    debugPrint(
-      '[ChatDebug] _buildMessages history.len=${voiceState.conversationHistory.length} '
-      'roles=${voiceState.conversationHistory.map((e) => e.role).toList()}',
-    );
     for (var i = 0; i < voiceState.conversationHistory.length; i++) {
       final item = voiceState.conversationHistory[i];
       if (item.content.isEmpty) continue;
@@ -1548,6 +2186,59 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     return messages;
   }
 
+  _ParsedStoryOptions? _parseStoryOptions(ChatMessageModel message) {
+    if (!widget.enableStoryOptions || message.role != ChatRole.assistant) {
+      return null;
+    }
+    if (message.isStreaming) return null;
+    final lines = message.message.split('\n');
+    final options = <_ParsedStoryOption>[];
+    final displayLines = <String>[];
+    final optionPattern = RegExp(
+      '^\\s*(?:[1-3]|[A-Ca-c])[.)]\\s+(.+?)(?:\\s+[\\u2014-]\\s+(.+))?\\s*\$',
+    );
+
+    for (final line in lines) {
+      final match = optionPattern.firstMatch(line);
+      if (match == null) {
+        final lowerLine = line.toLowerCase();
+        final isMenuFiller =
+            lowerLine.contains('here are your choices') ||
+            lowerLine.contains('here are the choices') ||
+            lowerLine.contains('here are three') ||
+            lowerLine.contains('take a moment') ||
+            lowerLine.contains('which story') ||
+            lowerLine.contains('resonates with you') ||
+            lowerLine.contains('we can begin');
+        if (!isMenuFiller) {
+          displayLines.add(line);
+        }
+        continue;
+      }
+      final title = _cleanStoryOptionTitle(match.group(1) ?? '');
+      if (title.isEmpty) {
+        displayLines.add(line);
+        continue;
+      }
+      options.add(_ParsedStoryOption(title: title));
+    }
+
+    if (options.length < 2) return null;
+    final displayText = displayLines.join('\n').trim();
+    return _ParsedStoryOptions(
+      displayText: displayText.isEmpty ? message.message : displayText,
+      options: options,
+    );
+  }
+
+  int? _latestStoryOptionMessageIndex(List<ChatMessageModel> messages) {
+    if (_confirmedStoryOptionTitle != null) return null;
+    for (var i = messages.length - 1; i >= 0; i--) {
+      if (_parseStoryOptions(messages[i]) != null) return i;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final voiceState = ref.watch(voiceChatControllerProvider);
@@ -1561,6 +2252,12 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     final screenWidth = MediaQuery.of(context).size.width;
     final bubbleMaxWidth = (screenWidth * 0.82).clamp(0.0, 420.0);
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final latestOptionMessageIndex = _latestStoryOptionMessageIndex(messages);
+    final canSubmitText =
+        _canSend &&
+        voiceState.isSessionReady &&
+        !voiceState.isProcessing &&
+        !voiceState.isConnecting;
 
     if (messages.length != _lastMessageCount) {
       _lastMessageCount = messages.length;
@@ -1573,30 +2270,53 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     return Column(
       children: [
         Expanded(
-          child: messages.isEmpty
-              ? _EmptyState(
-                  isDark: isDark,
-                  mutedSurface: mutedSurface,
-                  primaryTextColor: context.primaryTextColor,
-                  secondaryTextColor: mutedText,
-                )
-              : ListView.separated(
-                  controller: _listScrollController,
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-                  itemCount: messages.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 14),
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    return _AnimatedBubble(
-                      key: ValueKey(message.id),
-                      child: ChatBubble(
-                        message: message,
-                        onRetry: () {},
-                        maxWidth: bubbleMaxWidth,
+          child: ListView.separated(
+            controller: _listScrollController,
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+            itemCount: messages.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 14),
+            itemBuilder: (context, index) {
+              final message = messages[index];
+              final parsedOptions = index == latestOptionMessageIndex
+                  ? _parseStoryOptions(message)
+                  : null;
+              final displayMessage = parsedOptions == null
+                  ? message
+                  : message.copyWith(message: parsedOptions.displayText);
+              return _AnimatedBubble(
+                key: ValueKey(message.id),
+                child: Column(
+                  crossAxisAlignment: message.isUser
+                      ? CrossAxisAlignment.end
+                      : CrossAxisAlignment.start,
+                  children: [
+                    ChatBubble(
+                      message: displayMessage,
+                      onRetry: () {},
+                      maxWidth: bubbleMaxWidth,
+                    ),
+                    if (parsedOptions != null) ...[
+                      const SizedBox(height: 10),
+                      _StoryOptionButtons(
+                        options: parsedOptions.options,
+                        selectedTitle: _confirmedStoryOptionTitle,
+                        disabled:
+                            _isSubmittingStoryOption ||
+                            voiceState.isProcessing ||
+                            voiceState.isConnecting,
+                        onRegenerate: () => unawaited(
+                          _regenerateStoryOptions(controller, voiceState),
+                        ),
+                        onSelected: (option) => unawaited(
+                          _confirmStoryOption(option, controller, voiceState),
+                        ),
                       ),
-                    );
-                  },
+                    ],
+                  ],
                 ),
+              );
+            },
+          ),
         ),
         AnimatedPadding(
           duration: const Duration(milliseconds: 180),
@@ -1655,19 +2375,19 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: _canSend
+                              color: canSubmitText
                                   ? (isDark ? Colors.white : Colors.black)
                                   : Colors.transparent,
                               shape: BoxShape.circle,
                             ),
                             child: IconButton(
-                              onPressed: _canSend
+                              onPressed: canSubmitText
                                   ? () => _onSend(controller, voiceState)
                                   : null,
                               splashRadius: 20,
                               icon: Icon(
                                 CupertinoIcons.paperplane_fill,
-                                color: _canSend
+                                color: canSubmitText
                                     ? (isDark ? Colors.black : Colors.white)
                                     : mutedText,
                                 size: 19,
@@ -1726,66 +2446,6 @@ class _CircleIconButton extends StatelessWidget {
           decoration: BoxDecoration(color: background, shape: BoxShape.circle),
           alignment: Alignment.center,
           child: Icon(icon, color: foreground, size: 20),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.isDark,
-    required this.mutedSurface,
-    required this.primaryTextColor,
-    required this.secondaryTextColor,
-  });
-
-  final bool isDark;
-  final Color mutedSurface;
-  final Color primaryTextColor;
-  final Color secondaryTextColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 36),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Image.asset(
-                  'assets/images/message.png',
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'Start the conversation',
-              style: TextStyle(
-                color: primaryTextColor,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Chat here or call Aura',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: secondaryTextColor,
-                fontSize: 14,
-                height: 1.45,
-              ),
-            ),
-          ],
         ),
       ),
     );
