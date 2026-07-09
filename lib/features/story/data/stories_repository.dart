@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../../../core/network/api_client.dart';
@@ -145,10 +148,117 @@ class StoriesRepository {
     try {
       final res = await _dio.post(
         '/stories/$storyId/start',
-        data: {"device_type": 'mobile', "device_id": 'null', "autoplay": true},
+        data: {
+          "device_type": deviceType,
+          "device_id": deviceId,
+          "autoplay": true,
+        },
       );
       final data = res.data as Map<String, dynamic>;
       return StorySession.fromJson(data);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchStoryConversation({
+    required String storyId,
+  }) async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final res = await _dio.get(
+          '/stories/$storyId/conversation',
+          options: Options(receiveTimeout: const Duration(seconds: 45)),
+        );
+        final data = res.data;
+        if (data is! Map<String, dynamic>) return const [];
+        final history = data['history'];
+        if (history is! List) return const [];
+        return history.whereType<Map<String, dynamic>>().toList();
+      } on DioException catch (e) {
+        if (attempt == 0 && _isTransientConnectionError(e)) {
+          await Future<void>.delayed(const Duration(milliseconds: 450));
+          continue;
+        }
+        throw ErrorFormatter.fromDio(e);
+      }
+    }
+    return const [];
+  }
+
+  bool _isTransientConnectionError(DioException e) {
+    final message = e.message ?? e.error?.toString() ?? '';
+    return e.type == DioExceptionType.unknown &&
+        (message.contains('Connection closed') ||
+            message.contains('Connection reset') ||
+            message.contains('SocketException') ||
+            message.contains('HttpException'));
+  }
+
+  Future<StorySession> sendStoryText({
+    required String storyId,
+    required String message,
+    int? expectedVersion,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/stories/$storyId/choose',
+        data: {'voice_command': message},
+        options: Options(
+          receiveTimeout: const Duration(seconds: 75),
+          headers: {
+            if (expectedVersion != null) 'If-Match': expectedVersion.toString(),
+          },
+        ),
+      );
+      final data = res.data as Map<String, dynamic>;
+      return StorySession.fromJson(
+        (data['session'] as Map).cast<String, dynamic>(),
+      );
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Stream<StoryTextStreamEvent> streamStoryText({
+    required String storyId,
+    required String message,
+    int? expectedVersion,
+  }) async* {
+    try {
+      final res = await _dio.post<ResponseBody>(
+        '/stories/$storyId/chat/stream',
+        data: {'voice_command': message},
+        options: Options(
+          responseType: ResponseType.stream,
+          receiveTimeout: const Duration(seconds: 90),
+          headers: {
+            'Accept': 'text/event-stream',
+            if (expectedVersion != null) 'If-Match': expectedVersion.toString(),
+          },
+        ),
+      );
+      final body = res.data;
+      if (body == null) return;
+
+      var buffer = '';
+      await for (final chunk in utf8.decoder.bind(body.stream)) {
+        buffer += chunk;
+        while (true) {
+          final boundary = buffer.indexOf('\n\n');
+          if (boundary < 0) break;
+          final rawEvent = buffer.substring(0, boundary);
+          buffer = buffer.substring(boundary + 2);
+          final event = StoryTextStreamEvent.fromSse(rawEvent);
+          if (event != null) yield event;
+        }
+      }
+
+      final tail = buffer.trim();
+      if (tail.isNotEmpty) {
+        final event = StoryTextStreamEvent.fromSse(tail);
+        if (event != null) yield event;
+      }
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }
@@ -365,5 +475,49 @@ class StoriesRepository {
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }
+  }
+}
+
+class StoryTextStreamEvent {
+  const StoryTextStreamEvent({
+    required this.type,
+    this.content,
+    this.session,
+    this.error,
+  });
+
+  final String type;
+  final String? content;
+  final StorySession? session;
+  final String? error;
+
+  bool get isToken => type == 'token';
+  bool get isDone => type == 'done';
+  bool get isError => type == 'error';
+
+  static StoryTextStreamEvent? fromSse(String rawEvent) {
+    final dataLines = rawEvent
+        .split('\n')
+        .map((line) => line.trimRight())
+        .where((line) => line.startsWith('data:'))
+        .map((line) => line.substring(5).trimLeft())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    if (dataLines.isEmpty) return null;
+
+    final data = dataLines.join('\n');
+    final decoded = jsonDecode(data);
+    if (decoded is! Map<String, dynamic>) return null;
+
+    final type = (decoded['type'] as String?)?.trim() ?? '';
+    final sessionJson = decoded['session'];
+    return StoryTextStreamEvent(
+      type: type,
+      content: decoded['content'] as String?,
+      error: decoded['error'] as String?,
+      session: sessionJson is Map
+          ? StorySession.fromJson(sessionJson.cast<String, dynamic>())
+          : null,
+    );
   }
 }

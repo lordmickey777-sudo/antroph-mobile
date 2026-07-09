@@ -10,6 +10,7 @@ import 'package:antroph_mobile/features/home/widgets/chat_bubble.dart';
 import 'package:antroph_mobile/features/story/models/interactive_story_models.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/story/models/story_detail.dart';
+import 'package:antroph_mobile/features/story/models/story_session.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 import 'package:antroph_mobile/features/story/presentation/story_voice_page.dart';
 import 'package:antroph_mobile/features/story/providers/interactive_story_provider.dart';
@@ -29,11 +30,15 @@ bool _usesDynamicStoryOptions(StoryDetailDto detail) {
   final template = (detail.interactiveConfig['template'] as String?)?.trim();
   if (template == 'dynamic_story_menu') return true;
   final title = detail.title.toLowerCase();
-  if (title.contains('beneath the surface')) return true;
+  if (_isBeneathTheSurfaceTitle(title)) return true;
   final context = detail.context.toLowerCase();
   return context.contains('three stories to explore') &&
       context.contains('generate three') &&
       context.contains('story');
+}
+
+bool _isBeneathTheSurfaceTitle(String title) {
+  return title.toLowerCase().contains('beneath the surface');
 }
 
 class StoryChatFlowPage extends ConsumerStatefulWidget {
@@ -74,6 +79,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
   bool _connectionErrorDialogOpen = false;
   int _storyConnectionRetryAttempts = 0;
   String? _lastReadyStorySessionId;
+  String? _textStorySessionId;
   VoiceChatController? _voiceController;
 
   @override
@@ -114,13 +120,8 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
       return;
     }
 
-    if ((widget.storySessionId ?? '').trim().isNotEmpty) {
-      unawaited(voiceController.resumeStorySession(widget.storySessionId!));
-    } else {
-      unawaited(voiceController.startStorySession(widget.storyId));
-    }
-
-    // Chat-first: keep this page silent and prevent auto-listen.
+    // Text-first narrative mode uses the REST story API. Keep voice idle and
+    // silent until the user explicitly opens voice mode.
     unawaited(voiceController.stopPlayback());
     final voiceState = ref.read(voiceChatControllerProvider);
     if (!voiceState.isMuted) {
@@ -156,7 +157,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     unawaited(
       voiceController.ensureStorySessionConnected(
         widget.storyId,
-        preferredSessionId: widget.storySessionId,
+        preferredSessionId: _textStorySessionId ?? widget.storySessionId,
       ),
     );
 
@@ -314,12 +315,18 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final voiceState = ref.read(voiceChatControllerProvider);
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      voiceController.pauseStorySession();
+      if (voiceState.isStoryMode && voiceState.storySession != null) {
+        voiceController.pauseStorySession();
+      }
     } else if (state == AppLifecycleState.resumed) {
-      voiceController.resumePausedSession();
+      if (voiceState.isStoryMode &&
+          voiceState.phase == RealtimeVoicePhase.paused) {
+        voiceController.resumePausedSession();
+      }
     }
   }
 
@@ -429,14 +436,20 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
                 );
               }
               return _StoryTextChatTab(
+                storyId: widget.storyId,
+                storyTitle: title,
                 onCall: _openVoicePage,
+                onSessionReady: (sessionId) => _textStorySessionId = sessionId,
                 enableStoryOptions: _usesDynamicStoryOptions(detail),
               );
             },
             loading: () => const _StorySessionLoadingShell(),
             orElse: () => _StoryTextChatTab(
+              storyId: widget.storyId,
+              storyTitle: title,
               onCall: _openVoicePage,
-              enableStoryOptions: false,
+              onSessionReady: (sessionId) => _textStorySessionId = sessionId,
+              enableStoryOptions: _isBeneathTheSurfaceTitle(title),
             ),
           ),
         ),
@@ -1088,101 +1101,120 @@ class StoryConnectionErrorDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      backgroundColor: Colors.transparent,
+      child: StoryConnectionErrorCard(
+        onRetry: () => Navigator.of(context).pop(true),
+      ),
+    );
+  }
+}
+
+class StoryConnectionErrorCard extends StatelessWidget {
+  const StoryConnectionErrorCard({
+    super.key,
+    required this.onRetry,
+    this.message =
+        'Aura lost the story connection. Retry to reconnect and continue.',
+  });
+
+  final VoidCallback onRetry;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
     final surface = isDark ? const Color(0xFF111214) : Colors.white;
     final subdued = isDark ? Colors.white70 : const Color(0xFF5F6368);
 
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-      backgroundColor: Colors.transparent,
-      child: Container(
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.18),
-              blurRadius: 28,
-              offset: const Offset(0, 16),
-            ),
-          ],
+    return Container(
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06),
         ),
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    CupertinoIcons.wifi_slash,
-                    color: Colors.white,
-                    size: 22,
-                  ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.42 : 0.18),
+            blurRadius: 28,
+            offset: const Offset(0, 16),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Connection error',
-                        style: TextStyle(
-                          color: context.primaryTextColor,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          height: 1.15,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Aura lost the story connection. Retry to reconnect and continue.',
-                        style: TextStyle(
-                          color: subdued,
-                          fontSize: 13,
-                          height: 1.35,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  'Retry',
-                  style: TextStyle(fontWeight: FontWeight.w900),
+                child: const Icon(
+                  CupertinoIcons.wifi_slash,
+                  color: Colors.white,
+                  size: 22,
                 ),
               ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Connection error',
+                      style: TextStyle(
+                        color: context.primaryTextColor,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        height: 1.15,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      message,
+                      style: TextStyle(
+                        color: subdued,
+                        fontSize: 13,
+                        height: 1.35,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: onRetry,
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Retry',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1642,11 +1674,17 @@ class _ActiveParticipantAvatar extends StatelessWidget {
 
 class _StoryTextChatTab extends ConsumerStatefulWidget {
   const _StoryTextChatTab({
+    required this.storyId,
+    required this.storyTitle,
     required this.onCall,
+    required this.onSessionReady,
     required this.enableStoryOptions,
   });
 
+  final String storyId;
+  final String storyTitle;
   final VoidCallback onCall;
+  final ValueChanged<String> onSessionReady;
   final bool enableStoryOptions;
 
   @override
@@ -1654,9 +1692,16 @@ class _StoryTextChatTab extends ConsumerStatefulWidget {
 }
 
 class _ParsedStoryOption {
-  const _ParsedStoryOption({required this.title});
+  const _ParsedStoryOption({required this.title, this.teaser});
 
   final String title;
+  final String? teaser;
+
+  String get displayText {
+    final cleanTeaser = teaser?.trim();
+    if (cleanTeaser == null || cleanTeaser.isEmpty) return title;
+    return '$title\n$cleanTeaser';
+  }
 }
 
 class _ParsedStoryOptions {
@@ -1667,7 +1712,7 @@ class _ParsedStoryOptions {
 }
 
 String _cleanStoryOptionTitle(String value) {
-  var title = value.trim();
+  var title = _cleanStoryBubbleText(value);
   title = title.replaceAll(RegExp(r'\s+'), ' ');
   title = title.split(RegExp(r'\s+(?:-|–|—)\s+|:\s+')).first.trim();
   while (title.length >= 2 &&
@@ -1678,6 +1723,74 @@ String _cleanStoryOptionTitle(String value) {
     title = title.substring(1, title.length - 1).trim();
   }
   return title;
+}
+
+String _cleanStoryOptionTeaser(String? value) {
+  var teaser = _cleanStoryBubbleText(value ?? '');
+  teaser = teaser.replaceAll(RegExp(r'\s+'), ' ');
+  while (teaser.length >= 2 &&
+      ((teaser.startsWith('"') && teaser.endsWith('"')) ||
+          (teaser.startsWith("'") && teaser.endsWith("'")) ||
+          (teaser.startsWith('“') && teaser.endsWith('”')) ||
+          (teaser.startsWith('‘') && teaser.endsWith('’')))) {
+    teaser = teaser.substring(1, teaser.length - 1).trim();
+  }
+  return teaser;
+}
+
+_ParsedStoryOption? _parseStoryOptionLine(String line) {
+  final numberedMatch = RegExp(
+    r'^\s*(?:[1-3]|[A-Ca-c])[.)]\s+(.+?)\s*$',
+  ).firstMatch(line);
+  if (numberedMatch == null) return null;
+
+  var body = numberedMatch.group(1)?.trim() ?? '';
+  if (body.isEmpty) return null;
+
+  String title;
+  String teaser = '';
+  final boldMatch = RegExp(
+    r'^(\*\*|__)(.*?)\1\s*(.*)$',
+    dotAll: true,
+  ).firstMatch(body);
+  if (boldMatch != null) {
+    title = boldMatch.group(2)?.trim() ?? '';
+    teaser = boldMatch.group(3)?.trim() ?? '';
+  } else {
+    final separatorMatch = RegExp(
+      r'\s*(?:[:\-\u2013\u2014])\s+',
+    ).firstMatch(body);
+    if (separatorMatch == null) {
+      title = body;
+    } else {
+      title = body.substring(0, separatorMatch.start).trim();
+      teaser = body.substring(separatorMatch.end).trim();
+    }
+  }
+
+  teaser = teaser.replaceFirst(RegExp(r'^\s*(?:[:\-\u2013\u2014])\s*'), '');
+  title = _cleanStoryOptionTitle(title);
+  teaser = _cleanStoryOptionTeaser(teaser);
+  if (title.isEmpty) return null;
+  return _ParsedStoryOption(
+    title: title,
+    teaser: teaser.isEmpty ? null : teaser,
+  );
+}
+
+String _cleanStoryBubbleText(String value) {
+  var text = value.trim();
+  text = text.replaceAllMapped(
+    RegExp(r'\*\*(.*?)\*\*', dotAll: true),
+    (match) => match.group(1) ?? '',
+  );
+  text = text.replaceAllMapped(
+    RegExp(r'__(.*?)__', dotAll: true),
+    (match) => match.group(1) ?? '',
+  );
+  text = text.replaceAll('**', '');
+  text = text.replaceAll('__', '');
+  return text;
 }
 
 class _StoryOptionButtons extends StatefulWidget {
@@ -1707,8 +1820,8 @@ class _StoryOptionButtonsState extends State<_StoryOptionButtons> {
   void didUpdateWidget(covariant _StoryOptionButtons oldWidget) {
     super.didUpdateWidget(oldWidget);
     final optionsChanged =
-        oldWidget.options.map((option) => option.title).join('|') !=
-        widget.options.map((option) => option.title).join('|');
+        oldWidget.options.map((option) => option.displayText).join('|') !=
+        widget.options.map((option) => option.displayText).join('|');
     if (optionsChanged || widget.selectedTitle != null) {
       _draftOption = null;
       _confirmRegenerate = false;
@@ -1718,7 +1831,7 @@ class _StoryOptionButtonsState extends State<_StoryOptionButtons> {
   @override
   Widget build(BuildContext context) {
     final selectedTitle = widget.selectedTitle ?? _draftOption?.title;
-    final optionsDisabled = widget.disabled || widget.selectedTitle != null;
+    final optionsDisabled = widget.disabled;
     return Align(
       alignment: Alignment.centerLeft,
       child: ConstrainedBox(
@@ -1735,7 +1848,7 @@ class _StoryOptionButtonsState extends State<_StoryOptionButtons> {
               ),
               if (i != widget.options.length - 1) const SizedBox(height: 8),
             ],
-            if (_draftOption != null && widget.selectedTitle == null) ...[
+            if (_draftOption != null) ...[
               const SizedBox(height: 10),
               _StoryOptionConfirmBar(
                 title: _draftOption!.title,
@@ -1744,23 +1857,21 @@ class _StoryOptionButtonsState extends State<_StoryOptionButtons> {
                 onConfirm: () => widget.onSelected(_draftOption!),
               ),
             ],
-            if (widget.selectedTitle == null) ...[
-              const SizedBox(height: 8),
-              _StoryActionButton(
-                label: 'Try different stories',
+            const SizedBox(height: 8),
+            _StoryActionButton(
+              label: 'Try different stories',
+              disabled: widget.disabled,
+              selected: _confirmRegenerate,
+              onPressed: _selectRegenerate,
+            ),
+            if (_confirmRegenerate) ...[
+              const SizedBox(height: 10),
+              _StoryOptionConfirmBar(
+                title: 'Try different stories',
                 disabled: widget.disabled,
-                selected: _confirmRegenerate,
-                onPressed: _selectRegenerate,
+                onCancel: _clearDraftAction,
+                onConfirm: widget.onRegenerate,
               ),
-              if (_confirmRegenerate) ...[
-                const SizedBox(height: 10),
-                _StoryOptionConfirmBar(
-                  title: 'Try different stories',
-                  disabled: widget.disabled,
-                  onCancel: _clearDraftAction,
-                  onConfirm: widget.onRegenerate,
-                ),
-              ],
             ],
           ],
         ),
@@ -1769,6 +1880,7 @@ class _StoryOptionButtonsState extends State<_StoryOptionButtons> {
   }
 
   void _selectDraftOption(_ParsedStoryOption option) {
+    if (option.title == widget.selectedTitle) return;
     HapticFeedback.selectionClick();
     setState(() {
       _draftOption = option;
@@ -1807,7 +1919,11 @@ class _StoryOptionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const selectedColor = Color(0xFFF59E0B);
+    const defaultBorderColor = Color(0xFFFFC928);
+    const selectedBorderColor = Color(0xFF2FEF73);
+    const optionBackground = Color(0xF0131415);
+    final borderColor = selected ? selectedBorderColor : defaultBorderColor;
+    final borderAlpha = disabled ? 0.52 : 1.0;
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton(
@@ -1818,31 +1934,30 @@ class _StoryOptionButton extends StatelessWidget {
           foregroundColor: Colors.white,
           disabledForegroundColor: Colors.white54,
           side: BorderSide(
-            color: selectedColor.withValues(
-              alpha: disabled ? 0.42 : (selected ? 0.96 : 0.72),
-            ),
-            width: selected ? 1.35 : 1,
+            color: borderColor.withValues(alpha: borderAlpha),
+            width: selected ? 1.7 : 1.25,
           ),
-          backgroundColor: selected
-              ? selectedColor.withValues(alpha: 0.18)
-              : const Color(0xF0131415),
-          disabledBackgroundColor: selected
-              ? selectedColor.withValues(alpha: 0.18)
-              : const Color(0xF0131415),
+          backgroundColor: optionBackground,
+          disabledBackgroundColor: optionBackground,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                option.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: selected ? Colors.white : Colors.white70,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    option.title,
+                    style: TextStyle(
+                      color: selected ? Colors.white : Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -2012,15 +2127,25 @@ class _StoryOptionConfirmBar extends StatelessWidget {
 class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   final _textController = TextEditingController();
   final _listScrollController = ScrollController();
+  final List<ChatMessageModel> _messages = <ChatMessageModel>[];
   bool _canSend = false;
   int _lastMessageCount = 0;
   String? _confirmedStoryOptionTitle;
+  StorySession? _textSession;
+  bool _isStartingTextSession = true;
+  bool _isSendingText = false;
   bool _isSubmittingStoryOption = false;
+  String? _textSessionError;
 
   @override
   void initState() {
     super.initState();
     _textController.addListener(_onTextChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(_startTextStorySession());
+      }
+    });
   }
 
   @override
@@ -2037,50 +2162,219 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     }
   }
 
-  void _onSend(VoiceChatController controller, VoiceChatState voiceState) {
+  Future<void> _startTextStorySession() async {
+    setState(() {
+      _isStartingTextSession = true;
+      _textSessionError = null;
+    });
+    try {
+      final repo = ref.read(storiesRepositoryProvider);
+      final session = await repo.startSession(
+        storyId: widget.storyId,
+        deviceType: 'mobile',
+        deviceId: 'text-chat',
+      );
+      final history = await repo.fetchStoryConversation(
+        storyId: widget.storyId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _textSession = session;
+        _messages
+          ..clear()
+          ..addAll(_messagesFromHistory(history));
+        if (_messages.isEmpty) {
+          _appendAssistantFromSession(session);
+        }
+        _isStartingTextSession = false;
+      });
+      if (session.id.isNotEmpty) {
+        widget.onSessionReady(session.id);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isStartingTextSession = false;
+        _textSessionError = e.toString();
+      });
+      showToast(context, 'Story connection error');
+    }
+  }
+
+  List<ChatMessageModel> _messagesFromHistory(
+    List<Map<String, dynamic>> history,
+  ) {
+    final messages = <ChatMessageModel>[];
+    for (var i = 0; i < history.length; i++) {
+      final entry = history[i];
+      final speaker = (entry['speaker'] as String?)?.trim() ?? '';
+      final rawText = (entry['message'] as String?)?.trim() ?? '';
+      final text = speaker == 'user' ? _cleanStoryBubbleText(rawText) : rawText;
+      if (text.isEmpty) continue;
+      messages.add(
+        ChatMessageModel(
+          id: 'story_text_history_$i',
+          role: speaker == 'user' ? ChatRole.user : ChatRole.assistant,
+          message: text,
+          ts: DateTime.now(),
+        ),
+      );
+    }
+    return messages;
+  }
+
+  void _appendAssistantFromSession(StorySession session) {
+    final text = session.currentNode?.content.text.trim() ?? '';
+    if (text.isEmpty) return;
+    if (_messages.any(
+      (m) => m.role == ChatRole.assistant && m.message == text,
+    )) {
+      return;
+    }
+    _messages.add(
+      ChatMessageModel(
+        id: 'story_text_ai_${session.version}_${_messages.length}',
+        role: ChatRole.assistant,
+        message: text,
+        ts: DateTime.now(),
+      ),
+    );
+  }
+
+  Future<void> _onSend() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
-    if (voiceState.isProcessing || voiceState.showPendingAssistantBubble) {
+    if (_isSendingText || _isSubmittingStoryOption) {
       showToast(context, 'Aura is replying...', variant: ToastVariant.info);
       return;
     }
-    if (voiceState.isConnecting ||
-        voiceState.phase == RealtimeVoicePhase.connecting ||
-        voiceState.phase == RealtimeVoicePhase.waitingForReady) {
+    if (_isStartingTextSession) {
       showToast(context, 'Connecting...', variant: ToastVariant.info);
       return;
     }
 
-    // Keep chat tab silent and mic-off.
-    if (!voiceState.isMuted) {
-      controller.toggleMute();
-    }
-    unawaited(controller.stopPlayback());
-
-    if (!voiceState.isSessionReady) {
-      showToast(context, 'Reconnecting...', variant: ToastVariant.info);
-      return;
+    if (_textSession == null) {
+      await _startTextStorySession();
+      if (_textSession == null) return;
     }
 
     _textController.clear();
-    unawaited(controller.sendTextPrompt(text, textOnly: true));
+    unawaited(_sendTextStoryTurn(text));
   }
 
-  Future<void> _confirmStoryOption(
-    _ParsedStoryOption option,
-    VoiceChatController controller,
-    VoiceChatState voiceState,
-  ) async {
-    if (_confirmedStoryOptionTitle != null || _isSubmittingStoryOption) return;
+  Future<void> _sendTextStoryTurn(String text) async {
+    final userMessage = ChatMessageModel(
+      id: 'story_text_user_${DateTime.now().microsecondsSinceEpoch}',
+      role: ChatRole.user,
+      message: text,
+      ts: DateTime.now(),
+    );
+    final assistantMessageId =
+        'story_text_ai_stream_${DateTime.now().microsecondsSinceEpoch}';
+    setState(() {
+      _isSendingText = true;
+      _textSessionError = null;
+      _messages.add(userMessage);
+      _messages.add(
+        ChatMessageModel(
+          id: assistantMessageId,
+          role: ChatRole.assistant,
+          message: '',
+          ts: DateTime.now(),
+          streaming: true,
+        ),
+      );
+    });
+
+    try {
+      await for (final event
+          in ref
+              .read(storiesRepositoryProvider)
+              .streamStoryText(
+                storyId: widget.storyId,
+                message: text,
+                expectedVersion: _textSession?.version,
+              )) {
+        if (!mounted) return;
+        if (event.isToken) {
+          final token = event.content ?? '';
+          if (token.isEmpty) continue;
+          setState(() {
+            final index = _messages.indexWhere(
+              (m) => m.id == assistantMessageId,
+            );
+            if (index != -1) {
+              final current = _messages[index];
+              _messages[index] = current.copyWith(
+                message: current.message + token,
+                streaming: true,
+              );
+            }
+          });
+        } else if (event.isDone) {
+          setState(() {
+            if (event.session != null) {
+              _textSession = event.session;
+            }
+            final index = _messages.indexWhere(
+              (m) => m.id == assistantMessageId,
+            );
+            if (index != -1) {
+              _messages[index] = _messages[index].copyWith(streaming: false);
+            }
+            _isSendingText = false;
+          });
+          final sessionId = event.session?.id ?? _textSession?.id ?? '';
+          if (sessionId.isNotEmpty) {
+            widget.onSessionReady(sessionId);
+          }
+        } else if (event.isError) {
+          throw Exception(event.error ?? 'Story stream failed');
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        final index = _messages.indexWhere((m) => m.id == assistantMessageId);
+        if (index != -1) {
+          _messages[index] = _messages[index].copyWith(streaming: false);
+        }
+        _isSendingText = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSendingText = false;
+        _textSessionError = e.toString();
+        final lastIndex = _messages.lastIndexWhere(
+          (m) => m.id == userMessage.id,
+        );
+        if (lastIndex != -1) {
+          _messages[lastIndex] = _messages[lastIndex].copyWith(
+            delivery: ChatDeliveryState.failed,
+          );
+        }
+        final assistantIndex = _messages.indexWhere(
+          (m) => m.id == assistantMessageId,
+        );
+        if (assistantIndex != -1 && _messages[assistantIndex].message.isEmpty) {
+          _messages.removeAt(assistantIndex);
+        } else if (assistantIndex != -1) {
+          _messages[assistantIndex] = _messages[assistantIndex].copyWith(
+            streaming: false,
+          );
+        }
+      });
+      showToast(context, 'Story connection error');
+    }
+  }
+
+  Future<void> _confirmStoryOption(_ParsedStoryOption option) async {
+    if (_isSubmittingStoryOption) return;
+    if (_confirmedStoryOptionTitle == option.title) return;
 
     HapticFeedback.mediumImpact();
-    if (!voiceState.isMuted) {
-      controller.toggleMute();
-    }
-    unawaited(controller.stopPlayback());
-
-    if (!voiceState.isSessionReady) {
+    if (_isStartingTextSession) {
       showToast(context, 'Connecting...', variant: ToastVariant.info);
       return;
     }
@@ -2090,10 +2384,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       _isSubmittingStoryOption = true;
     });
     try {
-      await controller.sendTextPrompt(
-        'I choose ${option.title}.',
-        textOnly: true,
-      );
+      await _sendTextStoryTurn('I choose ${option.title}.');
     } finally {
       if (mounted) {
         setState(() => _isSubmittingStoryOption = false);
@@ -2101,27 +2392,21 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     }
   }
 
-  Future<void> _regenerateStoryOptions(
-    VoiceChatController controller,
-    VoiceChatState voiceState,
-  ) async {
-    if (_confirmedStoryOptionTitle != null || _isSubmittingStoryOption) return;
+  Future<void> _regenerateStoryOptions() async {
+    if (_isSubmittingStoryOption) return;
 
-    if (!voiceState.isMuted) {
-      controller.toggleMute();
-    }
-    unawaited(controller.stopPlayback());
-
-    if (!voiceState.isSessionReady) {
+    if (_isStartingTextSession) {
       showToast(context, 'Connecting...', variant: ToastVariant.info);
       return;
     }
 
-    setState(() => _isSubmittingStoryOption = true);
+    setState(() {
+      _confirmedStoryOptionTitle = null;
+      _isSubmittingStoryOption = true;
+    });
     try {
-      await controller.sendTextPrompt(
-        'Give me three different story options for Beneath the Surface. Use only numbered title lines in the same format. Do not use quotation marks, previews, subtitles, or dash separators.',
-        textOnly: true,
+      await _sendTextStoryTurn(
+        'Give me three different story options for Beneath the Surface. Use numbered options with a title and one short teaser in the same line. Do not use quotation marks or subtitles.',
       );
     } finally {
       if (mounted) {
@@ -2142,65 +2427,32 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     });
   }
 
-  List<ChatMessageModel> _buildMessages(VoiceChatState voiceState) {
-    final messages = <ChatMessageModel>[];
-    for (var i = 0; i < voiceState.conversationHistory.length; i++) {
-      final item = voiceState.conversationHistory[i];
-      if (item.content.isEmpty) continue;
-      messages.add(
-        ChatMessageModel(
-          id: 'story_$i',
-          role: item.isUser ? ChatRole.user : ChatRole.assistant,
-          message: item.content,
-          ts: DateTime.now(),
-        ),
-      );
-    }
-    final liveAiText = voiceState.aiResponse?.trim() ?? '';
-    final liveAiAlreadyInHistory =
-        liveAiText.isNotEmpty &&
-        voiceState.conversationHistory.any(
-          (item) => item.isAssistant && item.content.trim() == liveAiText,
-        );
-    final hasAiText = liveAiText.isNotEmpty && !liveAiAlreadyInHistory;
-    final awaitingAi = voiceState.isProcessing || voiceState.isConnecting;
-    final showPendingAssistant =
-        voiceState.showPendingAssistantBubble && !liveAiAlreadyInHistory;
-    if (hasAiText ||
-        showPendingAssistant ||
-        (awaitingAi && !liveAiAlreadyInHistory)) {
-      messages.add(
-        ChatMessageModel(
-          id: 'story_live_ai',
-          role: ChatRole.assistant,
-          message: hasAiText ? liveAiText : '',
-          ts: DateTime.now(),
-          streaming:
-              showPendingAssistant ||
-              awaitingAi ||
-              voiceState.isPlaying ||
-              !hasAiText,
-        ),
-      );
-    }
-    return messages;
+  List<ChatMessageModel> _buildMessages() {
+    return List<ChatMessageModel>.of(_messages);
   }
 
   _ParsedStoryOptions? _parseStoryOptions(ChatMessageModel message) {
-    if (!widget.enableStoryOptions || message.role != ChatRole.assistant) {
+    final shouldParseStoryOptions =
+        widget.enableStoryOptions ||
+        _isBeneathTheSurfaceTitle(widget.storyTitle);
+    if (!shouldParseStoryOptions || message.role != ChatRole.assistant) {
       return null;
     }
-    if (message.isStreaming) return null;
+    final lowerMessage = message.message.toLowerCase();
+    final looksLikeStoryOptionMenu =
+        lowerMessage.contains('story options') ||
+        lowerMessage.contains('stories to explore') ||
+        lowerMessage.contains('which story') ||
+        lowerMessage.contains('resonates with you');
+    if (!looksLikeStoryOptionMenu) return null;
+
     final lines = message.message.split('\n');
     final options = <_ParsedStoryOption>[];
     final displayLines = <String>[];
-    final optionPattern = RegExp(
-      '^\\s*(?:[1-3]|[A-Ca-c])[.)]\\s+(.+?)(?:\\s+[\\u2014-]\\s+(.+))?\\s*\$',
-    );
 
     for (final line in lines) {
-      final match = optionPattern.firstMatch(line);
-      if (match == null) {
+      final option = _parseStoryOptionLine(line);
+      if (option == null) {
         final lowerLine = line.toLowerCase();
         final isMenuFiller =
             lowerLine.contains('here are your choices') ||
@@ -2215,35 +2467,23 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         }
         continue;
       }
-      final title = _cleanStoryOptionTitle(match.group(1) ?? '');
-      if (title.isEmpty) {
-        displayLines.add(line);
-        continue;
-      }
-      options.add(_ParsedStoryOption(title: title));
+      options.add(option);
     }
 
     if (options.length < 2) return null;
+    if (message.isStreaming && options.length < 3) return null;
     final displayText = displayLines.join('\n').trim();
     return _ParsedStoryOptions(
-      displayText: displayText.isEmpty ? message.message : displayText,
+      displayText: displayText.isEmpty
+          ? 'Choose a story to explore.'
+          : displayText,
       options: options,
     );
   }
 
-  int? _latestStoryOptionMessageIndex(List<ChatMessageModel> messages) {
-    if (_confirmedStoryOptionTitle != null) return null;
-    for (var i = messages.length - 1; i >= 0; i--) {
-      if (_parseStoryOptions(messages[i]) != null) return i;
-    }
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final voiceState = ref.watch(voiceChatControllerProvider);
-    final controller = ref.read(voiceChatControllerProvider.notifier);
-    final messages = _buildMessages(voiceState);
+    final messages = _buildMessages();
     final isDark = context.isDarkMode;
     final mutedSurface = isDark
         ? const Color(0xFF1A1A1A)
@@ -2252,12 +2492,8 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     final screenWidth = MediaQuery.of(context).size.width;
     final bubbleMaxWidth = (screenWidth * 0.82).clamp(0.0, 420.0);
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-    final latestOptionMessageIndex = _latestStoryOptionMessageIndex(messages);
     final canSubmitText =
-        _canSend &&
-        voiceState.isSessionReady &&
-        !voiceState.isProcessing &&
-        !voiceState.isConnecting;
+        _canSend && !_isSendingText && !_isStartingTextSession;
 
     if (messages.length != _lastMessageCount) {
       _lastMessageCount = messages.length;
@@ -2265,6 +2501,23 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     }
     if (messages.isNotEmpty && messages.last.isStreaming) {
       _scrollToBottom();
+    }
+
+    if (_isStartingTextSession && messages.isEmpty) {
+      return const _StorySessionLoadingShell();
+    }
+
+    if (_textSessionError != null && messages.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: StoryConnectionErrorCard(
+            onRetry: () => unawaited(_startTextStorySession()),
+            message:
+                'Aura could not connect to this story. Retry to reconnect and continue.',
+          ),
+        ),
+      );
     }
 
     return Column(
@@ -2277,9 +2530,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
             separatorBuilder: (_, __) => const SizedBox(height: 14),
             itemBuilder: (context, index) {
               final message = messages[index];
-              final parsedOptions = index == latestOptionMessageIndex
-                  ? _parseStoryOptions(message)
-                  : null;
+              final parsedOptions = _parseStoryOptions(message);
               final displayMessage = parsedOptions == null
                   ? message
                   : message.copyWith(message: parsedOptions.displayText);
@@ -2294,6 +2545,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                       message: displayMessage,
                       onRetry: () {},
                       maxWidth: bubbleMaxWidth,
+                      renderMarkdownBold: !displayMessage.isUser,
                     ),
                     if (parsedOptions != null) ...[
                       const SizedBox(height: 10),
@@ -2302,14 +2554,12 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                         selectedTitle: _confirmedStoryOptionTitle,
                         disabled:
                             _isSubmittingStoryOption ||
-                            voiceState.isProcessing ||
-                            voiceState.isConnecting,
-                        onRegenerate: () => unawaited(
-                          _regenerateStoryOptions(controller, voiceState),
-                        ),
-                        onSelected: (option) => unawaited(
-                          _confirmStoryOption(option, controller, voiceState),
-                        ),
+                            _isSendingText ||
+                            _isStartingTextSession,
+                        onRegenerate: () =>
+                            unawaited(_regenerateStoryOptions()),
+                        onSelected: (option) =>
+                            unawaited(_confirmStoryOption(option)),
                       ),
                     ],
                   ],
@@ -2364,7 +2614,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                               ),
                               isDense: true,
                             ),
-                            onSubmitted: (_) => _onSend(controller, voiceState),
+                            onSubmitted: (_) => unawaited(_onSend()),
                           ),
                         ),
                         Padding(
@@ -2382,7 +2632,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                             ),
                             child: IconButton(
                               onPressed: canSubmitText
-                                  ? () => _onSend(controller, voiceState)
+                                  ? () => unawaited(_onSend())
                                   : null,
                               splashRadius: 20,
                               icon: Icon(

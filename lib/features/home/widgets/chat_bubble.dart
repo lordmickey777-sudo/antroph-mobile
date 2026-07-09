@@ -12,11 +12,13 @@ class ChatBubble extends StatelessWidget {
     required this.message,
     required this.onRetry,
     required this.maxWidth,
+    this.renderMarkdownBold = false,
   });
 
   final ChatMessageModel message;
   final VoidCallback onRetry;
   final double maxWidth;
+  final bool renderMarkdownBold;
 
   @override
   Widget build(BuildContext context) {
@@ -62,8 +64,9 @@ class ChatBubble extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (!showsTypingOnly)
-                Text(
-                  message.message,
+                _BubbleText(
+                  text: message.message,
+                  renderMarkdownBold: renderMarkdownBold,
                   style: TextStyle(
                     color: textColor,
                     fontSize: 15,
@@ -83,6 +86,46 @@ class ChatBubble extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _BubbleText extends StatelessWidget {
+  const _BubbleText({
+    required this.text,
+    required this.style,
+    required this.renderMarkdownBold,
+  });
+
+  final String text;
+  final TextStyle style;
+  final bool renderMarkdownBold;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!renderMarkdownBold) {
+      return Text(text, style: style);
+    }
+
+    final spans = <TextSpan>[];
+    final pattern = RegExp(r'(\*\*|__)(.*?)\1', dotAll: true);
+    var cursor = 0;
+    for (final match in pattern.allMatches(text)) {
+      if (match.start > cursor) {
+        spans.add(TextSpan(text: text.substring(cursor, match.start)));
+      }
+      spans.add(
+        TextSpan(
+          text: match.group(2) ?? '',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      );
+      cursor = match.end;
+    }
+    if (cursor < text.length) {
+      spans.add(TextSpan(text: text.substring(cursor)));
+    }
+
+    return Text.rich(TextSpan(style: style, children: spans));
   }
 }
 
