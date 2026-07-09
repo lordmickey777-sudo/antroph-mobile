@@ -1061,6 +1061,10 @@ class _CategoryRows extends StatelessWidget {
         normalizedCategory.contains('formation')) {
       return CupertinoIcons.mic;
     }
+    if (normalizedCategory.contains('soft') ||
+        normalizedCategory.contains('learning')) {
+      return CupertinoIcons.pen;
+    }
 
     const icons = [
       CupertinoIcons.book,
