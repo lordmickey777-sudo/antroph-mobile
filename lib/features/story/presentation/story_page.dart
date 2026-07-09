@@ -115,11 +115,6 @@ class _StoryPageState extends ConsumerState<StoryPage>
                         onSearchTap: () => setState(() => _isSearchOpen = true),
                       ),
                     ),
-                    if (continueStories.isNotEmpty)
-                      _ContinuePlayingSliver(
-                        stories: continueStories,
-                        onTap: (story) => _resumeStory(context, ref, story),
-                      ),
                     if (featuredStories.isNotEmpty)
                       SliverToBoxAdapter(
                         child: _FeaturedStoriesCarousel(
@@ -127,6 +122,11 @@ class _StoryPageState extends ConsumerState<StoryPage>
                           onTap: (story) =>
                               _playFeaturedStory(context, ref, story),
                         ),
+                      ),
+                    if (continueStories.isNotEmpty)
+                      _ContinuePlayingSliver(
+                        stories: continueStories,
+                        onTap: (story) => _resumeStory(context, ref, story),
                       ),
                     for (final section in sections)
                       _SectionSliver(
