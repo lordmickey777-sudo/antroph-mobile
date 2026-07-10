@@ -179,7 +179,7 @@ class _MyStoriesPageState extends ConsumerState<MyStoriesPage> {
           }
 
           return RefreshIndicator(
-            onRefresh: () => ref.refresh(myStoriesProvider.future),
+            onRefresh: () => ref.read(myStoriesProvider.notifier).refreshNow(),
             child: GridView.builder(
               padding: EdgeInsets.symmetric(
                 horizontal: horizontalPadding,

@@ -84,7 +84,8 @@ class CommunityBrowsePage extends ConsumerWidget {
           }
 
           return RefreshIndicator(
-            onRefresh: () => ref.refresh(communityBrowseProvider(null).future),
+            onRefresh: () =>
+                ref.read(communityBrowseProvider(null).notifier).refreshNow(),
             child: GridView.builder(
               padding: EdgeInsets.symmetric(
                 horizontal: horizontalPadding,
