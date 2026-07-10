@@ -21,6 +21,7 @@ class InteractiveStoryState {
     this.localQuizSelections = const <String, String>{},
     this.streamingAssistantText,
     this.recentStreamedAssistantText,
+    this.isGenerationTakingLong = false,
     this.isRetryingGeneration = false,
     this.isAdvancingQuestion = false,
     this.error,
@@ -33,6 +34,7 @@ class InteractiveStoryState {
   final Map<String, String> localQuizSelections;
   final String? streamingAssistantText;
   final String? recentStreamedAssistantText;
+  final bool isGenerationTakingLong;
   final bool isRetryingGeneration;
   final bool isAdvancingQuestion;
   final String? error;
@@ -45,6 +47,7 @@ class InteractiveStoryState {
     Map<String, String>? localQuizSelections,
     Object? streamingAssistantText = _unset,
     Object? recentStreamedAssistantText = _unset,
+    bool? isGenerationTakingLong,
     bool? isRetryingGeneration,
     bool? isAdvancingQuestion,
     Object? error = _unset,
@@ -61,6 +64,8 @@ class InteractiveStoryState {
       recentStreamedAssistantText: recentStreamedAssistantText == _unset
           ? this.recentStreamedAssistantText
           : recentStreamedAssistantText as String?,
+      isGenerationTakingLong:
+          isGenerationTakingLong ?? this.isGenerationTakingLong,
       isRetryingGeneration: isRetryingGeneration ?? this.isRetryingGeneration,
       isAdvancingQuestion: isAdvancingQuestion ?? this.isAdvancingQuestion,
       error: error == _unset ? this.error : error as String?,
@@ -71,9 +76,16 @@ class InteractiveStoryState {
 const _unset = Object();
 
 class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
+  static const generationSlowThreshold = Duration(seconds: 15);
+  static const _recoveryRequestTimeout = Duration(seconds: 7);
+  static const _socketConnectTimeout = Duration(seconds: 6);
+
   IOWebSocketChannel? _roomChannel;
   StreamSubscription<dynamic>? _roomSubscription;
   Timer? _refreshTimer;
+  Timer? _generationWatchdogTimer;
+  String? _generationWatchdogKey;
+  Future<void>? _generationRecovery;
   bool _isDisposed = false;
 
   @override
@@ -83,6 +95,8 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       _isDisposed = true;
       _refreshTimer?.cancel();
       _refreshTimer = null;
+      _generationWatchdogTimer?.cancel();
+      _generationWatchdogTimer = null;
       unawaited(_disconnectRoomSocket());
     });
     return const InteractiveStoryState();
@@ -202,7 +216,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       final repo = ref.read(storiesRepositoryProvider);
       final session = await repo.fetchInteractiveSession(sessionId);
       if (_isDisposed) return;
-      state = InteractiveStoryState(session: session);
+      state = state.copyWith(session: session, isLoading: false, error: null);
       _scheduleWaitingRefresh();
     } on ApiError catch (e) {
       if (_isDisposed) return;
@@ -213,38 +227,98 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     }
   }
 
-  Future<void> retryGeneration() async {
+  Future<void> retryGeneration() {
+    return recoverGeneration(canRetry: true);
+  }
+
+  Future<void> recoverGeneration({required bool canRetry}) {
+    final activeRecovery = _generationRecovery;
+    if (activeRecovery != null) return activeRecovery;
+
+    final recovery = _recoverGeneration(canRetry: canRetry);
+    _generationRecovery = recovery;
+    return recovery.whenComplete(() {
+      if (identical(_generationRecovery, recovery)) {
+        _generationRecovery = null;
+      }
+    });
+  }
+
+  Future<void> _recoverGeneration({required bool canRetry}) async {
     final sessionId = state.session?.sessionId;
-    if (sessionId == null || sessionId.isEmpty || state.isLoading) return;
-    state = state.copyWith(
-      isLoading: true,
-      isRetryingGeneration: true,
-      error: null,
-    );
+    if (sessionId == null || sessionId.isEmpty || state.isRetryingGeneration) {
+      return;
+    }
+    state = state.copyWith(isRetryingGeneration: true, error: null);
+
+    InteractiveSessionState? canonicalSession;
+    var requestedRetry = false;
     try {
       final repo = ref.read(storiesRepositoryProvider);
-      final session = await repo.retryInteractiveQuizGeneration(sessionId);
+      try {
+        canonicalSession = await repo
+            .fetchInteractiveSession(sessionId)
+            .timeout(_recoveryRequestTimeout);
+        if (_isDisposed) return;
+        state = state.copyWith(session: canonicalSession);
+        _scheduleWaitingRefresh();
+      } catch (_) {
+        // Reconnecting can still restore the room snapshot. Normal polling
+        // remains active if the one-off canonical request is unavailable.
+      }
+
+      if (_isDisposed) return;
+      await _connectRoomSocket(sessionId);
+      if (_isDisposed) return;
+
+      final latestSession = canonicalSession ?? state.session;
+      final phase = latestSession?.interactiveState['phase'] as String?;
+      if (canRetry && phase == 'generation_failed') {
+        requestedRetry = true;
+        _resetGenerationWatchdog();
+        final retriedSession = await repo
+            .retryInteractiveQuizGeneration(sessionId)
+            .timeout(_recoveryRequestTimeout);
+        if (_isDisposed) return;
+        state = state.copyWith(session: retriedSession);
+      }
+
       if (_isDisposed) return;
       state = state.copyWith(
-        session: session,
-        isLoading: false,
-        isRetryingGeneration: _shouldKeepGenerationRetryOverlay(session),
+        isRetryingGeneration:
+            requestedRetry && _shouldKeepGenerationRetryOverlay(state.session),
       );
       _scheduleWaitingRefresh();
     } on ApiError catch (e) {
       if (_isDisposed) return;
-      state = state.copyWith(
-        isLoading: false,
-        isRetryingGeneration: false,
-        error: e.message,
-      );
+      if (e.statusCode == 409) {
+        try {
+          final canonicalSession = await ref
+              .read(storiesRepositoryProvider)
+              .fetchInteractiveSession(sessionId)
+              .timeout(_recoveryRequestTimeout);
+          if (_isDisposed) return;
+          state = state.copyWith(
+            session: canonicalSession,
+            isRetryingGeneration: false,
+            error: null,
+          );
+          return;
+        } catch (_) {
+          // Fall through to the original conflict if the canonical refetch fails.
+        }
+      }
+      state = state.copyWith(isRetryingGeneration: false, error: e.message);
     } catch (e) {
       if (_isDisposed) return;
       state = state.copyWith(
-        isLoading: false,
         isRetryingGeneration: false,
-        error: '$e',
+        error: 'Could not reconnect. Aura will keep checking for the question.',
       );
+    } finally {
+      if (!_isDisposed) {
+        _scheduleWaitingRefresh();
+      }
     }
   }
 
@@ -342,6 +416,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
             ? _unset
             : streamedText,
       );
+      _scheduleWaitingRefresh();
     } on ApiError catch (e) {
       if (_isDisposed) return;
       if (e.statusCode == 409) {
@@ -422,6 +497,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
             ? _unset
             : streamedText,
       );
+      _scheduleWaitingRefresh();
     } on ApiError catch (e) {
       if (_isDisposed) return;
       state = state.copyWith(
@@ -515,7 +591,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     IOWebSocketChannel? channel;
     try {
       channel = IOWebSocketChannel.connect(Uri.parse(url));
-      await channel.ready;
+      await channel.ready.timeout(_socketConnectTimeout);
       if (_isDisposed) {
         try {
           await channel.sink.close(ws_status.normalClosure, 'dispose');
@@ -805,6 +881,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     if (_isDisposed) return;
     _refreshTimer?.cancel();
     final session = state.session;
+    _syncGenerationWatchdog(session);
     if (session == null || session.isCompleted) return;
     final phase = session.interactiveState['phase'] as String?;
     final topicPromptStatus =
@@ -822,6 +899,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     final shouldPoll =
         phase == 'generating_question' ||
         phase == 'question_generation_started' ||
+        phase == 'generation_failed' ||
         (phase == 'topic_selection' && topicPromptStatus == 'generating') ||
         phase == 'finalizing_question' ||
         phase == 'showing_results' ||
@@ -856,6 +934,57 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     }
   }
 
+  void _syncGenerationWatchdog(InteractiveSessionState? session) {
+    final phase = session?.interactiveState['phase'] as String?;
+    final isGenerating =
+        phase == 'generating_question' ||
+        phase == 'question_generation_started';
+    if (session == null || !isGenerating) {
+      _resetGenerationWatchdog(clearSlowState: true);
+      return;
+    }
+
+    final round = session.interactiveState['current_round'];
+    final key = '${session.sessionId}:${round ?? 'unknown'}';
+    if (_generationWatchdogKey == key) return;
+
+    _generationWatchdogTimer?.cancel();
+    _generationWatchdogKey = key;
+    if (state.isGenerationTakingLong) {
+      state = state.copyWith(isGenerationTakingLong: false);
+    }
+    final requestedAt = _parseStateDate(
+      session.interactiveState['generation_requested_at'],
+    );
+    final elapsed = requestedAt == null
+        ? Duration.zero
+        : DateTime.now().toUtc().difference(requestedAt);
+    final remaining = generationSlowThreshold - elapsed;
+    final watchdogDelay = remaining.isNegative ? Duration.zero : remaining;
+    _generationWatchdogTimer = Timer(watchdogDelay, () {
+      if (_isDisposed || _generationWatchdogKey != key) return;
+      final current = state.session;
+      final currentPhase = current?.interactiveState['phase'] as String?;
+      final currentRound = current?.interactiveState['current_round'];
+      if (current?.sessionId != session.sessionId ||
+          currentRound != round ||
+          (currentPhase != 'generating_question' &&
+              currentPhase != 'question_generation_started')) {
+        return;
+      }
+      state = state.copyWith(isGenerationTakingLong: true);
+    });
+  }
+
+  void _resetGenerationWatchdog({bool clearSlowState = false}) {
+    _generationWatchdogTimer?.cancel();
+    _generationWatchdogTimer = null;
+    _generationWatchdogKey = null;
+    if (clearSlowState && state.isGenerationTakingLong) {
+      state = state.copyWith(isGenerationTakingLong: false);
+    }
+  }
+
   Duration _expiryRefreshDelay(DateTime? expiresAt) {
     if (expiresAt == null) return const Duration(seconds: 2);
     final remaining = expiresAt.difference(DateTime.now().toUtc());
@@ -887,8 +1016,8 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     return null;
   }
 
-  bool _shouldKeepGenerationRetryOverlay(InteractiveSessionState session) {
-    final phase = session.interactiveState['phase'] as String?;
+  bool _shouldKeepGenerationRetryOverlay(InteractiveSessionState? session) {
+    final phase = session?.interactiveState['phase'] as String?;
     return phase == 'generating_question' ||
         phase == 'question_generation_started';
   }

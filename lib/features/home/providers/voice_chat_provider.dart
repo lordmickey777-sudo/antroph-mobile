@@ -1476,7 +1476,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     final action = payload['action'] as String?;
     if (action == 'paused') {
       state = state.copyWith(phase: RealtimeVoicePhase.paused);
-    } else if (action == 'resumed') {
+    } else if (action == 'resumed' || action == 'resume') {
       state = state.copyWith(phase: RealtimeVoicePhase.ready);
     }
   }

@@ -117,6 +117,7 @@ class CollectionsPage extends ConsumerWidget {
           storyId: storyId,
           mascotConfig: collection.mascot,
           storyImage: collection.coverImageUrl,
+          initialInteractionMode: 'narrative',
         ),
       ),
     );
@@ -258,6 +259,22 @@ class CollectionDetailPage extends ConsumerWidget {
       return;
     }
 
+    var initialInteractionMode = ref
+        .read(storyDetailProvider(story.storyId))
+        .asData
+        ?.value
+        .interactionMode;
+    if (initialInteractionMode == null) {
+      try {
+        initialInteractionMode = (await ref.read(
+          storyDetailProvider(story.storyId).future,
+        )).interactionMode;
+      } catch (_) {
+        initialInteractionMode = 'narrative';
+      }
+      if (!context.mounted) return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => StoryChatFlowPage(
@@ -266,6 +283,7 @@ class CollectionDetailPage extends ConsumerWidget {
           mascotConfig: story.mascot,
           storySubtitle: story.subtitle,
           storyImage: story.imageUrl,
+          initialInteractionMode: initialInteractionMode,
         ),
       ),
     );

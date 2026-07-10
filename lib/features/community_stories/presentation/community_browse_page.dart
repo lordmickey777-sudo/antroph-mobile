@@ -12,7 +12,7 @@ import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 
 import '../providers/community_stories_providers.dart';
 import '../models/community_story_model.dart';
-import '../widgets/community_story_card.dart';
+import '../widgets/community_story_grid_card.dart';
 import '../widgets/community_story_list_shimmer.dart';
 
 class CommunityBrowsePage extends ConsumerWidget {
@@ -85,18 +85,22 @@ class CommunityBrowsePage extends ConsumerWidget {
 
           return RefreshIndicator(
             onRefresh: () => ref.refresh(communityBrowseProvider(null).future),
-            child: ListView.separated(
+            child: GridView.builder(
               padding: EdgeInsets.symmetric(
                 horizontal: horizontalPadding,
                 vertical: 16,
               ),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.78,
+              ),
               itemCount: stories.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 14),
               itemBuilder: (context, index) {
                 final story = stories[index];
-                return CommunityStoryCard(
+                return CommunityStoryGridCard(
                   story: story,
-                  showStatus: false,
                   onTap: () => _showStoryDetail(context, story),
                 );
               },
@@ -317,6 +321,7 @@ class _CommunityStoryDetail extends StatelessWidget {
                               storyId: story.id,
                               storySubtitle: story.description,
                               storyImage: story.coverImageUrl,
+                              initialInteractionMode: story.interactionMode,
                               interactiveLaunchMode: launchMode,
                               joinCode: joinCode,
                             ),

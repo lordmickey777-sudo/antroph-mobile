@@ -51,6 +51,7 @@ class StoryChatFlowPage extends ConsumerStatefulWidget {
     this.storySubtitle,
     this.storyImage,
     this.isAddedToPlaylist = false,
+    this.initialInteractionMode,
     this.voicePageBuilder,
     this.interactiveLaunchMode = InteractiveStoryLaunchMode.create,
     this.joinCode,
@@ -63,6 +64,7 @@ class StoryChatFlowPage extends ConsumerStatefulWidget {
   final String? storySubtitle;
   final String? storyImage;
   final bool isAddedToPlaylist;
+  final String? initialInteractionMode;
   final WidgetBuilder? voicePageBuilder;
   final InteractiveStoryLaunchMode interactiveLaunchMode;
   final String? joinCode;
@@ -78,6 +80,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
   bool _isExitingStory = false;
   bool _connectionErrorDialogOpen = false;
   int _storyConnectionRetryAttempts = 0;
+  int _textHistoryRevision = 0;
   String? _lastReadyStorySessionId;
   String? _textStorySessionId;
   VoiceChatController? _voiceController;
@@ -150,7 +153,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     );
   }
 
-  void _openVoicePage() {
+  Future<void> _openVoicePage() async {
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
     final voiceState = ref.read(voiceChatControllerProvider);
 
@@ -166,7 +169,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
       voiceController.toggleMute();
     }
 
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder:
             widget.voicePageBuilder ??
@@ -180,6 +183,9 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
             ),
       ),
     );
+
+    if (!mounted) return;
+    setState(() => _textHistoryRevision += 1);
   }
 
   bool _isInteractiveStory() {
@@ -423,12 +429,21 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
               const SizedBox(width: 4),
             ],
           ),
-          body: storyDetail.maybeWhen(
-            data: (detail) {
-              if (detail.interactionMode != 'narrative') {
+          body: Builder(
+            builder: (context) {
+              final detail = storyDetail.asData?.value;
+              final interactionMode =
+                  widget.initialInteractionMode ??
+                  detail?.interactionMode ??
+                  (storyDetail.hasError ? 'narrative' : null);
+
+              if (interactionMode == null) {
+                return const _StorySessionLoadingShell();
+              }
+              if (interactionMode != 'narrative') {
                 return _InteractiveStoryTab(
                   storyId: widget.storyId,
-                  interactionMode: detail.interactionMode,
+                  interactionMode: interactionMode,
                   launchMode: widget.interactiveLaunchMode,
                   joinCode: widget.joinCode,
                   onCall: _openVoicePage,
@@ -440,17 +455,12 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
                 storyTitle: title,
                 onCall: _openVoicePage,
                 onSessionReady: (sessionId) => _textStorySessionId = sessionId,
-                enableStoryOptions: _usesDynamicStoryOptions(detail),
+                historyRevision: _textHistoryRevision,
+                enableStoryOptions: detail != null
+                    ? _usesDynamicStoryOptions(detail)
+                    : _isBeneathTheSurfaceTitle(title),
               );
             },
-            loading: () => const _StorySessionLoadingShell(),
-            orElse: () => _StoryTextChatTab(
-              storyId: widget.storyId,
-              storyTitle: title,
-              onCall: _openVoicePage,
-              onSessionReady: (sessionId) => _textStorySessionId = sessionId,
-              enableStoryOptions: _isBeneathTheSurfaceTitle(title),
-            ),
           ),
         ),
       ),
@@ -627,13 +637,18 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         isQuizSession && session?.interactiveState['session_type'] == 'group';
     final isGroupQuizChatPhase =
         isGroupQuizSession && phase == 'showing_results';
+    final canRetryQuestionGeneration = _canRetryQuizGeneration(
+      session,
+      currentUserId,
+    );
+    final questionGenerationFailed = phase == 'generation_failed';
     final showQuestionGenerationOverlay =
-        isGroupQuizSession &&
+        isQuizSession &&
         session != null &&
-        (phase == 'generation_failed' || state.isRetryingGeneration);
-    final questionGenerationRetrying =
-        state.isRetryingGeneration ||
-        (state.isLoading && phase == 'generation_failed');
+        (questionGenerationFailed ||
+            state.isGenerationTakingLong ||
+            state.isRetryingGeneration);
+    final questionGenerationRetrying = state.isRetryingGeneration;
     final disableQuizGameControls =
         isGroupQuizSession &&
         (phase == 'generation_failed' || state.isRetryingGeneration);
@@ -675,8 +690,11 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                         recentStreamedAssistantText:
                             state.recentStreamedAssistantText,
                         isAdvancingQuestion: state.isAdvancingQuestion,
-                        onRetryGeneration: () =>
-                            unawaited(notifier.retryGeneration()),
+                        onRetryGeneration: () => unawaited(
+                          notifier.recoverGeneration(
+                            canRetry: canRetryQuestionGeneration,
+                          ),
+                        ),
                         onAdvanceQuestion: () =>
                             unawaited(notifier.advanceQuestion()),
                         onReplay: () => unawaited(
@@ -804,12 +822,22 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
           Positioned.fill(
             child: _QuestionGenerationOverlay(
               isLoading: questionGenerationRetrying,
-              message: effectiveQuestionGenerationError?.isNotEmpty == true
-                  ? effectiveQuestionGenerationError!
-                  : 'The next question could not be loaded.',
+              isFailure: questionGenerationFailed,
+              canRetry: canRetryQuestionGeneration,
+              message: questionGenerationFailed
+                  ? effectiveQuestionGenerationError?.isNotEmpty == true
+                        ? effectiveQuestionGenerationError!
+                        : canRetryQuestionGeneration
+                        ? 'The next question could not be loaded.'
+                        : 'The host needs to retry this question. Reconnect to stay in sync.'
+                  : 'The question is taking longer than expected. Reconnect to check its latest status.',
               onRetry: questionGenerationRetrying
                   ? null
-                  : () => unawaited(notifier.retryGeneration()),
+                  : () => unawaited(
+                      notifier.recoverGeneration(
+                        canRetry: canRetryQuestionGeneration,
+                      ),
+                    ),
             ),
           ),
       ],
@@ -820,11 +848,15 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
 class _QuestionGenerationOverlay extends StatelessWidget {
   const _QuestionGenerationOverlay({
     required this.isLoading,
+    required this.isFailure,
+    required this.canRetry,
     required this.message,
     required this.onRetry,
   });
 
   final bool isLoading;
+  final bool isFailure;
+  final bool canRetry;
   final String message;
   final VoidCallback? onRetry;
 
@@ -897,8 +929,12 @@ class _QuestionGenerationOverlay extends StatelessWidget {
                         children: [
                           Text(
                             isLoading
-                                ? 'Retrying question'
-                                : 'Question failed to load',
+                                ? 'Checking connection'
+                                : isFailure
+                                ? canRetry
+                                      ? 'Question failed to load'
+                                      : 'Waiting for the host'
+                                : 'Question is taking longer',
                             style: TextStyle(
                               color: context.primaryTextColor,
                               fontSize: 18,
@@ -941,7 +977,11 @@ class _QuestionGenerationOverlay extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      isLoading ? 'Retrying...' : 'Retry',
+                      isLoading
+                          ? 'Checking...'
+                          : isFailure && canRetry
+                          ? 'Reconnect & retry'
+                          : 'Reconnect & check',
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                   ),
@@ -1374,12 +1414,43 @@ bool _isQuizSession(InteractiveSessionState? session) {
     'timer_selection',
     'generating_question',
     'question_generation_started',
+    'generation_failed',
     'question_active',
     'finalizing_question',
     'showing_results',
     'post_question_prompt',
     'completed',
   }.contains(phase);
+}
+
+bool _canRetryQuizGeneration(
+  InteractiveSessionState? session,
+  String? currentUserId,
+) {
+  if (session == null) return false;
+  if (session.interactiveState['session_type'] != 'group') return true;
+
+  final activeParticipants = session.participants.where(
+    (participant) => participant.status == 'active',
+  );
+  final normalizedUserId = currentUserId?.trim();
+  if (normalizedUserId != null && normalizedUserId.isNotEmpty) {
+    return activeParticipants.any(
+      (participant) =>
+          participant.userId == normalizedUserId && participant.role == 'host',
+    );
+  }
+
+  final deviceParticipant = activeParticipants.where(
+    (participant) => participant.deviceId == 'mobile-app',
+  );
+  if (deviceParticipant.length == 1) {
+    return deviceParticipant.single.role == 'host';
+  }
+  if (session.participants.length == 1) {
+    return session.participants.single.role == 'host';
+  }
+  return false;
 }
 
 class _StorySessionLoadingShell extends StatelessWidget {
@@ -1678,6 +1749,7 @@ class _StoryTextChatTab extends ConsumerStatefulWidget {
     required this.storyTitle,
     required this.onCall,
     required this.onSessionReady,
+    required this.historyRevision,
     required this.enableStoryOptions,
   });
 
@@ -1685,6 +1757,7 @@ class _StoryTextChatTab extends ConsumerStatefulWidget {
   final String storyTitle;
   final VoidCallback onCall;
   final ValueChanged<String> onSessionReady;
+  final int historyRevision;
   final bool enableStoryOptions;
 
   @override
@@ -1715,6 +1788,7 @@ String _cleanStoryOptionTitle(String value) {
   var title = _cleanStoryBubbleText(value);
   title = title.replaceAll(RegExp(r'\s+'), ' ');
   title = title.split(RegExp(r'\s+(?:-|–|—)\s+|:\s+')).first.trim();
+  title = title.replaceFirst(RegExp(r'[:\-–—]\s*$'), '').trim();
   while (title.length >= 2 &&
       ((title.startsWith('"') && title.endsWith('"')) ||
           (title.startsWith("'") && title.endsWith("'")) ||
@@ -2149,6 +2223,14 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   }
 
   @override
+  void didUpdateWidget(covariant _StoryTextChatTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.historyRevision != oldWidget.historyRevision) {
+      unawaited(_refreshConversationAfterVoice());
+    }
+  }
+
+  @override
   void dispose() {
     _textController.dispose();
     _listScrollController.dispose();
@@ -2198,6 +2280,28 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         _textSessionError = e.toString();
       });
       showToast(context, 'Story connection error');
+    }
+  }
+
+  Future<void> _refreshConversationAfterVoice() async {
+    try {
+      final history = await ref
+          .read(storiesRepositoryProvider)
+          .fetchStoryConversation(storyId: widget.storyId);
+      if (!mounted || history.isEmpty) return;
+
+      final refreshedMessages = _messagesFromHistory(history);
+      if (refreshedMessages.isEmpty) return;
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(refreshedMessages);
+        _textSessionError = null;
+      });
+      _scrollToBottom();
+    } catch (_) {
+      // Keep the existing chat visible. A later text send or page reopen will
+      // fetch the canonical history again.
     }
   }
 
@@ -2432,18 +2536,21 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   }
 
   _ParsedStoryOptions? _parseStoryOptions(ChatMessageModel message) {
-    final shouldParseStoryOptions =
+    if (message.role != ChatRole.assistant) return null;
+
+    final isConfiguredStoryMenu =
         widget.enableStoryOptions ||
         _isBeneathTheSurfaceTitle(widget.storyTitle);
-    if (!shouldParseStoryOptions || message.role != ChatRole.assistant) {
-      return null;
-    }
     final lowerMessage = message.message.toLowerCase();
     final looksLikeStoryOptionMenu =
         lowerMessage.contains('story options') ||
         lowerMessage.contains('stories to explore') ||
+        lowerMessage.contains('stories to choose') ||
+        lowerMessage.contains('choose a story') ||
+        lowerMessage.contains('select a story') ||
         lowerMessage.contains('which story') ||
-        lowerMessage.contains('resonates with you');
+        lowerMessage.contains('resonates with you') ||
+        (isConfiguredStoryMenu && lowerMessage.contains('choose'));
     if (!looksLikeStoryOptionMenu) return null;
 
     final lines = message.message.split('\n');
@@ -2484,6 +2591,17 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   @override
   Widget build(BuildContext context) {
     final messages = _buildMessages();
+    final visibleMessages = messages.isEmpty && _isStartingTextSession
+        ? <ChatMessageModel>[
+            ChatMessageModel(
+              id: 'story_text_connecting',
+              role: ChatRole.assistant,
+              message: '',
+              ts: DateTime.now(),
+              streaming: true,
+            ),
+          ]
+        : messages;
     final isDark = context.isDarkMode;
     final mutedSurface = isDark
         ? const Color(0xFF1A1A1A)
@@ -2495,16 +2613,12 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     final canSubmitText =
         _canSend && !_isSendingText && !_isStartingTextSession;
 
-    if (messages.length != _lastMessageCount) {
-      _lastMessageCount = messages.length;
+    if (visibleMessages.length != _lastMessageCount) {
+      _lastMessageCount = visibleMessages.length;
       _scrollToBottom();
     }
-    if (messages.isNotEmpty && messages.last.isStreaming) {
+    if (visibleMessages.isNotEmpty && visibleMessages.last.isStreaming) {
       _scrollToBottom();
-    }
-
-    if (_isStartingTextSession && messages.isEmpty) {
-      return const _StorySessionLoadingShell();
     }
 
     if (_textSessionError != null && messages.isEmpty) {
@@ -2526,10 +2640,10 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
           child: ListView.separated(
             controller: _listScrollController,
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-            itemCount: messages.length,
+            itemCount: visibleMessages.length,
             separatorBuilder: (_, __) => const SizedBox(height: 14),
             itemBuilder: (context, index) {
-              final message = messages[index];
+              final message = visibleMessages[index];
               final parsedOptions = _parseStoryOptions(message);
               final displayMessage = parsedOptions == null
                   ? message

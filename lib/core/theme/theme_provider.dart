@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const _fullButtonShape = StadiumBorder();
 
@@ -7,6 +6,7 @@ const _fullButtonShape = StadiumBorder();
 class AppTheme {
   static const darkBg = Color(0xFF141718);
   static const darkSurface = Color(0xFF1B1D1F);
+  static const searchInputBackground = Color(0xFF1F1F1F);
 
   static ButtonStyle _elevatedStyle() {
     return ElevatedButton.styleFrom(

@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../../core/theme/theme_provider.dart';
 import '../models/interactive_story_models.dart';
+import 'group_quiz_results_view.dart';
 
 typedef QuizAnswerCallback = void Function(String optionId, String? questionId);
 
@@ -309,6 +310,7 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
             _QuizTranscriptRow(
               item: item,
               session: session,
+              currentUserId: widget.currentUserId,
               pendingKeys: widget.pendingKeys,
               recentStreamedAssistantText: widget.recentStreamedAssistantText,
               onChoice: widget.onChoice,
@@ -1014,6 +1016,7 @@ class _QuizTranscriptRow extends StatelessWidget {
   const _QuizTranscriptRow({
     required this.item,
     required this.session,
+    required this.currentUserId,
     required this.pendingKeys,
     required this.recentStreamedAssistantText,
     required this.onChoice,
@@ -1029,6 +1032,7 @@ class _QuizTranscriptRow extends StatelessWidget {
 
   final _QuizTranscriptItem item;
   final InteractiveSessionState session;
+  final String? currentUserId;
   final Set<String> pendingKeys;
   final String? recentStreamedAssistantText;
   final ValueChanged<String> onChoice;
@@ -1111,15 +1115,32 @@ class _QuizTranscriptRow extends StatelessWidget {
                     (item.statusTitle == 'Question failed to load'
                         ? 'Retry'
                         : null),
-                onAction:
-                    item.statusActionLabel != null && onAdvanceQuestion != null
-                    ? onAdvanceQuestion
-                    : item.statusTitle == 'Question failed to load'
-                    ? onRetryGeneration
-                    : null,
+                onAction: _statusAction(context),
               ),
       ),
     };
+  }
+
+  VoidCallback? _statusAction(BuildContext context) {
+    if (item.statusTitle == 'Question failed to load') {
+      return onRetryGeneration;
+    }
+    if (item.statusActionLabel == null || onAdvanceQuestion == null) {
+      return null;
+    }
+    if (item.statusActionLabel == 'Show final results') {
+      return () {
+        unawaited(
+          showGroupQuizResultsBottomSheet(
+            context,
+            session: session,
+            currentUserId: currentUserId,
+          ),
+        );
+        onAdvanceQuestion!.call();
+      };
+    }
+    return onAdvanceQuestion;
   }
 
   Widget _buildAiMessage() {
@@ -2276,11 +2297,12 @@ class _LiveQuizQuestion {
         '';
     final correctOptionId =
         (question['correct_option_id'] as String?)?.trim() ?? '';
-    final options = ((question['options'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((e) => InteractiveOption.fromJson(e.cast<String, dynamic>()))
-        .where((option) => option.id.isNotEmpty || option.label.isNotEmpty)
-        .toList();
+    final options = _orderedQuizOptions(
+      ((question['options'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => InteractiveOption.fromJson(e.cast<String, dynamic>()))
+          .where((option) => option.id.isNotEmpty || option.label.isNotEmpty),
+    );
     if (questionId.isEmpty || text.isEmpty || options.isEmpty) return null;
     return _LiveQuizQuestion(
       questionId: questionId,
@@ -2307,11 +2329,12 @@ class _LiveQuizQuestion {
         (question['text'] as String?)?.trim() ??
         (question['question'] as String?)?.trim() ??
         '';
-    final options = ((question['options'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((e) => InteractiveOption.fromJson(e.cast<String, dynamic>()))
-        .where((option) => option.id.isNotEmpty || option.label.isNotEmpty)
-        .toList();
+    final options = _orderedQuizOptions(
+      ((question['options'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => InteractiveOption.fromJson(e.cast<String, dynamic>()))
+          .where((option) => option.id.isNotEmpty || option.label.isNotEmpty),
+    );
     if (questionId.isEmpty || text.isEmpty || options.isEmpty) return null;
     return _LiveQuizQuestion(
       questionId: questionId,
@@ -2328,6 +2351,26 @@ class _LiveQuizQuestion {
       explanation: (question['explanation'] as String?)?.trim(),
     );
   }
+}
+
+List<InteractiveOption> _orderedQuizOptions(
+  Iterable<InteractiveOption> options,
+) {
+  final ordered = options.toList();
+  const canonicalIds = <String>['a', 'b', 'c', 'd'];
+  final normalizedIds = ordered
+      .map((option) => option.id.trim().toLowerCase())
+      .toSet();
+  if (ordered.length == canonicalIds.length &&
+      normalizedIds.length == canonicalIds.length &&
+      normalizedIds.containsAll(canonicalIds)) {
+    ordered.sort(
+      (left, right) => canonicalIds
+          .indexOf(left.id.trim().toLowerCase())
+          .compareTo(canonicalIds.indexOf(right.id.trim().toLowerCase())),
+    );
+  }
+  return ordered;
 }
 
 class _LiveQuizBlock extends StatefulWidget {

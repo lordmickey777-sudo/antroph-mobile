@@ -271,6 +271,7 @@ class _StoryPageState extends ConsumerState<StoryPage>
           storyImage: image,
           mascotConfig: mascotConfig,
           isAddedToPlaylist: isAddedToPlaylist,
+          initialInteractionMode: 'narrative',
         ),
       ),
     );
@@ -383,12 +384,9 @@ class _StorySearchLayer extends StatefulWidget {
 }
 
 class _StorySearchLayerState extends State<_StorySearchLayer> {
-  static const _openSearchBarDuration = Duration(milliseconds: 1120);
-  static const _closeSearchBarDuration = Duration(milliseconds: 360);
-  static const _openBodySlideDuration = Duration(milliseconds: 680);
-  static const _closeBodySlideDuration = Duration(milliseconds: 260);
-  static const _openBodyFadeDuration = Duration(milliseconds: 560);
-  static const _closeBodyFadeDuration = Duration(milliseconds: 220);
+  static const _searchBarDuration = Duration(milliseconds: 560);
+  static const _bodySlideDuration = Duration(milliseconds: 340);
+  static const _bodyFadeDuration = Duration(milliseconds: 420);
 
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
@@ -449,6 +447,10 @@ class _StorySearchLayerState extends State<_StorySearchLayer> {
       _selectedSuggestion = null;
       _hasEntered = true;
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_hasEntered || _isClosing) return;
+      _focusNode.requestFocus();
+    });
   }
 
   Future<void> _close([_StorySearchSelection? selection]) async {
@@ -456,7 +458,7 @@ class _StorySearchLayerState extends State<_StorySearchLayer> {
     _isClosing = true;
     _focusNode.unfocus();
     if (mounted) setState(() => _hasEntered = false);
-    await Future<void>.delayed(_closeSearchBarDuration);
+    await Future<void>.delayed(_searchBarDuration);
     if (!mounted) return;
     setState(() => _isClosing = false);
     widget.onCloseComplete();
@@ -601,15 +603,6 @@ class _StorySearchLayerState extends State<_StorySearchLayer> {
       40,
     );
     final currentSearchRect = _hasEntered ? targetSearchRect : launcherRect;
-    final searchBarDuration = _isClosing
-        ? _closeSearchBarDuration
-        : _openSearchBarDuration;
-    final bodySlideDuration = _isClosing
-        ? _closeBodySlideDuration
-        : _openBodySlideDuration;
-    final bodyFadeDuration = _isClosing
-        ? _closeBodyFadeDuration
-        : _openBodyFadeDuration;
     final fixedSuggestionTop = targetSearchRect.bottom + 12;
     final fixedSuggestionHeight = !showSuggestionPanel
         ? 0.0
@@ -631,7 +624,7 @@ class _StorySearchLayerState extends State<_StorySearchLayer> {
             IgnorePointer(
               ignoring: !overlayActive,
               child: AnimatedOpacity(
-                duration: bodyFadeDuration,
+                duration: _bodyFadeDuration,
                 curve: Curves.easeOutCubic,
                 opacity: _hasEntered ? 1 : 0,
                 child: GestureDetector(
@@ -648,11 +641,11 @@ class _StorySearchLayerState extends State<_StorySearchLayer> {
               child: Padding(
                 padding: EdgeInsets.only(top: bodyTopPadding),
                 child: AnimatedSlide(
-                  duration: bodySlideDuration,
+                  duration: _bodySlideDuration,
                   curve: Curves.easeOutCubic,
                   offset: _hasEntered ? Offset.zero : const Offset(0, 0.025),
                   child: AnimatedOpacity(
-                    duration: bodyFadeDuration,
+                    duration: _bodyFadeDuration,
                     curve: Curves.easeOutCubic,
                     opacity: _hasEntered ? 1 : 0,
                     child: ListView(
@@ -667,7 +660,8 @@ class _StorySearchLayerState extends State<_StorySearchLayer> {
                                 : TextButton(
                                     onPressed: _clearRecentSearches,
                                     style: TextButton.styleFrom(
-                                      backgroundColor: const Color(0xFF1F1F1F),
+                                      backgroundColor:
+                                          AppTheme.searchInputBackground,
                                       foregroundColor: Colors.white,
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 16,
@@ -726,11 +720,11 @@ class _StorySearchLayerState extends State<_StorySearchLayer> {
               child: IgnorePointer(
                 ignoring: !overlayActive || !showSuggestionPanel,
                 child: AnimatedSlide(
-                  duration: bodySlideDuration,
+                  duration: _bodySlideDuration,
                   curve: Curves.easeOutCubic,
                   offset: _hasEntered ? Offset.zero : const Offset(0, 0.04),
                   child: AnimatedOpacity(
-                    duration: bodyFadeDuration,
+                    duration: _bodyFadeDuration,
                     curve: Curves.easeOutCubic,
                     opacity: _hasEntered && showSuggestionPanel ? 1 : 0,
                     child: _SearchSuggestionsDropdown(
@@ -749,7 +743,7 @@ class _StorySearchLayerState extends State<_StorySearchLayer> {
               child: IgnorePointer(
                 ignoring: !overlayActive,
                 child: AnimatedOpacity(
-                  duration: bodyFadeDuration,
+                  duration: _bodyFadeDuration,
                   curve: Curves.easeOutCubic,
                   opacity: _hasEntered ? 1 : 0,
                   child: IconButton(
@@ -763,7 +757,7 @@ class _StorySearchLayerState extends State<_StorySearchLayer> {
               ),
             ),
             AnimatedPositioned(
-              duration: searchBarDuration,
+              duration: _searchBarDuration,
               curve: Curves.easeOutCubic,
               left: currentSearchRect.left,
               top: currentSearchRect.top,
@@ -776,7 +770,7 @@ class _StorySearchLayerState extends State<_StorySearchLayer> {
                   opacity: overlayActive ? 1 : 0,
                   child: _MorphingStorySearchField(
                     isOpen: overlayActive,
-                    backgroundColor: const Color(0xFF1F1F1F),
+                    backgroundColor: AppTheme.searchInputBackground,
                     iconColor: const Color(0xFFB6B6B6),
                     controller: _controller,
                     focusNode: _focusNode,
@@ -837,52 +831,40 @@ class _MorphingStorySearchField extends StatelessWidget {
               Icon(CupertinoIcons.search, size: 20, color: iconColor),
               const SizedBox(width: 10),
               Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 160),
-                  layoutBuilder: (currentChild, previousChildren) {
-                    return Stack(
-                      alignment: Alignment.centerLeft,
-                      children: [
-                        ...previousChildren,
-                        if (currentChild != null) currentChild,
-                      ],
-                    );
-                  },
-                  child: isOpen
-                      ? TextField(
-                          key: const ValueKey('story_search_input'),
-                          controller: controller!,
-                          focusNode: focusNode!,
-                          onChanged: onChanged,
-                          onSubmitted: onSubmitted,
-                          textInputAction: TextInputAction.search,
-                          cursorColor: Colors.white,
-                          style: const TextStyle(
-                            color: Colors.white,
+                child: isOpen
+                    ? TextField(
+                        key: const ValueKey('story_search_input'),
+                        controller: controller!,
+                        focusNode: focusNode!,
+                        onChanged: onChanged,
+                        onSubmitted: onSubmitted,
+                        textInputAction: TextInputAction.search,
+                        cursorColor: Colors.white,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        decoration: const InputDecoration(
+                          isCollapsed: true,
+                          border: InputBorder.none,
+                          hintText: 'Search stories or categories',
+                          hintStyle: TextStyle(
+                            color: Color(0xFF8D8D8D),
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
                           ),
-                          decoration: const InputDecoration(
-                            isCollapsed: true,
-                            border: InputBorder.none,
-                            hintText: 'Search stories or categories',
-                            hintStyle: TextStyle(
-                              color: Color(0xFF8D8D8D),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        )
-                      : TypographyText(
-                          'Search stories or categories',
-                          key: const ValueKey('story_search_launcher_text'),
-                          variant: TypographyVariant.body2,
-                          color: iconColor,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          maxLines: 1,
                         ),
-                ),
+                      )
+                    : TypographyText(
+                        'Search stories or categories',
+                        key: const ValueKey('story_search_launcher_text'),
+                        variant: TypographyVariant.body2,
+                        color: iconColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        maxLines: 1,
+                      ),
               ),
             ],
           ),
@@ -1095,7 +1077,7 @@ class _SearchSuggestionsDropdown extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: AppTheme.searchInputBackground,
         borderRadius: BorderRadius.circular(16),
       ),
       clipBehavior: Clip.antiAlias,
@@ -1878,8 +1860,8 @@ class _CommunityStoriesSliver extends ConsumerWidget {
 
   final String searchQuery;
 
-  static const double _cardWidth = 200;
-  static const double _cardHeight = 240;
+  static const double _cardWidth = 150;
+  static const double _cardHeight = 190;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1986,6 +1968,7 @@ class _CommunityStoriesSliver extends ConsumerWidget {
           storyId: story.id,
           storySubtitle: story.description,
           storyImage: story.coverImageUrl,
+          initialInteractionMode: story.interactionMode,
           interactiveLaunchMode: launchMode,
           joinCode: joinCode,
         ),
@@ -2421,7 +2404,7 @@ class _CommunityStoryCompactCard extends StatelessWidget {
       child: SizedBox(
         width: width,
         child: SmoothCard(
-          radius: 24,
+          radius: 20,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -2434,7 +2417,7 @@ class _CommunityStoryCompactCard extends StatelessWidget {
                 right: 0,
                 bottom: 0,
                 child: Container(
-                  height: 80,
+                  height: 72,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
@@ -2450,9 +2433,9 @@ class _CommunityStoryCompactCard extends StatelessWidget {
 
               // Title + author
               Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
+                left: 10,
+                right: 10,
+                bottom: 10,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -2461,7 +2444,7 @@ class _CommunityStoryCompactCard extends StatelessWidget {
                       story.title,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                       maxLines: 2,
@@ -2490,8 +2473,8 @@ class _CommunityStoryCompactCard extends StatelessWidget {
                   child: AppCircleIconButton(
                     onPressed: onPlay,
                     icon: CupertinoIcons.play_fill,
-                    size: 34,
-                    iconSize: 18,
+                    size: 30,
+                    iconSize: 16,
                     backgroundColor: context.actionButtonBackground,
                     foregroundColor: context.actionButtonForeground,
                   ),

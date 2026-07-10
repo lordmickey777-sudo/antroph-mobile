@@ -6,8 +6,12 @@ import 'package:antroph_mobile/features/home/providers/voice_chat_provider.dart'
 import 'package:antroph_mobile/features/home/services/pcm_audio_player.dart';
 import 'package:antroph_mobile/features/home/services/realtime_voice_client.dart';
 import 'package:antroph_mobile/features/home/widgets/chat_bubble.dart';
+import 'package:antroph_mobile/features/story/data/stories_repository.dart';
+import 'package:antroph_mobile/features/story/models/story_session.dart';
 import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
 import 'package:antroph_mobile/features/story/presentation/story_voice_page.dart';
+import 'package:antroph_mobile/features/story/providers/story_providers.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,14 +24,19 @@ void main() {
     tester,
   ) async {
     final fake = FakeVoiceChatController();
+    final storiesRepository = _FakeStoriesRepository();
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [voiceChatControllerProvider.overrideWith(() => fake)],
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+          storiesRepositoryProvider.overrideWithValue(storiesRepository),
+        ],
         child: MaterialApp(
           home: StoryChatFlowPage(
             storyId: 'story_1',
             storyTitle: 'Test Story',
+            initialInteractionMode: 'narrative',
             voicePageBuilder: _testVoicePageBuilder,
           ),
         ),
@@ -40,7 +49,7 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byIcon(Icons.call_rounded), findsOneWidget);
 
-    expect(fake.startStorySessionCalls, 1);
+    expect(fake.startStorySessionCalls, 0);
     expect(fake.stopPlaybackCalls, greaterThanOrEqualTo(1));
     expect(fake.state.isMuted, isTrue);
 
@@ -52,6 +61,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500)); // finish transition
 
     expect(find.byType(VoiceChatScreen), findsOneWidget);
+    expect(fake.startStorySessionCalls, greaterThanOrEqualTo(1));
     expect(fake.toggleMuteCalls, greaterThanOrEqualTo(2));
     expect(fake.startRecordingCalls, 1);
   });
@@ -60,14 +70,19 @@ void main() {
     tester,
   ) async {
     final fake = FakeVoiceChatController();
+    final storiesRepository = _FakeStoriesRepository();
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [voiceChatControllerProvider.overrideWith(() => fake)],
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+          storiesRepositoryProvider.overrideWithValue(storiesRepository),
+        ],
         child: MaterialApp(
           home: StoryChatFlowPage(
             storyId: 'story_1',
             storyTitle: 'Test Story',
+            initialInteractionMode: 'narrative',
             voicePageBuilder: _testVoicePageBuilder,
           ),
         ),
@@ -82,8 +97,120 @@ void main() {
 
     expect(find.text('Tell me more'), findsOneWidget);
     expect(find.byType(ChatBubble), findsNWidgets(2));
-    expect(fake.state.showPendingAssistantBubble, isTrue);
-    expect(fake.sendTextPromptCalls, 1);
+    expect(storiesRepository.streamCalls, 1);
+    expect(fake.sendTextPromptCalls, 0);
+  });
+
+  testWidgets('voice turns are appended to the text chat after voice closes', (
+    tester,
+  ) async {
+    final fake = FakeVoiceChatController();
+    final storiesRepository = _FakeStoriesRepository(
+      conversation: const [
+        {'speaker': 'assistant', 'message': 'Welcome to the story.'},
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+          storiesRepositoryProvider.overrideWithValue(storiesRepository),
+        ],
+        child: MaterialApp(
+          home: StoryChatFlowPage(
+            storyId: 'story_1',
+            storyTitle: 'Test Story',
+            initialInteractionMode: 'narrative',
+            voicePageBuilder: (context) => Scaffold(
+              body: Center(
+                child: FilledButton(
+                  onPressed: () {
+                    storiesRepository.conversation = const [
+                      {
+                        'speaker': 'assistant',
+                        'message': 'Welcome to the story.',
+                      },
+                      {'speaker': 'user', 'message': 'Tell me about the path.'},
+                      {
+                        'speaker': 'ai',
+                        'message': 'The path leads toward the old forest.',
+                      },
+                    ];
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Return to chat'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Welcome to the story.'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.call_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Return to chat'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tell me about the path.'), findsOneWidget);
+    expect(find.text('The path leads toward the old forest.'), findsOneWidget);
+    expect(storiesRepository.fetchConversationCalls, greaterThanOrEqualTo(2));
+  });
+
+  testWidgets('normal narrative story renders numbered chapters as buttons', (
+    tester,
+  ) async {
+    final fake = FakeVoiceChatController();
+    final storiesRepository = _FakeStoriesRepository(
+      conversation: const [
+        {
+          'speaker': 'assistant',
+          'message': '''Here are three stories to choose from:
+
+1. **The Silent Promise:** A newly married couple discovers commitment.
+2. **Across the Miles:** Two long-distance partners navigate love.
+3. **Wedding Whisper:** A wedding planner finds unexpected romance.
+
+Which story would you like to explore?''',
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+          storiesRepositoryProvider.overrideWithValue(storiesRepository),
+        ],
+        child: const MaterialApp(
+          home: StoryChatFlowPage(
+            storyId: 'story_1',
+            storyTitle: 'Love in Translation',
+            initialInteractionMode: 'narrative',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.widgetWithText(OutlinedButton, 'The Silent Promise'),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(OutlinedButton, 'Across the Miles'),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(OutlinedButton, 'Wedding Whisper'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('VoiceChatScreen shows Ready for armed story state', (
@@ -238,6 +365,52 @@ class FakeVoiceChatController extends VoiceChatController {
   @override
   Future<void> endStorySession() async {
     endStorySessionCalls++;
+  }
+}
+
+class _FakeStoriesRepository extends StoriesRepository {
+  _FakeStoriesRepository({this.conversation = const []}) : super(dio: Dio());
+
+  int streamCalls = 0;
+  int fetchConversationCalls = 0;
+  List<Map<String, dynamic>> conversation;
+
+  StorySession get _session => StorySession(
+    id: 'session_1',
+    storyId: 'story_1',
+    currentNodeId: 'node_1',
+    pathHistory: const [],
+    milestonesReached: const [],
+    isPaused: false,
+    isCompleted: false,
+    lastActivityAt: DateTime(2026, 7, 10),
+    version: 1,
+  );
+
+  @override
+  Future<StorySession> startSession({
+    required String storyId,
+    required String deviceType,
+    required String deviceId,
+  }) async => _session;
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchStoryConversation({
+    required String storyId,
+  }) async {
+    fetchConversationCalls++;
+    return conversation;
+  }
+
+  @override
+  Stream<StoryTextStreamEvent> streamStoryText({
+    required String storyId,
+    required String message,
+    int? expectedVersion,
+  }) async* {
+    streamCalls++;
+    yield const StoryTextStreamEvent(type: 'token', content: 'A reply');
+    yield StoryTextStreamEvent(type: 'done', session: _session);
   }
 }
 

@@ -110,39 +110,16 @@ class CommunityStoriesRepository {
     }
   }
 
-  /// Browse community stories.
-  ///
-  /// The general stories endpoint includes the signed-in user's own community
-  /// stories in any moderation state, while anonymous users only receive
-  /// approved published community stories.
+  /// Browse approved and published community stories.
   Future<List<CommunityStoryDto>> browseCommunityStories({
     int page = 1,
     int pageSize = 20,
     String? categoryId,
-  }) async {
-    try {
-      final res = await _dio.get(
-        '/stories/browse',
-        queryParameters: {
-          'page': page,
-          'page_size': pageSize,
-          'story_type': 'community',
-          if (categoryId != null) 'category_id': categoryId,
-        },
-      );
-      final list = _extractList(res.data);
-      return list.map((e) => CommunityStoryDto.fromJson(e)).toList();
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 404) {
-        return _browsePublishedCommunityStories(
-          page: page,
-          pageSize: pageSize,
-          categoryId: categoryId,
-        );
-      }
-      throw ErrorFormatter.fromDio(e);
-    }
-  }
+  }) => _browsePublishedCommunityStories(
+    page: page,
+    pageSize: pageSize,
+    categoryId: categoryId,
+  );
 
   Future<List<CommunityStoryDto>> _browsePublishedCommunityStories({
     required int page,
@@ -160,7 +137,10 @@ class CommunityStoriesRepository {
         options: Options(extra: const {'skipAuth': true}),
       );
       final list = _extractList(res.data);
-      return list.map((e) => CommunityStoryDto.fromJson(e)).toList();
+      return list
+          .map(CommunityStoryDto.fromJson)
+          .where((story) => story.isApprovedAndPublished)
+          .toList();
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }

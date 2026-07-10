@@ -73,6 +73,9 @@ class CommunityStoryDto {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  bool get isApprovedAndPublished =>
+      isPublished && moderationStatus.trim().toLowerCase() == 'approved';
+
   factory CommunityStoryDto.fromJson(Map<String, dynamic> json) {
     return CommunityStoryDto(
       id: (json['id'] as String?)?.trim() ?? '',

@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/auth/state/auth_state.dart';
 import '../data/community_stories_repository.dart';
 import '../models/community_story_model.dart';
 import '../models/rive_element_model.dart';
@@ -78,84 +77,51 @@ final communityStoryDetailProvider = FutureProvider.autoDispose
     });
 
 /// Browse published community stories. Pass categoryId or null for all.
-final communityBrowseProvider = FutureProvider.family<List<CommunityStoryDto>, String?>((
-  ref,
-  categoryId,
-) async {
-  final repo = ref.read(communityStoriesRepositoryProvider);
-  final authUserId = ref.watch(authControllerProvider).asData?.value?.id;
-  final cacheCategoryId = [
-    categoryId ?? 'all',
-    authUserId == null ? 'public' : 'user_$authUserId',
-  ].join(':');
+final communityBrowseProvider =
+    FutureProvider.family<List<CommunityStoryDto>, String?>((
+      ref,
+      categoryId,
+    ) async {
+      final repo = ref.read(communityStoriesRepositoryProvider);
+      final cacheCategoryId = '${categoryId ?? 'all'}:approved_published_v1';
 
-  Future<List<CommunityStoryDto>> fetchStories() async {
-    final browsedStories = await repo.browseCommunityStories(
-      categoryId: categoryId,
-    );
-
-    if (authUserId == null) {
-      return browsedStories;
-    }
-
-    try {
-      final myStories = await repo.fetchMyStories();
-      final visibleMyStories = categoryId == null
-          ? myStories
-          : myStories.where((story) => story.categoryId == categoryId).toList();
-      return _mergeStories(visibleMyStories, browsedStories);
-    } catch (e) {
-      print(
-        'DEBUG: communityBrowseProvider($categoryId) - My Stories Merge Error: $e',
-      );
-      return browsedStories;
-    }
-  }
-
-  // Return disk cache immediately while refreshing in background
-  final cached = await CommunityStoriesCacheService.load(
-    categoryId: cacheCategoryId,
-  );
-  if (cached != null) {
-    print('DEBUG: communityBrowseProvider($categoryId) - CACHE HIT');
-    () async {
-      try {
-        final fresh = await fetchStories();
-        print(
-          'DEBUG: communityBrowseProvider($categoryId) - Background Refresh Success',
+      Future<List<CommunityStoryDto>> fetchStories() async {
+        final stories = await repo.browseCommunityStories(
+          categoryId: categoryId,
         );
-        await CommunityStoriesCacheService.save(
-          fresh,
-          categoryId: cacheCategoryId,
-        );
-      } catch (e) {
-        print(
-          'DEBUG: communityBrowseProvider($categoryId) - Background Refresh Error: $e',
-        );
+        return stories.where((story) => story.isApprovedAndPublished).toList();
       }
-    }();
-    return cached;
-  }
-  print('DEBUG: communityBrowseProvider($categoryId) - CACHE MISS');
 
-  final res = await fetchStories();
-  await CommunityStoriesCacheService.save(res, categoryId: cacheCategoryId);
-  return res;
-});
+      // Return disk cache immediately while refreshing in background
+      final cached = await CommunityStoriesCacheService.load(
+        categoryId: cacheCategoryId,
+      );
+      if (cached != null) {
+        print('DEBUG: communityBrowseProvider($categoryId) - CACHE HIT');
+        final visibleCached = cached
+            .where((story) => story.isApprovedAndPublished)
+            .toList();
+        () async {
+          try {
+            final fresh = await fetchStories();
+            print(
+              'DEBUG: communityBrowseProvider($categoryId) - Background Refresh Success',
+            );
+            await CommunityStoriesCacheService.save(
+              fresh,
+              categoryId: cacheCategoryId,
+            );
+          } catch (e) {
+            print(
+              'DEBUG: communityBrowseProvider($categoryId) - Background Refresh Error: $e',
+            );
+          }
+        }();
+        return visibleCached;
+      }
+      print('DEBUG: communityBrowseProvider($categoryId) - CACHE MISS');
 
-List<CommunityStoryDto> _mergeStories(
-  List<CommunityStoryDto> primary,
-  List<CommunityStoryDto> secondary,
-) {
-  final seen = <String>{};
-  final merged = <CommunityStoryDto>[];
-
-  for (final story in [...primary, ...secondary]) {
-    if (story.id.isEmpty || !seen.add(story.id)) {
-      continue;
-    }
-    merged.add(story);
-  }
-
-  return merged;
-}
+      final res = await fetchStories();
+      await CommunityStoriesCacheService.save(res, categoryId: cacheCategoryId);
+      return res;
+    });

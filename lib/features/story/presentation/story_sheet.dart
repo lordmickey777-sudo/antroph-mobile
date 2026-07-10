@@ -290,6 +290,12 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
       return;
     }
 
+    final initialInteractionMode = ref
+        .read(storyDetailProvider(widget.storyId))
+        .asData
+        ?.value
+        .interactionMode;
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => StoryChatFlowPage(
@@ -299,6 +305,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
           storySubtitle: widget.subtitle,
           storyImage: widget.imageAsset,
           isAddedToPlaylist: _isAdded,
+          initialInteractionMode: initialInteractionMode,
           interactiveLaunchMode: launchMode,
           joinCode: joinCode,
         ),

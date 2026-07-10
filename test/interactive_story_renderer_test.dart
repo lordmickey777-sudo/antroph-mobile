@@ -128,6 +128,75 @@ void main() {
     expect(find.text('Venus'), findsOneWidget);
   });
 
+  testWidgets('InteractiveStoryRenderer orders canonical quiz options A to D', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(400, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final session = InteractiveSessionState.fromJson({
+      'session_id': 'session-1',
+      'story_id': 'story-1',
+      'interaction_mode': 'group',
+      'ai_role': 'host',
+      'participants': const [],
+      'interactive_state': {
+        'template': 'quiz',
+        'session_type': 'group',
+        'phase': 'question_active',
+        'current_round': 1,
+        'total_rounds': 3,
+        'question': {
+          'question_id': 'q-abcd',
+          'text': 'Choose the second letter.',
+          'correct_option_id': 'b',
+          'expires_at': DateTime.now()
+              .toUtc()
+              .add(const Duration(seconds: 5))
+              .toIso8601String(),
+          'options': [
+            {'id': 'd', 'label': 'Delta'},
+            {'id': 'b', 'label': 'Beta'},
+            {'id': 'a', 'label': 'Alpha'},
+            {'id': 'c', 'label': 'Gamma'},
+          ],
+        },
+      },
+      'events': const [],
+      'last_seq': 1,
+      'is_completed': false,
+    });
+    var selected = '';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: InteractiveStoryRenderer(
+            session: session,
+            onChoice: (_) {},
+            onQuizAnswer: (optionId, _) => selected = optionId,
+            onRetryGeneration: () {},
+            onReplay: () {},
+            onLeave: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final alphaY = tester.getTopLeft(find.text('Alpha')).dy;
+    final betaY = tester.getTopLeft(find.text('Beta')).dy;
+    final gammaY = tester.getTopLeft(find.text('Gamma')).dy;
+    final deltaY = tester.getTopLeft(find.text('Delta')).dy;
+    expect(alphaY, lessThan(betaY));
+    expect(betaY, lessThan(gammaY));
+    expect(gammaY, lessThan(deltaY));
+
+    await tester.tap(find.text('Beta'));
+    await tester.pump();
+    await tester.tap(find.text('Confirm'));
+    expect(selected, 'b');
+  });
+
   testWidgets('InteractiveStoryRenderer renders results and final podium', (
     tester,
   ) async {
@@ -202,7 +271,10 @@ void main() {
       ...base,
       'interactive_state': {
         'template': 'quiz',
+        'session_type': 'group',
         'phase': 'completed',
+        'current_round': 3,
+        'total_rounds': 3,
         'winner_participant_ids': ['p1'],
         'final_standings': [
           {
@@ -240,6 +312,138 @@ void main() {
     expect(find.text('Winner: Ada'), findsOneWidget);
     expect(find.text('Replay'), findsOneWidget);
     expect(find.text('Leave'), findsOneWidget);
+  });
+
+  testWidgets('group host opens player scores from Show final results', (
+    tester,
+  ) async {
+    var completed = false;
+    var advanceCalls = 0;
+
+    InteractiveSessionState buildSession() => InteractiveSessionState.fromJson({
+      'session_id': 'session-1',
+      'story_id': 'story-1',
+      'interaction_mode': 'group',
+      'ai_role': 'host',
+      'participants': [
+        {
+          'id': 'p1',
+          'session_id': 'session-1',
+          'user_id': 'u1',
+          'display_name': 'Ada',
+          'role': 'host',
+          'status': 'active',
+          'score': 4,
+        },
+        {
+          'id': 'p2',
+          'session_id': 'session-1',
+          'user_id': 'u2',
+          'display_name': 'Ben',
+          'role': 'participant',
+          'status': 'active',
+          'score': 2,
+        },
+      ],
+      'interactive_state': completed
+          ? {
+              'template': 'quiz',
+              'session_type': 'group',
+              'phase': 'completed',
+              'current_round': 3,
+              'total_rounds': 3,
+              'winner_participant_ids': ['p1'],
+              'final_standings': [
+                {
+                  'rank': 1,
+                  'participant_id': 'p1',
+                  'user_id': 'u1',
+                  'display_name': 'Ada',
+                  'score': 4,
+                },
+                {
+                  'rank': 2,
+                  'participant_id': 'p2',
+                  'user_id': 'u2',
+                  'display_name': 'Ben',
+                  'score': 2,
+                },
+              ],
+            }
+          : {
+              'template': 'quiz',
+              'session_type': 'group',
+              'phase': 'showing_results',
+              'current_round': 3,
+              'total_rounds': 3,
+              'current_question_id': 'q3',
+              'result': {
+                'question_id': 'q3',
+                'correct_option_id': 'a',
+                'answers': const [],
+                'standings': [
+                  {
+                    'rank': 1,
+                    'participant_id': 'p1',
+                    'display_name': 'Ada',
+                    'score': 4,
+                  },
+                  {
+                    'rank': 2,
+                    'participant_id': 'p2',
+                    'display_name': 'Ben',
+                    'score': 2,
+                  },
+                ],
+              },
+            },
+      'events': const [],
+      'last_seq': 3,
+      'is_completed': completed,
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => InteractiveStoryRenderer(
+              session: buildSession(),
+              currentUserId: 'u1',
+              onChoice: (_) {},
+              onQuizAnswer: (_, _) {},
+              onRetryGeneration: () {},
+              onAdvanceQuestion: () {
+                advanceCalls++;
+                setState(() => completed = true);
+              },
+              onReplay: () {},
+              onLeave: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Show final results'), findsOneWidget);
+    await tester.tap(find.text('Show final results'));
+    await tester.pumpAndSettle();
+
+    expect(advanceCalls, 1);
+    expect(
+      find.byKey(const ValueKey('group-quiz-results-sheet')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('group-score-value-p1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('group-score-value-p2')), findsOneWidget);
+    expect(find.text('4 pts'), findsNWidgets(2));
+    expect(find.text('2 pts'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('group-quiz-results-done')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('group-quiz-results-sheet')),
+      findsNothing,
+    );
   });
 
   testWidgets('InteractiveStoryRenderer renders pending user text at bottom', (
