@@ -26,9 +26,9 @@ class PostHogService {
     config.host = AppEnv.posthogHost.trim().isEmpty
         ? 'https://us.i.posthog.com'
         : AppEnv.posthogHost.trim();
-    config.debug = kDebugMode;
+    config.debug = false;
     config.captureApplicationLifecycleEvents = true;
-    config.sessionReplay = true;
+    config.sessionReplay = !kDebugMode;
     config.sessionReplayConfig.maskAllTexts = false;
     config.sessionReplayConfig.maskAllImages = false;
     config.sessionReplayConfig.throttleDelay = const Duration(
