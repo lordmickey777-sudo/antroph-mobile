@@ -2510,7 +2510,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     });
     try {
       await _sendTextStoryTurn(
-        'Give me three different story options for Beneath the Surface. Use numbered options with a title and one short teaser in the same line. Do not use quotation marks or subtitles.',
+        'Give me three different story options for ${widget.storyTitle}. Use numbered options with a title and one short teaser in the same line. Do not use quotation marks or subtitles.',
       );
     } finally {
       if (mounted) {
