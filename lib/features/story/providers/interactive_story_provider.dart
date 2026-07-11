@@ -127,7 +127,8 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         roomType: roomType,
       );
       if (_isDisposed) return;
-      state = InteractiveStoryState(session: session);
+      final normalizedSession = _normalizeSessionSnapshot(session);
+      state = InteractiveStoryState(session: normalizedSession);
       unawaited(_connectRoomSocket(session.sessionId));
       _scheduleWaitingRefresh();
     } on ApiError catch (e) {
@@ -171,7 +172,8 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         displayName: displayName,
       );
       if (_isDisposed) return;
-      state = InteractiveStoryState(session: session);
+      final normalizedSession = _normalizeSessionSnapshot(session);
+      state = InteractiveStoryState(session: normalizedSession);
       unawaited(_connectRoomSocket(session.sessionId));
       _scheduleWaitingRefresh();
     } on ApiError catch (e) {
@@ -196,7 +198,8 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         displayName: displayName,
       );
       if (_isDisposed) return;
-      state = InteractiveStoryState(session: session);
+      final normalizedSession = _normalizeSessionSnapshot(session);
+      state = InteractiveStoryState(session: normalizedSession);
       unawaited(_connectRoomSocket(session.sessionId));
       _scheduleWaitingRefresh();
     } on ApiError catch (e) {
@@ -216,7 +219,16 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       final repo = ref.read(storiesRepositoryProvider);
       final session = await repo.fetchInteractiveSession(sessionId);
       if (_isDisposed) return;
-      state = state.copyWith(session: session, isLoading: false, error: null);
+      if (state.session?.sessionId != sessionId) return;
+      if (_isOlderSessionSnapshot(session)) {
+        state = state.copyWith(isLoading: false, error: null);
+        return;
+      }
+      state = state.copyWith(
+        session: _normalizeSessionSnapshot(session),
+        isLoading: false,
+        error: null,
+      );
       _scheduleWaitingRefresh();
     } on ApiError catch (e) {
       if (_isDisposed) return;
@@ -260,6 +272,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
             .fetchInteractiveSession(sessionId)
             .timeout(_recoveryRequestTimeout);
         if (_isDisposed) return;
+        canonicalSession = _normalizeSessionSnapshot(canonicalSession);
         state = state.copyWith(session: canonicalSession);
         _scheduleWaitingRefresh();
       } catch (_) {
@@ -280,7 +293,9 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
             .retryInteractiveQuizGeneration(sessionId)
             .timeout(_recoveryRequestTimeout);
         if (_isDisposed) return;
-        state = state.copyWith(session: retriedSession);
+        state = state.copyWith(
+          session: _normalizeSessionSnapshot(retriedSession),
+        );
       }
 
       if (_isDisposed) return;
@@ -299,7 +314,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
               .timeout(_recoveryRequestTimeout);
           if (_isDisposed) return;
           state = state.copyWith(
-            session: canonicalSession,
+            session: _normalizeSessionSnapshot(canonicalSession),
             isRetryingGeneration: false,
             error: null,
           );
@@ -335,7 +350,10 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       final repo = ref.read(storiesRepositoryProvider);
       final session = await repo.advanceInteractiveSession(sessionId);
       if (_isDisposed) return;
-      state = state.copyWith(session: session, isAdvancingQuestion: false);
+      state = state.copyWith(
+        session: _normalizeSessionSnapshot(session),
+        isAdvancingQuestion: false,
+      );
       _scheduleWaitingRefresh();
     } on ApiError catch (e) {
       if (_isDisposed) return;
@@ -392,18 +410,22 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
 
     try {
       final repo = ref.read(storiesRepositoryProvider);
+      final requestMetadata = inputType == 'option_select'
+          ? _guidedAspectExpectationMetadata(state.session)
+          : const <String, dynamic>{};
       final response = await repo.submitInteractiveInput(
         sessionId: sessionId,
         input: InteractiveInput(
           inputType: inputType,
           questionId: questionId,
           optionId: optionId,
+          metadata: requestMetadata,
           idempotencyKey: key,
         ),
       );
       if (_isDisposed) return;
       final current = state.session;
-      if (current == null) return;
+      if (current == null || current.sessionId != sessionId) return;
       final mergedSession = _mergeResponseIntoSession(current, response);
       final streamedText = state.streamingAssistantText?.trim();
       state = state.copyWith(
@@ -453,7 +475,11 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     }
   }
 
-  Future<void> submitText(String text) async {
+  Future<void> submitText(
+    String text, {
+    String inputType = 'text',
+    Map<String, dynamic> metadata = const <String, dynamic>{},
+  }) async {
     final sessionId = state.session?.sessionId;
     final trimmed = text.trim();
     if (sessionId == null || sessionId.isEmpty || trimmed.isEmpty) return;
@@ -474,17 +500,22 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
 
     try {
       final repo = ref.read(storiesRepositoryProvider);
+      final requestMetadata = <String, dynamic>{
+        ..._guidedAspectExpectationMetadata(state.session),
+        ...metadata,
+      };
       final response = await repo.submitInteractiveInput(
         sessionId: sessionId,
         input: InteractiveInput(
-          inputType: 'text',
+          inputType: inputType,
           text: trimmed,
+          metadata: requestMetadata,
           idempotencyKey: key,
         ),
       );
       if (_isDisposed) return;
       final current = state.session;
-      if (current == null) return;
+      if (current == null || current.sessionId != sessionId) return;
       final mergedSession = _mergeResponseIntoSession(current, response);
       final streamedText = state.streamingAssistantText?.trim();
       state = state.copyWith(
@@ -678,11 +709,13 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         final session = InteractiveSessionState.fromJson(
           snapshot.cast<String, dynamic>(),
         );
+        if (_isOlderSessionSnapshot(session)) return;
+        final normalizedSession = _normalizeSessionSnapshot(session);
         state = state.copyWith(
-          session: session,
+          session: normalizedSession,
           isRetryingGeneration:
               state.isRetryingGeneration &&
-              _shouldKeepGenerationRetryOverlay(session),
+              _shouldKeepGenerationRetryOverlay(normalizedSession),
         );
         _scheduleWaitingRefresh();
       }
@@ -710,6 +743,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       return;
     }
     final seq = (event['seq'] as num?)?.toInt() ?? current.lastSeq;
+    if (seq <= current.lastSeq) return;
     final nextState = Map<String, dynamic>.from(current.interactiveState);
     InteractiveTurn? nextTurn = current.currentTurn;
     String? recentStreamedAssistantText;
@@ -722,9 +756,61 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
           ..['topic_prompt'] = payload['prompt']
           ..['topic_prompt_status'] = 'ready';
         break;
+      case 'topic_candidate_selected':
+        _consumePendingTopicSelection(payload);
+        _mergeTopicSelectionState(nextState, payload);
+        nextState
+          ..['template'] = 'quiz'
+          ..['phase'] = 'topic_selection'
+          ..['topic_selection_stage'] =
+              payload['topic_selection_stage'] ?? 'aspect';
+        _markTopicAspectGenerationPending(nextState, payload);
+        break;
+      case 'topic_aspect_selected':
+        _consumePendingTopicSelection(payload);
+        _mergeTopicSelectionState(nextState, payload);
+        nextState
+          ..['template'] = 'quiz'
+          ..['phase'] = payload['phase'] ?? 'topic_selection'
+          ..['topic_selection_stage'] =
+              payload['topic_selection_stage'] ??
+              nextState['topic_selection_stage'] ??
+              'aspect';
+        final aspectAction = (payload['action'] ?? payload['option_id'])
+            ?.toString()
+            .trim()
+            .toLowerCase();
+        if (aspectAction == 'continue_with_topic') {
+          nextState
+            ..['topic_path_actions_expanded'] = true
+            ..['allow_custom_aspect'] = false;
+        } else if (aspectAction == 'choose_aspect') {
+          nextState
+            ..['topic_path_actions_expanded'] = false
+            ..['allow_custom_aspect'] = true;
+        } else {
+          _markTopicAspectGenerationPending(nextState, payload);
+        }
+        break;
       case 'topic_selected':
-        _consumePendingTextByValue(payload['topic'] as String?);
-        nextState['selected_topic'] = payload['topic'];
+        _consumePendingTopicSelection(payload);
+        _mergeTopicSelectionState(nextState, payload);
+        nextState['selected_topic'] =
+            payload['topic'] ?? nextState['selected_topic'];
+        final topicAction = (payload['action'] ?? payload['option_id'])
+            ?.toString()
+            .trim()
+            .toLowerCase();
+        if (topicAction == 'quiz' || topicAction == 'chat') {
+          nextState['phase'] = topicAction == 'quiz'
+              ? 'timer_selection'
+              : 'discussion';
+          final topicPath = payload['topic_path'];
+          if (topicPath is List) {
+            nextState['selected_topic_path'] = topicPath;
+          }
+          _clearTopicAspectWorkingState(nextState);
+        }
         break;
       case 'solo_user_message':
         _consumePendingTextByValue(payload['text'] as String?);
@@ -850,11 +936,13 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         )
         ? current.events
         : [...current.events, sessionEvent];
-    final nextSession = current.copyWith(
-      interactiveState: nextState,
-      events: nextEvents,
-      currentTurn: nextTurn,
-      lastSeq: seq > current.lastSeq ? seq : current.lastSeq,
+    final nextSession = _normalizeSessionSnapshot(
+      current.copyWith(
+        interactiveState: nextState,
+        events: nextEvents,
+        currentTurn: nextTurn,
+        lastSeq: seq > current.lastSeq ? seq : current.lastSeq,
+      ),
     );
     state = state.copyWith(
       session: nextSession,
@@ -886,6 +974,10 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     final phase = session.interactiveState['phase'] as String?;
     final topicPromptStatus =
         session.interactiveState['topic_prompt_status'] as String?;
+    final topicSelectionStage =
+        session.interactiveState['topic_selection_stage'] as String?;
+    final topicAspectStatus =
+        session.interactiveState['topic_aspect_status'] as String?;
     final hasQuestion = session.interactiveState['question'] is Map;
     if (phase == 'question_active') {
       final expiresAt = _parseStateDate(session.interactiveState['expires_at']);
@@ -901,6 +993,10 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         phase == 'question_generation_started' ||
         phase == 'generation_failed' ||
         (phase == 'topic_selection' && topicPromptStatus == 'generating') ||
+        (phase == 'topic_selection' &&
+            topicSelectionStage == 'aspect' &&
+            (topicAspectStatus == 'generating' ||
+                topicAspectStatus == 'loading')) ||
         phase == 'finalizing_question' ||
         phase == 'showing_results' ||
         (!hasQuestion && session.currentTurn == null);
@@ -919,11 +1015,14 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       final repo = ref.read(storiesRepositoryProvider);
       final session = await repo.fetchInteractiveSession(sessionId);
       if (_isDisposed) return;
+      if (state.session?.sessionId != sessionId) return;
+      if (_isOlderSessionSnapshot(session)) return;
+      final normalizedSession = _normalizeSessionSnapshot(session);
       state = state.copyWith(
-        session: session,
+        session: normalizedSession,
         isRetryingGeneration:
             state.isRetryingGeneration &&
-            _shouldKeepGenerationRetryOverlay(session),
+            _shouldKeepGenerationRetryOverlay(normalizedSession),
       );
     } catch (_) {
       // Keep the current UI state and try again while it is still waiting.
@@ -1052,11 +1151,98 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       (_, InteractiveTurn incoming) => incoming,
       _ => currentTurn,
     };
-    return current.copyWith(
-      interactiveState: response.state,
-      events: nextEvents,
-      currentTurn: nextTurn,
-      lastSeq: responseSeq > current.lastSeq ? responseSeq : current.lastSeq,
+    return _normalizeSessionSnapshot(
+      current.copyWith(
+        interactiveState: responseSeq >= current.lastSeq
+            ? response.state
+            : current.interactiveState,
+        events: nextEvents,
+        currentTurn: nextTurn,
+        lastSeq: responseSeq > current.lastSeq ? responseSeq : current.lastSeq,
+      ),
+    );
+  }
+
+  bool _isOlderSessionSnapshot(InteractiveSessionState incoming) {
+    final current = state.session;
+    return current != null &&
+        current.sessionId == incoming.sessionId &&
+        incoming.lastSeq < current.lastSeq;
+  }
+
+  InteractiveSessionState _normalizeSessionSnapshot(
+    InteractiveSessionState session,
+  ) {
+    final interactiveState = session.interactiveState;
+    if (interactiveState['session_type'] != 'solo' ||
+        interactiveState['phase'] != 'topic_selection') {
+      return session;
+    }
+    final turn = _newestSoloModeTurn(session);
+    if (turn == null) return session;
+
+    final latestTopicPromptSeq = session.events
+        .where((event) => event.eventType == 'topic_selection_started')
+        .fold<int>(
+          0,
+          (latest, event) => event.seq > latest ? event.seq : latest,
+        );
+    if (turn.seq <= latestTopicPromptSeq) return session;
+
+    final normalizedState = <String, dynamic>{
+      ...interactiveState,
+      ...turn.statePatch,
+      'phase': 'mode_selection',
+    };
+    final selectedTopic = normalizedState['selected_topic']?.toString().trim();
+    if (selectedTopic == null || selectedTopic.isEmpty) {
+      final topicEvents =
+          session.events
+              .where(
+                (event) =>
+                    event.eventType == 'topic_selected' &&
+                    event.seq <= turn.seq,
+              )
+              .toList()
+            ..sort((left, right) => right.seq.compareTo(left.seq));
+      for (final event in topicEvents) {
+        final topic = event.payload['topic']?.toString().trim();
+        if (topic != null && topic.isNotEmpty) {
+          normalizedState['selected_topic'] = topic;
+          break;
+        }
+      }
+    }
+    return session.copyWith(
+      interactiveState: normalizedState,
+      currentTurn: turn,
+      lastSeq: turn.seq > session.lastSeq ? turn.seq : session.lastSeq,
+    );
+  }
+
+  InteractiveTurn? _newestSoloModeTurn(InteractiveSessionState session) {
+    InteractiveTurn? newest;
+    final currentTurn = session.currentTurn;
+    if (currentTurn != null && _isSoloModeTurn(currentTurn)) {
+      newest = currentTurn;
+    }
+    for (final event in session.events) {
+      if (event.eventType != 'interactive_turn') continue;
+      try {
+        final turn = InteractiveTurn.fromJson(event.payload);
+        if (!_isSoloModeTurn(turn)) continue;
+        if (newest == null || turn.seq > newest.seq) newest = turn;
+      } catch (_) {
+        // Ignore malformed historical turns and keep the canonical snapshot.
+      }
+    }
+    return newest;
+  }
+
+  bool _isSoloModeTurn(InteractiveTurn turn) {
+    if (turn.statePatch['phase'] == 'mode_selection') return true;
+    return turn.blocks.whereType<InteractiveChoiceGroupBlock>().any(
+      (block) => block.metadata['choice_kind'] == 'solo_quiz_mode',
     );
   }
 
@@ -1090,6 +1276,132 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     if (index == -1) return;
     nextMessages.removeAt(index);
     state = state.copyWith(pendingTextMessages: nextMessages);
+  }
+
+  void _consumePendingTopicSelection(Map<String, dynamic> payload) {
+    for (final key in const [
+      'option_id',
+      'candidate_id',
+      'aspect_id',
+      'action_id',
+      'selection_id',
+    ]) {
+      _consumePendingOptionByValue(payload[key]?.toString());
+    }
+    for (final key in const ['topic', 'aspect', 'text']) {
+      final value = payload[key]?.toString();
+      _consumePendingOptionByValue(value);
+      _consumePendingTextByValue(value);
+    }
+  }
+
+  void _consumePendingOptionByValue(String? rawValue) {
+    final normalized = _normalizePendingText(rawValue);
+    if (normalized.isEmpty || state.pendingInputKeys.isEmpty) return;
+    final suffix = '-option_select-$normalized';
+    final nextKeys = {...state.pendingInputKeys}
+      ..removeWhere((key) => key.trim().toLowerCase().endsWith(suffix));
+    if (nextKeys.length == state.pendingInputKeys.length) return;
+    state = state.copyWith(pendingInputKeys: nextKeys);
+  }
+
+  void _mergeTopicSelectionState(
+    Map<String, dynamic> target,
+    Map<String, dynamic> payload,
+  ) {
+    final sources = <Map<String, dynamic>>[];
+    final responseState = payload['state'];
+    if (responseState is Map) {
+      sources.add(responseState.cast<String, dynamic>());
+    }
+    final statePatch = payload['state_patch'];
+    if (statePatch is Map) {
+      sources.add(statePatch.cast<String, dynamic>());
+    }
+    sources.add(payload);
+
+    for (final source in sources) {
+      for (final key in const [
+        'phase',
+        'topic_selection_stage',
+        'topic_path',
+        'pending_topic_aspects',
+        'topic_aspect_status',
+        'topic_drilldown_depth',
+        'topic_aspect_revision',
+        'allow_custom_aspect',
+        'topic_path_actions_expanded',
+        'selected_topic',
+        'selected_topic_path',
+        'topic_candidate',
+        'selected_topic_candidate',
+        'selected_topic_aspect',
+        'topic_prompt',
+        'topic_prompt_status',
+        'topic_suggestions',
+        'pending_topic_options',
+      ]) {
+        if (source.containsKey(key)) target[key] = source[key];
+      }
+    }
+  }
+
+  void _clearTopicAspectWorkingState(Map<String, dynamic> target) {
+    for (final key in const [
+      'topic_selection_stage',
+      'topic_path',
+      'topic_drilldown_depth',
+      'topic_aspect_revision',
+      'topic_aspect_status',
+      'allow_custom_aspect',
+      'topic_path_actions_expanded',
+      'pending_topic_aspects',
+      'pending_topic_options',
+      'pending_topic_fragment',
+      'pending_topic_clarification_attempts',
+    ]) {
+      target.remove(key);
+    }
+  }
+
+  void _markTopicAspectGenerationPending(
+    Map<String, dynamic> target,
+    Map<String, dynamic> payload,
+  ) {
+    final depth = (payload['depth'] as num?)?.toInt();
+    if (depth != null) target['topic_drilldown_depth'] = depth;
+    if (!payload.containsKey('topic_aspect_status')) {
+      target['topic_aspect_status'] = 'generating';
+    }
+    if (!payload.containsKey('pending_topic_aspects')) {
+      target['pending_topic_aspects'] = <dynamic>[];
+    }
+  }
+
+  Map<String, dynamic> _guidedAspectExpectationMetadata(
+    InteractiveSessionState? session,
+  ) {
+    final interactiveState = session?.interactiveState;
+    if (interactiveState == null ||
+        interactiveState['session_type'] != 'solo' ||
+        interactiveState['phase'] != 'topic_selection' ||
+        interactiveState['topic_selection_stage'] != 'aspect') {
+      return const <String, dynamic>{};
+    }
+    final revision = interactiveState['topic_aspect_revision']
+        ?.toString()
+        .trim();
+    final path = ((interactiveState['topic_path'] as List?) ?? const [])
+        .map((part) => part.toString().trim())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (revision == null || revision.isEmpty || path.isEmpty) {
+      return const <String, dynamic>{};
+    }
+    return <String, dynamic>{
+      'expected_revision': revision,
+      'expected_topic_path': path,
+    };
   }
 
   String _normalizePendingText(String? value) {

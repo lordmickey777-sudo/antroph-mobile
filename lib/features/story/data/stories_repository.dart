@@ -377,7 +377,12 @@ class StoriesRepository {
         data: input.toJson(),
         options: Options(
           receiveTimeout: const Duration(seconds: 60),
-          validateStatus: (status) => (status ?? 0) < 500,
+          // Keep 409 available for the stale-turn message below, while
+          // allowing authentication failures to reach Dio's refresh/retry
+          // interceptor instead of being parsed as empty quiz responses.
+          validateStatus: (status) =>
+              status != null &&
+              ((status >= 200 && status < 300) || status == 409),
         ),
       );
       if (res.statusCode == 409) {

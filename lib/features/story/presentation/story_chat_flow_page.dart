@@ -381,6 +381,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
           ),
         ),
         child: Scaffold(
+          resizeToAvoidBottomInset: false,
           backgroundColor: Colors.transparent,
           appBar: AppBar(
             backgroundColor: Colors.transparent,
@@ -492,7 +493,19 @@ class _InteractiveStoryTab extends ConsumerStatefulWidget {
 
 class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   final _textController = TextEditingController();
+  final _textFocusNode = FocusNode();
+  final _customTopicCallLink = LayerLink();
   bool _canSend = false;
+  bool _customTopicEntryEnabled = false;
+  String? _customTopicSessionId;
+  bool _customAspectEntryEnabled = false;
+  String? _customAspectRevision;
+  List<String> _customAspectPath = const <String>[];
+  String? _soloViewSessionId;
+  String? _soloViewModeOverride;
+  bool _showQuizTopicDecision = false;
+  bool _resumeQuizAfterNewTopic = false;
+  bool _isRestartingForNewTopic = false;
   bool _started = false;
   String? _lastGenerationFailureKey;
   String? _stickyGenerationError;
@@ -510,6 +523,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   @override
   void dispose() {
     _textController.dispose();
+    _textFocusNode.dispose();
     super.dispose();
   }
 
@@ -541,21 +555,373 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   }
 
   void _sendText() {
+    final session = ref.read(interactiveStoryProvider).session;
+    if (!_shouldShowTextComposer(session)) return;
     final text = _textController.text.trim();
     if (text.isEmpty) return;
-    _textController.clear();
-    final session = ref.read(interactiveStoryProvider).session;
     final state = session?.interactiveState ?? const <String, dynamic>{};
+    final isCustomTopicSubmission =
+        state['session_type'] == 'solo' &&
+        state['phase'] == 'topic_selection' &&
+        _customTopicEntryEnabled;
+    final customAspectMetadata =
+        isCustomTopicSubmission && _customAspectEntryEnabled
+        ? _customAspectExpectationMetadata()
+        : const <String, dynamic>{};
+    _textController.clear();
+    if (isCustomTopicSubmission) _resetCustomTopicEntry();
     final isGroupQuizChat =
         state['template'] == 'quiz' &&
         state['session_type'] == 'group' &&
         state['phase'] == 'showing_results';
+    final isPostSetupSoloChat =
+        session != null &&
+        state['session_type'] == 'solo' &&
+        _hasCompletedSoloQuizSetup(session) &&
+        _shouldShowSoloModeSwitch(session) &&
+        _effectiveSoloViewMode(session) == 'chat';
     final notifier = ref.read(interactiveStoryProvider.notifier);
     unawaited(
       isGroupQuizChat
           ? notifier.submitPlayerChat(text)
-          : notifier.submitText(text),
+          : notifier.submitText(
+              text,
+              inputType: isPostSetupSoloChat ? 'solo_chat' : 'text',
+              metadata: customAspectMetadata,
+            ),
     );
+  }
+
+  bool _shouldShowTextComposer(InteractiveSessionState? session) {
+    if (session == null) return false;
+    if (!_isQuizSession(session)) return true;
+    final state = session.interactiveState;
+    final phase = (state['phase'] as String?) ?? '';
+    final sessionType = (state['session_type'] as String?) ?? '';
+    if (sessionType == 'group' && phase == 'showing_results') return true;
+    if (sessionType != 'solo') return false;
+    if (_hasCompletedSoloQuizSetup(session) &&
+        _shouldShowSoloModeSwitch(session) &&
+        _effectiveSoloViewMode(session) == 'chat' &&
+        !_isShowingQuizTopicDecision(session)) {
+      return true;
+    }
+    if (phase == 'discussion') return true;
+    return phase == 'topic_selection' &&
+        _customTopicEntryEnabled &&
+        _customTopicSessionId == session.sessionId;
+  }
+
+  bool _isAspectSelectionStage(InteractiveSessionState? session) {
+    final state = session?.interactiveState;
+    return state?['session_type'] == 'solo' &&
+        state?['phase'] == 'topic_selection' &&
+        state?['topic_selection_stage'] == 'aspect';
+  }
+
+  String _effectiveSoloViewMode(InteractiveSessionState? session) {
+    if (session == null) return 'quiz';
+    if (_soloViewSessionId == session.sessionId &&
+        _soloViewModeOverride != null) {
+      return _soloViewModeOverride!;
+    }
+    return session.interactiveState['phase'] == 'discussion' ? 'chat' : 'quiz';
+  }
+
+  bool _hasCompletedSoloQuizSetup(InteractiveSessionState? session) {
+    if (session == null || session.interactiveState['session_type'] != 'solo') {
+      return false;
+    }
+    if (session.interactiveState['quiz_setup_complete'] == true) return true;
+    final selectedTopic = session.interactiveState['selected_topic']
+        ?.toString()
+        .trim();
+    final phase = session.interactiveState['phase']?.toString() ?? '';
+    return selectedTopic?.isNotEmpty == true &&
+        const {
+          'generating_question',
+          'question_generation_started',
+          'generation_failed',
+          'question_active',
+          'finalizing_question',
+          'showing_results',
+          'post_question_prompt',
+        }.contains(phase);
+  }
+
+  bool _shouldShowSoloModeSwitch(InteractiveSessionState? session) {
+    if (session == null || session.interactiveState['session_type'] != 'solo') {
+      return false;
+    }
+    final selectedTopic = session.interactiveState['selected_topic']
+        ?.toString()
+        .trim();
+    if (selectedTopic == null || selectedTopic.isEmpty) return false;
+    final phase = session.interactiveState['phase']?.toString() ?? '';
+    if (phase == 'discussion') return true;
+    return _hasCompletedSoloQuizSetup(session) &&
+        !const {
+          'topic_selection',
+          'mode_selection',
+          'timer_selection',
+          'completed',
+          'complete',
+        }.contains(phase);
+  }
+
+  bool _isShowingQuizTopicDecision(InteractiveSessionState? session) {
+    return session != null &&
+        _soloViewSessionId == session.sessionId &&
+        _showQuizTopicDecision;
+  }
+
+  void _handleSoloChoice(String optionId) {
+    final notifier = ref.read(interactiveStoryProvider.notifier);
+    final session = ref.read(interactiveStoryProvider).session;
+    if (session == null || session.interactiveState['session_type'] != 'solo') {
+      unawaited(
+        notifier.submitOption(optionId: optionId, inputType: 'option_select'),
+      );
+      return;
+    }
+    final normalized = optionId.trim().toLowerCase();
+    final phase = session.interactiveState['phase']?.toString() ?? '';
+
+    if (phase == 'topic_selection' &&
+        _customTopicEntryEnabled &&
+        _customAspectEntryEnabled &&
+        normalized != 'custom_aspect') {
+      return;
+    }
+
+    if (phase == 'topic_selection' &&
+        (normalized == 'custom_topic' || normalized == 'custom_aspect')) {
+      _enableCustomTopicEntry();
+      return;
+    }
+
+    if (_isShowingQuizTopicDecision(session)) {
+      if (normalized == 'continue_topic') {
+        setState(() {
+          _soloViewSessionId = session.sessionId;
+          _soloViewModeOverride = 'quiz';
+          _showQuizTopicDecision = false;
+        });
+        if (phase == 'post_question_prompt') {
+          unawaited(
+            notifier.submitOption(
+              optionId: 'continue_topic',
+              inputType: 'option_select',
+            ),
+          );
+        } else if (phase == 'discussion' ||
+            !_hasCompletedSoloQuizSetup(session)) {
+          unawaited(
+            notifier.submitOption(optionId: 'quiz', inputType: 'option_select'),
+          );
+        }
+        return;
+      }
+      if (normalized == 'new_topic') {
+        unawaited(_restartForNewQuizTopic());
+        return;
+      }
+    }
+
+    if (_shouldShowSoloModeSwitch(session)) {
+      if (normalized == 'chat') {
+        setState(() {
+          _soloViewSessionId = session.sessionId;
+          _soloViewModeOverride = 'chat';
+          _showQuizTopicDecision = false;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _textFocusNode.requestFocus();
+        });
+        return;
+      }
+      if (normalized == 'quiz') {
+        if (_effectiveSoloViewMode(session) == 'chat') {
+          if (_hasCompletedSoloQuizSetup(session)) {
+            _textFocusNode.unfocus();
+            setState(() {
+              _soloViewSessionId = session.sessionId;
+              _showQuizTopicDecision = true;
+            });
+          } else {
+            setState(() {
+              _soloViewSessionId = session.sessionId;
+              _soloViewModeOverride = 'quiz';
+            });
+            unawaited(
+              notifier.submitOption(
+                optionId: 'quiz',
+                inputType: 'option_select',
+              ),
+            );
+          }
+        } else if (phase == 'post_question_prompt') {
+          unawaited(
+            notifier.submitOption(
+              optionId: 'continue_topic',
+              inputType: 'option_select',
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    unawaited(
+      notifier.submitOption(optionId: optionId, inputType: 'option_select'),
+    );
+  }
+
+  Future<void> _restartForNewQuizTopic() async {
+    if (_isRestartingForNewTopic) return;
+    _textFocusNode.unfocus();
+    _resetCustomTopicEntry(clearText: true);
+    setState(() {
+      _isRestartingForNewTopic = true;
+      _resumeQuizAfterNewTopic = true;
+      _showQuizTopicDecision = false;
+      _soloViewSessionId = null;
+      _soloViewModeOverride = null;
+    });
+    await ref
+        .read(interactiveStoryProvider.notifier)
+        .restart(
+          storyId: widget.storyId,
+          interactionMode: widget.interactionMode,
+          sessionType: 'solo',
+        );
+    if (mounted) setState(() => _isRestartingForNewTopic = false);
+  }
+
+  void _syncSoloViewState(InteractiveStoryState next) {
+    final session = next.session;
+    if (session == null) return;
+    final phase = session.interactiveState['phase']?.toString() ?? '';
+    if (_soloViewSessionId != null && _soloViewSessionId != session.sessionId) {
+      setState(() {
+        _soloViewSessionId = null;
+        _soloViewModeOverride = null;
+        _showQuizTopicDecision = false;
+      });
+    }
+    if (_resumeQuizAfterNewTopic && phase == 'mode_selection') {
+      _resumeQuizAfterNewTopic = false;
+      unawaited(
+        ref
+            .read(interactiveStoryProvider.notifier)
+            .submitOption(optionId: 'quiz', inputType: 'option_select'),
+      );
+    } else if (_resumeQuizAfterNewTopic &&
+        phase == 'topic_selection' &&
+        session.interactiveState['topic_selection_stage'] == 'aspect') {
+      _resumeQuizAfterNewTopic = false;
+    }
+  }
+
+  void _enableCustomTopicEntry() {
+    final session = ref.read(interactiveStoryProvider).session;
+    if (session == null) return;
+    final state = session.interactiveState;
+    if (state['session_type'] != 'solo' ||
+        state['phase'] != 'topic_selection') {
+      return;
+    }
+    final isAspectEntry = state['topic_selection_stage'] == 'aspect';
+    setState(() {
+      _customTopicEntryEnabled = true;
+      _customTopicSessionId = session.sessionId;
+      _customAspectEntryEnabled = isAspectEntry;
+      _customAspectRevision = isAspectEntry
+          ? state['topic_aspect_revision']?.toString().trim()
+          : null;
+      _customAspectPath = isAspectEntry
+          ? _topicPathSnapshot(state)
+          : const <String>[];
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          _shouldShowTextComposer(ref.read(interactiveStoryProvider).session)) {
+        _textFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void _resetCustomTopicEntry({bool clearText = false}) {
+    if (clearText) _textController.clear();
+    _textFocusNode.unfocus();
+    if (!_customTopicEntryEnabled &&
+        _customTopicSessionId == null &&
+        !_customAspectEntryEnabled &&
+        _customAspectRevision == null &&
+        _customAspectPath.isEmpty) {
+      return;
+    }
+    setState(() {
+      _customTopicEntryEnabled = false;
+      _customTopicSessionId = null;
+      _customAspectEntryEnabled = false;
+      _customAspectRevision = null;
+      _customAspectPath = const <String>[];
+    });
+  }
+
+  void _submitSuggestedTopic(String topic) {
+    _resetCustomTopicEntry(clearText: true);
+    unawaited(ref.read(interactiveStoryProvider.notifier).submitText(topic));
+  }
+
+  void _syncCustomTopicEntry(InteractiveStoryState next) {
+    if (!_customTopicEntryEnabled) return;
+    final session = next.session;
+    var remainsInTopicSelection =
+        session?.sessionId == _customTopicSessionId &&
+        session?.interactiveState['session_type'] == 'solo' &&
+        session?.interactiveState['phase'] == 'topic_selection';
+    if (remainsInTopicSelection && _customAspectEntryEnabled) {
+      final interactiveState = session!.interactiveState;
+      remainsInTopicSelection =
+          interactiveState['topic_selection_stage'] == 'aspect' &&
+          interactiveState['topic_aspect_revision']?.toString().trim() ==
+              _customAspectRevision &&
+          _sameTopicPath(
+            _topicPathSnapshot(interactiveState),
+            _customAspectPath,
+          );
+    }
+    if (!remainsInTopicSelection) {
+      _resetCustomTopicEntry(clearText: true);
+    }
+  }
+
+  Map<String, dynamic> _customAspectExpectationMetadata() {
+    final revision = _customAspectRevision?.trim();
+    if (revision == null || revision.isEmpty || _customAspectPath.isEmpty) {
+      return const <String, dynamic>{};
+    }
+    return <String, dynamic>{
+      'expected_revision': revision,
+      'expected_topic_path': [..._customAspectPath],
+    };
+  }
+
+  List<String> _topicPathSnapshot(Map<String, dynamic> interactiveState) {
+    return ((interactiveState['topic_path'] as List?) ?? const [])
+        .map((part) => part.toString().trim())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  bool _sameTopicPath(List<String> left, List<String> right) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index += 1) {
+      if (left[index] != right[index]) return false;
+    }
+    return true;
   }
 
   void _handleGenerationFailure(InteractiveStoryState next) {
@@ -600,6 +966,8 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
       next,
     ) {
       if (!mounted) return;
+      _syncCustomTopicEntry(next);
+      _syncSoloViewState(next);
       _handleGenerationFailure(next);
       final error = next.error;
       if (error != null &&
@@ -621,22 +989,102 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final session = state.session;
     final isQuizSession = _isQuizSession(session);
     final phase = (session?.interactiveState['phase'] as String?) ?? '';
-    final sessionType =
-        (session?.interactiveState['session_type'] as String?) ?? '';
-    final isSoloQuizTextPhase =
-        isQuizSession &&
-        sessionType == 'solo' &&
-        {
-          'topic_selection',
-          'mode_selection',
-          'discussion',
-          'timer_selection',
-          'post_question_prompt',
-        }.contains(phase);
+    final isSoloQuizSession =
+        isQuizSession && session?.interactiveState['session_type'] == 'solo';
     final isGroupQuizSession =
         isQuizSession && session?.interactiveState['session_type'] == 'group';
-    final isGroupQuizChatPhase =
-        isGroupQuizSession && phase == 'showing_results';
+    final soloViewMode = _effectiveSoloViewMode(session);
+    final showQuizTopicDecision = _isShowingQuizTopicDecision(session);
+    final showSoloModeSwitch =
+        _shouldShowSoloModeSwitch(session) && !showQuizTopicDecision;
+    final showTextComposer = _shouldShowTextComposer(session);
+    final isAspectSelectionStage = _isAspectSelectionStage(session);
+    final topicSuggestions = session?.interactiveState['topic_suggestions'];
+    final pendingTopicOptions =
+        session?.interactiveState['pending_topic_options'];
+    final pendingTopicAspects =
+        session?.interactiveState['pending_topic_aspects'];
+    final hasPendingBottomText = state.pendingInputKeys.any(
+      (key) => key.contains('-text-'),
+    );
+    final hasCustomTopicAnchor =
+        !hasPendingBottomText &&
+        (pendingTopicOptions is! List || pendingTopicOptions.isEmpty) &&
+        ((topicSuggestions as List?) ?? const <dynamic>[]).whereType<Map>().any(
+          (option) =>
+              option['id']?.toString().trim().toLowerCase() == 'custom_topic',
+        );
+    final hasPendingBottomChoice = state.pendingInputKeys.any(
+      (key) => key.contains('-option_select-'),
+    );
+    final activeChoiceTurn = _activeInteractiveTurn(session);
+    final topicAspectStatus = session?.interactiveState['topic_aspect_status']
+        ?.toString()
+        .trim()
+        .toLowerCase();
+    final topicAspectIsLoading =
+        topicAspectStatus == 'generating' || topicAspectStatus == 'loading';
+    final topicPathActionsExpanded =
+        session?.interactiveState['topic_path_actions_expanded'] == true;
+    final hasAspectPathActions =
+        isAspectSelectionStage &&
+        !topicAspectIsLoading &&
+        !hasPendingBottomText &&
+        !hasPendingBottomChoice &&
+        session != null &&
+        _turnHasMatchingGuidedChoiceKind(
+          activeChoiceTurn,
+          'solo_topic_path_actions',
+          session.interactiveState,
+        );
+    final hasAspectActionCallAnchor = hasAspectPathActions;
+    final allowCustomAspect = session?.interactiveState['allow_custom_aspect'];
+    final customAspectAllowed = topicAspectStatus == 'max_depth'
+        ? allowCustomAspect == true
+        : allowCustomAspect != false;
+    final hasCustomAspectCallAnchor =
+        isAspectSelectionStage &&
+        !topicAspectIsLoading &&
+        !hasPendingBottomText &&
+        !hasAspectActionCallAnchor &&
+        !hasPendingBottomChoice &&
+        !topicPathActionsExpanded &&
+        customAspectAllowed &&
+        (topicAspectStatus == 'failed' ||
+            topicAspectStatus == 'max_depth' ||
+            (session != null &&
+                _turnHasMatchingGuidedChoiceKind(
+                  activeChoiceTurn,
+                  'solo_topic_aspect',
+                  session.interactiveState,
+                )) ||
+            (topicAspectStatus == 'ready' &&
+                pendingTopicAspects is List &&
+                pendingTopicAspects.isNotEmpty));
+    final hasModeChoiceAnchor =
+        phase == 'mode_selection' &&
+        !hasPendingBottomChoice &&
+        _hasSoloChoiceKind(session, 'solo_quiz_mode');
+    final hasTimerChoiceAnchor =
+        phase == 'timer_selection' &&
+        !hasPendingBottomChoice &&
+        isSoloQuizSession;
+    final hasPersistentModeAnchor =
+        showSoloModeSwitch && !hasPendingBottomChoice;
+    final hasQuizTopicDecisionAnchor =
+        showQuizTopicDecision && !hasPendingBottomChoice;
+    final floatSoloChoiceCall =
+        isSoloQuizSession &&
+        !showTextComposer &&
+        ((phase == 'topic_selection' &&
+                (isAspectSelectionStage
+                    ? (hasAspectActionCallAnchor || hasCustomAspectCallAnchor)
+                    : hasCustomTopicAnchor)) ||
+            hasModeChoiceAnchor ||
+            hasTimerChoiceAnchor ||
+            hasPersistentModeAnchor ||
+            hasQuizTopicDecisionAnchor);
+    final canSubmitText = showTextComposer && _canSend;
     final canRetryQuestionGeneration = _canRetryQuizGeneration(
       session,
       currentUserId,
@@ -645,6 +1093,8 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final showQuestionGenerationOverlay =
         isQuizSession &&
         session != null &&
+        soloViewMode != 'chat' &&
+        !showQuizTopicDecision &&
         (questionGenerationFailed ||
             state.isGenerationTakingLong ||
             state.isRetryingGeneration);
@@ -689,6 +1139,10 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                         streamingAssistantText: state.streamingAssistantText,
                         recentStreamedAssistantText:
                             state.recentStreamedAssistantText,
+                        soloViewMode: soloViewMode,
+                        showSoloModeSwitch: showSoloModeSwitch,
+                        showQuizTopicDecision: showQuizTopicDecision,
+                        alignSoloOptionsRight: !showTextComposer,
                         isAdvancingQuestion: state.isAdvancingQuestion,
                         onRetryGeneration: () => unawaited(
                           notifier.recoverGeneration(
@@ -704,12 +1158,15 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                           ),
                         ),
                         onLeave: () => unawaited(widget.onLeave()),
-                        onChoice: (optionId) => unawaited(
-                          notifier.submitOption(
-                            optionId: optionId,
-                            inputType: 'option_select',
-                          ),
-                        ),
+                        onChoice: _handleSoloChoice,
+                        onTopicSuggestion: _submitSuggestedTopic,
+                        onCustomTopicRequested: _enableCustomTopicEntry,
+                        hideCustomTopicSuggestion:
+                            _customTopicEntryEnabled &&
+                            _customTopicSessionId == session.sessionId,
+                        customTopicCallLink: floatSoloChoiceCall
+                            ? _customTopicCallLink
+                            : null,
                         onQuizAnswer: (optionId, questionId) => unawaited(
                           notifier.submitOption(
                             optionId: optionId,
@@ -720,8 +1177,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                       ),
                     ),
             ),
-            if (session != null &&
-                (!isQuizSession || isSoloQuizTextPhase || isGroupQuizChatPhase))
+            if (showTextComposer)
               AnimatedPadding(
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeOut,
@@ -739,7 +1195,9 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                             borderRadius: BorderRadius.circular(28),
                           ),
                           child: TextField(
+                            key: const ValueKey('solo-topic-text-field'),
                             controller: _textController,
+                            focusNode: _textFocusNode,
                             maxLines: 4,
                             minLines: 1,
                             textCapitalization: TextCapitalization.sentences,
@@ -750,15 +1208,13 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                               height: 1.35,
                             ),
                             decoration: InputDecoration(
-                              hintText: switch (phase) {
-                                'topic_selection' => 'Topic or category',
-                                'mode_selection' =>
-                                  'Discuss first or quiz now?',
-                                'timer_selection' => 'Timed or untimed?',
-                                'post_question_prompt' => 'Reply here',
-                                'showing_results' => 'Message the room',
-                                _ => 'Message',
-                              },
+                              hintText: phase == 'topic_selection'
+                                  ? isAspectSelectionStage
+                                        ? 'Type your own aspect'
+                                        : 'Type your own topic'
+                                  : phase == 'showing_results'
+                                  ? 'Message the room'
+                                  : 'Message',
                               hintStyle: TextStyle(
                                 color: mutedText,
                                 fontSize: 16,
@@ -780,33 +1236,47 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                       _CircleIconButton(
                         icon: CupertinoIcons.paperplane_fill,
                         tooltip: 'Send',
-                        background: _canSend
+                        background: canSubmitText
                             ? (isDark ? Colors.white : Colors.black)
                             : mutedSurface,
-                        foreground: _canSend
+                        foreground: canSubmitText
                             ? (isDark ? Colors.black : Colors.white)
                             : mutedText,
-                        onTap: _canSend ? _sendText : () {},
+                        onTap: canSubmitText ? _sendText : () {},
                       ),
-                      const SizedBox(width: 8),
-                      _CircleIconButton(
-                        icon: Icons.call_rounded,
-                        tooltip: 'Voice',
-                        background: const Color(0xFF22C55E),
-                        foreground: Colors.white,
-                        onTap: widget.onCall,
-                      ),
+                      if (!floatSoloChoiceCall) ...[
+                        const SizedBox(width: 8),
+                        _CircleIconButton(
+                          icon: Icons.call_rounded,
+                          tooltip: 'Voice',
+                          background: const Color(0xFF22C55E),
+                          foreground: Colors.white,
+                          onTap: widget.onCall,
+                        ),
+                      ],
                     ],
                   ),
                 ),
               )
-            else if (session != null)
+            else if (session != null && !floatSoloChoiceCall)
               _QuizGameBottomBar(
                 onCall: widget.onCall,
                 disabled: disableQuizGameControls,
+                showMessagePlaceholder: !isSoloQuizSession,
               ),
           ],
         ),
+        if (floatSoloChoiceCall)
+          CompositedTransformFollower(
+            link: _customTopicCallLink,
+            showWhenUnlinked: false,
+            targetAnchor: Alignment.centerLeft,
+            followerAnchor: Alignment.centerLeft,
+            child: _QuizCallButton(
+              key: const ValueKey('solo-topic-floating-call'),
+              onTap: widget.onCall,
+            ),
+          ),
         if (isGroupQuizSession && session != null)
           Positioned(
             top: 0,
@@ -1306,10 +1776,15 @@ class _LeavingGameDialog extends StatelessWidget {
 }
 
 class _QuizGameBottomBar extends StatelessWidget {
-  const _QuizGameBottomBar({required this.onCall, this.disabled = false});
+  const _QuizGameBottomBar({
+    required this.onCall,
+    this.disabled = false,
+    this.showMessagePlaceholder = true,
+  });
 
   final VoidCallback onCall;
   final bool disabled;
+  final bool showMessagePlaceholder;
 
   @override
   Widget build(BuildContext context) {
@@ -1322,82 +1797,183 @@ class _QuizGameBottomBar extends StatelessWidget {
         child: Opacity(
           opacity: disabled ? 0.72 : 1,
           child: Row(
+            mainAxisAlignment: showMessagePlaceholder
+                ? MainAxisAlignment.start
+                : MainAxisAlignment.end,
             children: [
-              Expanded(
-                child: Container(
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: const Color(0xF0131415),
-                    borderRadius: BorderRadius.circular(999),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.20),
-                        blurRadius: 18,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.only(left: 16, right: 8),
-                  child: Row(
-                    children: [
-                      Text(
-                        'Message',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.42),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+              if (showMessagePlaceholder) ...[
+                Expanded(
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: const Color(0xF0131415),
+                      borderRadius: BorderRadius.circular(999),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.20),
+                          blurRadius: 18,
+                          offset: const Offset(0, 6),
                         ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : Colors.white.withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
+                      ],
+                    ),
+                    padding: const EdgeInsets.only(left: 16, right: 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Message',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.42),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                        child: const Icon(
-                          CupertinoIcons.paperplane_fill,
-                          color: Colors.white,
-                          size: 18,
+                        const Spacer(),
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.white.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            CupertinoIcons.paperplane_fill,
+                            color: Colors.white,
+                            size: 18,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              GestureDetector(
-                onTap: onCall,
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF24D11F),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.18),
-                        blurRadius: 14,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.call_rounded,
-                    color: Colors.white,
-                    size: 25,
-                  ),
-                ),
-              ),
+                const SizedBox(width: 10),
+              ],
+              _QuizCallButton(onTap: onCall),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+class _QuizCallButton extends StatelessWidget {
+  const _QuizCallButton({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: const Color(0xFF24D11F),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: const Icon(Icons.call_rounded, color: Colors.white, size: 25),
+      ),
+    );
+  }
+}
+
+bool _hasSoloChoiceKind(InteractiveSessionState? session, String choiceKind) {
+  if (_turnHasSoloChoiceKind(session?.currentTurn, choiceKind)) return true;
+  if (session == null) return false;
+  for (final event in session.events.reversed) {
+    if (event.eventType != 'interactive_turn') continue;
+    if (_turnHasSoloChoiceKind(
+      InteractiveTurn.fromJson(event.payload),
+      choiceKind,
+    )) {
+      return true;
+    }
+  }
+  return false;
+}
+
+InteractiveTurn? _activeInteractiveTurn(InteractiveSessionState? session) {
+  if (session == null) return null;
+  final currentTurn = session.currentTurn;
+  if (currentTurn != null) return currentTurn;
+  StorySessionEvent? newestEvent;
+  for (final event in session.events) {
+    if (event.eventType != 'interactive_turn') continue;
+    if (newestEvent == null || event.seq > newestEvent.seq) {
+      newestEvent = event;
+    }
+  }
+  return newestEvent == null
+      ? null
+      : InteractiveTurn.fromJson(newestEvent.payload);
+}
+
+bool _turnHasSoloChoiceKind(InteractiveTurn? turn, String choiceKind) {
+  if (turn == null) return false;
+  return turn.blocks.whereType<InteractiveChoiceGroupBlock>().any(
+    (block) => block.metadata['choice_kind'] == choiceKind,
+  );
+}
+
+bool _turnHasMatchingGuidedChoiceKind(
+  InteractiveTurn? turn,
+  String choiceKind,
+  Map<String, dynamic> interactiveState,
+) {
+  if (turn == null) return false;
+  return turn.blocks.whereType<InteractiveChoiceGroupBlock>().any((block) {
+    if (block.metadata['choice_kind'] != choiceKind) return false;
+    final stateRevision = interactiveState['topic_aspect_revision']
+        ?.toString()
+        .trim();
+    final blockRevision = block.metadata['revision']?.toString().trim();
+    if (stateRevision != blockRevision) return false;
+
+    final stateDepth = (interactiveState['topic_drilldown_depth'] as num?)
+        ?.toInt();
+    final blockDepth = (block.metadata['depth'] as num?)?.toInt();
+    if (stateDepth != blockDepth) return false;
+
+    final statePath = _normalizedGuidedTopicPath(
+      interactiveState['topic_path'],
+    );
+    final blockPath = _normalizedGuidedTopicPath(block.metadata['topic_path']);
+    if (!_sameGuidedTopicPath(statePath, blockPath)) return false;
+
+    final stateActionsExpanded =
+        interactiveState['topic_path_actions_expanded'] == true;
+    final blockActionsExpanded =
+        block.metadata['topic_path_actions_expanded'] == true;
+    if (stateActionsExpanded != blockActionsExpanded) {
+      return false;
+    }
+    return true;
+  });
+}
+
+List<String> _normalizedGuidedTopicPath(dynamic raw) {
+  return ((raw as List?) ?? const <dynamic>[])
+      .map((part) => part.toString().trim())
+      .where((part) => part.isNotEmpty)
+      .toList(growable: false);
+}
+
+bool _sameGuidedTopicPath(List<String> left, List<String> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index += 1) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
 }
 
 bool _isQuizSession(InteractiveSessionState? session) {

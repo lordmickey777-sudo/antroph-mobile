@@ -10,12 +10,20 @@ import 'group_quiz_results_view.dart';
 
 typedef QuizAnswerCallback = void Function(String optionId, String? questionId);
 
+const _aiChatSurfaceColor = Color(0xED101112);
+const _soloOptionMaxWidth = 250.0;
+const _soloOptionHorizontalPadding = 14.0;
+
 class InteractiveStoryRenderer extends StatelessWidget {
   const InteractiveStoryRenderer({
     super.key,
     required this.session,
     this.currentUserId,
     required this.onChoice,
+    this.onTopicSuggestion,
+    this.onCustomTopicRequested,
+    this.customTopicCallLink,
+    this.hideCustomTopicSuggestion = false,
     required this.onQuizAnswer,
     required this.onRetryGeneration,
     this.onAdvanceQuestion,
@@ -27,11 +35,19 @@ class InteractiveStoryRenderer extends StatelessWidget {
     this.localQuizSelections = const <String, String>{},
     this.streamingAssistantText,
     this.recentStreamedAssistantText,
+    this.soloViewMode,
+    this.showSoloModeSwitch = false,
+    this.showQuizTopicDecision = false,
+    this.alignSoloOptionsRight = true,
   });
 
   final InteractiveSessionState session;
   final String? currentUserId;
   final ValueChanged<String> onChoice;
+  final ValueChanged<String>? onTopicSuggestion;
+  final VoidCallback? onCustomTopicRequested;
+  final LayerLink? customTopicCallLink;
+  final bool hideCustomTopicSuggestion;
   final QuizAnswerCallback onQuizAnswer;
   final VoidCallback onRetryGeneration;
   final VoidCallback? onAdvanceQuestion;
@@ -43,6 +59,10 @@ class InteractiveStoryRenderer extends StatelessWidget {
   final Map<String, String> localQuizSelections;
   final String? streamingAssistantText;
   final String? recentStreamedAssistantText;
+  final String? soloViewMode;
+  final bool showSoloModeSwitch;
+  final bool showQuizTopicDecision;
+  final bool alignSoloOptionsRight;
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +80,15 @@ class InteractiveStoryRenderer extends StatelessWidget {
         localQuizSelections: localQuizSelections,
         streamingAssistantText: streamingAssistantText,
         recentStreamedAssistantText: recentStreamedAssistantText,
+        soloViewMode: soloViewMode,
+        showSoloModeSwitch: showSoloModeSwitch,
+        showQuizTopicDecision: showQuizTopicDecision,
+        alignSoloOptionsRight: alignSoloOptionsRight,
         onChoice: onChoice,
+        onTopicSuggestion: onTopicSuggestion,
+        onCustomTopicRequested: onCustomTopicRequested,
+        customTopicCallLink: customTopicCallLink,
+        hideCustomTopicSuggestion: hideCustomTopicSuggestion,
         onQuizAnswer: onQuizAnswer,
         onRetryGeneration: onRetryGeneration,
         onAdvanceQuestion: onAdvanceQuestion,
@@ -187,7 +215,15 @@ class _QuizTranscriptView extends StatefulWidget {
     required this.localQuizSelections,
     this.streamingAssistantText,
     this.recentStreamedAssistantText,
+    this.soloViewMode,
+    required this.showSoloModeSwitch,
+    required this.showQuizTopicDecision,
+    required this.alignSoloOptionsRight,
     required this.onChoice,
+    this.onTopicSuggestion,
+    this.onCustomTopicRequested,
+    this.customTopicCallLink,
+    required this.hideCustomTopicSuggestion,
     required this.onQuizAnswer,
     required this.onRetryGeneration,
     this.onAdvanceQuestion,
@@ -203,7 +239,15 @@ class _QuizTranscriptView extends StatefulWidget {
   final Map<String, String> localQuizSelections;
   final String? streamingAssistantText;
   final String? recentStreamedAssistantText;
+  final String? soloViewMode;
+  final bool showSoloModeSwitch;
+  final bool showQuizTopicDecision;
+  final bool alignSoloOptionsRight;
   final ValueChanged<String> onChoice;
+  final ValueChanged<String>? onTopicSuggestion;
+  final VoidCallback? onCustomTopicRequested;
+  final LayerLink? customTopicCallLink;
+  final bool hideCustomTopicSuggestion;
   final QuizAnswerCallback onQuizAnswer;
   final VoidCallback onRetryGeneration;
   final VoidCallback? onAdvanceQuestion;
@@ -281,6 +325,7 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
   @override
   Widget build(BuildContext context) {
     final session = widget.session;
+    final bottomSafeInset = MediaQuery.of(context).viewPadding.bottom;
     final items = _QuizTranscriptItem.build(
       session: session,
       currentUserId: widget.currentUserId,
@@ -290,41 +335,168 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
       streamingAssistantText: widget.streamingAssistantText,
       canAdvanceQuestion: _canCurrentUserAdvance(session, widget.currentUserId),
       isAdvancingQuestion: widget.isAdvancingQuestion,
+      showSoloModeSwitch: widget.showSoloModeSwitch,
+      showQuizTopicDecision: widget.showQuizTopicDecision,
+      soloViewMode: widget.soloViewMode,
     );
+    _QuizTranscriptItem? standardBottomSuggestion;
+    _QuizTranscriptItem? topicAspectSuggestion;
+    _QuizTranscriptItem? topicPathActions;
+    final hidePendingOptionSuggestions = widget.pendingKeys.any(
+      (key) => key.contains('-option_select-'),
+    );
+    final transcriptItems = <_QuizTranscriptItem>[];
+    for (final item in items) {
+      if (item.kind == _QuizTranscriptItemKind.topicSuggestions ||
+          item.kind == _QuizTranscriptItemKind.topicAspectSuggestions ||
+          item.kind == _QuizTranscriptItemKind.topicPathActionSuggestions ||
+          item.kind == _QuizTranscriptItemKind.topicAspectRetry ||
+          item.kind == _QuizTranscriptItemKind.modeSuggestions ||
+          item.kind == _QuizTranscriptItemKind.timerSuggestions ||
+          item.kind == _QuizTranscriptItemKind.persistentModeSuggestions ||
+          item.kind == _QuizTranscriptItemKind.quizTopicDecisionSuggestions) {
+        final isOptionSuggestion =
+            item.kind == _QuizTranscriptItemKind.topicAspectSuggestions ||
+            item.kind == _QuizTranscriptItemKind.topicPathActionSuggestions ||
+            item.kind == _QuizTranscriptItemKind.topicAspectRetry ||
+            item.kind == _QuizTranscriptItemKind.modeSuggestions ||
+            item.kind == _QuizTranscriptItemKind.timerSuggestions ||
+            item.kind == _QuizTranscriptItemKind.persistentModeSuggestions ||
+            item.kind == _QuizTranscriptItemKind.quizTopicDecisionSuggestions;
+        final isGuidedTopicSuggestion =
+            item.kind == _QuizTranscriptItemKind.topicAspectSuggestions ||
+            item.kind == _QuizTranscriptItemKind.topicPathActionSuggestions ||
+            item.kind == _QuizTranscriptItemKind.topicAspectRetry;
+        final hideForPendingText =
+            isGuidedTopicSuggestion &&
+            widget.pendingKeys.any((key) => key.contains('-text-'));
+        if ((!isOptionSuggestion || !hidePendingOptionSuggestions) &&
+            !hideForPendingText) {
+          if (item.kind == _QuizTranscriptItemKind.topicAspectSuggestions ||
+              item.kind == _QuizTranscriptItemKind.topicAspectRetry) {
+            topicAspectSuggestion = item;
+          } else if (item.kind ==
+              _QuizTranscriptItemKind.topicPathActionSuggestions) {
+            topicPathActions = item;
+          } else {
+            standardBottomSuggestion = item;
+          }
+        }
+      } else {
+        transcriptItems.add(item);
+      }
+    }
+    final guidedTopicFooters = <_QuizTranscriptItem>[
+      if (topicAspectSuggestion != null) topicAspectSuggestion,
+      if (topicPathActions != null) topicPathActions,
+    ];
+    final bottomSuggestionItems = guidedTopicFooters.isNotEmpty
+        ? guidedTopicFooters
+        : <_QuizTranscriptItem>[
+            if (standardBottomSuggestion != null) standardBottomSuggestion,
+          ];
+    final chatComposerFollowsPersistentFooter =
+        bottomSuggestionItems.length == 1 &&
+        bottomSuggestionItems.single.kind ==
+            _QuizTranscriptItemKind.persistentModeSuggestions &&
+        widget.soloViewMode?.trim().toLowerCase() == 'chat';
+    Widget buildRow(_QuizTranscriptItem item, {bool attachCallLink = true}) =>
+        _QuizTranscriptRow(
+          item: item,
+          session: session,
+          currentUserId: widget.currentUserId,
+          pendingKeys: widget.pendingKeys,
+          recentStreamedAssistantText: widget.recentStreamedAssistantText,
+          onChoice: widget.onChoice,
+          onTopicSuggestion: widget.onTopicSuggestion,
+          onCustomTopicRequested: widget.onCustomTopicRequested,
+          customTopicCallLink: attachCallLink
+              ? widget.customTopicCallLink
+              : null,
+          hideCustomTopicSuggestion: widget.hideCustomTopicSuggestion,
+          soloViewMode: widget.soloViewMode,
+          alignSoloOptionsRight: widget.alignSoloOptionsRight,
+          quizInteractionEnabled:
+              widget.soloViewMode != 'chat' && !widget.showQuizTopicDecision,
+          onQuizAnswer: widget.onQuizAnswer,
+          onRetryGeneration: widget.onRetryGeneration,
+          onAdvanceQuestion: widget.onAdvanceQuestion,
+          onReplay: widget.onReplay,
+          onLeave: widget.onLeave,
+          onTextRevealTick: _scrollToBottom,
+          completedTranscriptAnimationIds: _completedTranscriptAnimationIds,
+          onTranscriptAnimationComplete: _markTranscriptAnimationComplete,
+        );
 
-    return ListView(
+    return CustomScrollView(
       controller: _controller,
-      padding: const EdgeInsets.fromLTRB(2, 14, 2, 28),
-      children: [
-        const SizedBox(height: 4),
-        if (items.isEmpty)
-          _ChatMessageBubble(
-            child: _QuizStatusContent(
-              icon: CupertinoIcons.person_3_fill,
-              title: 'Waiting for the first question',
-              body: _lobbyText(session),
-            ),
-          )
-        else
-          for (final item in items) ...[
-            _QuizTranscriptRow(
-              item: item,
-              session: session,
-              currentUserId: widget.currentUserId,
-              pendingKeys: widget.pendingKeys,
-              recentStreamedAssistantText: widget.recentStreamedAssistantText,
-              onChoice: widget.onChoice,
-              onQuizAnswer: widget.onQuizAnswer,
-              onRetryGeneration: widget.onRetryGeneration,
-              onAdvanceQuestion: widget.onAdvanceQuestion,
-              onReplay: widget.onReplay,
-              onLeave: widget.onLeave,
-              onTextRevealTick: _scrollToBottom,
-              completedTranscriptAnimationIds: _completedTranscriptAnimationIds,
-              onTranscriptAnimationComplete: _markTranscriptAnimationComplete,
-            ),
-            const SizedBox(height: 10),
-          ],
+      slivers: [
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            2,
+            14,
+            2,
+            bottomSuggestionItems.isEmpty ? 28 : 0,
+          ),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              const SizedBox(height: 4),
+              if (transcriptItems.isEmpty && bottomSuggestionItems.isEmpty)
+                _ChatMessageBubble(
+                  child: _QuizStatusContent(
+                    icon: CupertinoIcons.person_3_fill,
+                    title: 'Waiting for the first question',
+                    body: _lobbyText(session),
+                  ),
+                )
+              else
+                for (final item in transcriptItems) ...[
+                  buildRow(item),
+                  const SizedBox(height: 10),
+                ],
+            ]),
+          ),
+        ),
+        if (bottomSuggestionItems.isNotEmpty)
+          SliverLayoutBuilder(
+            builder: (context, constraints) {
+              final availableHeight =
+                  constraints.viewportMainAxisExtent -
+                  constraints.precedingScrollExtent;
+              return SliverToBoxAdapter(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: availableHeight > 0 ? availableHeight : 0.0,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      for (
+                        var index = 0;
+                        index < bottomSuggestionItems.length;
+                        index++
+                      ) ...[
+                        buildRow(
+                          bottomSuggestionItems[index],
+                          attachCallLink:
+                              index == bottomSuggestionItems.length - 1,
+                        ),
+                        if (index < bottomSuggestionItems.length - 1)
+                          const SizedBox(height: 10),
+                      ],
+                      SizedBox(
+                        height:
+                            widget.hideCustomTopicSuggestion ||
+                                chatComposerFollowsPersistentFooter
+                            ? 0
+                            : bottomSafeInset,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
       ],
     );
   }
@@ -335,6 +507,14 @@ enum _QuizTranscriptItemKind {
   aiMessage,
   userMessage,
   choiceGroup,
+  topicSuggestions,
+  topicAspectSuggestions,
+  topicPathActionSuggestions,
+  topicAspectRetry,
+  modeSuggestions,
+  timerSuggestions,
+  persistentModeSuggestions,
+  quizTopicDecisionSuggestions,
   pendingAssistant,
   streamingAssistant,
   question,
@@ -422,6 +602,9 @@ class _QuizTranscriptItem {
     String? streamingAssistantText,
     bool canAdvanceQuestion = false,
     bool isAdvancingQuestion = false,
+    bool showSoloModeSwitch = false,
+    bool showQuizTopicDecision = false,
+    String? soloViewMode,
   }) {
     final events = _dedupeEvents(session.events)
       ..sort((a, b) => a.seq.compareTo(b.seq));
@@ -438,7 +621,41 @@ class _QuizTranscriptItem {
     final stateQuestion = _LiveQuizQuestion.fromStateSnapshot(
       session.interactiveState,
     );
-    final phase = (session.interactiveState['phase'] as String?) ?? '';
+    final rawPhase = (session.interactiveState['phase'] as String?) ?? '';
+    final sessionType =
+        (session.interactiveState['session_type'] as String?) ?? '';
+    final currentTurn = session.currentTurn;
+    final phase = _effectiveTranscriptPhase(
+      session: session,
+      rawPhase: rawPhase,
+      sessionType: sessionType,
+      currentTurn: currentTurn,
+    );
+    final topicSelectionStage = session
+        .interactiveState['topic_selection_stage']
+        ?.toString()
+        .trim()
+        .toLowerCase();
+    final isTopicAspectStage =
+        phase == 'topic_selection' && topicSelectionStage == 'aspect';
+    final topicAspectStatus = session.interactiveState['topic_aspect_status']
+        ?.toString()
+        .trim()
+        .toLowerCase();
+    final topicPathActionsExpanded =
+        session.interactiveState['topic_path_actions_expanded'] == true;
+    final topicAspectIsLoading =
+        isTopicAspectStage &&
+        (topicAspectStatus == 'generating' || topicAspectStatus == 'loading');
+    final showTopicSuggestions =
+        phase == 'topic_selection' &&
+        !isTopicAspectStage &&
+        sessionType == 'solo' &&
+        !pendingKeys.any((key) => key.contains('-text-')) &&
+        !_hasPendingTopicClarification(session.interactiveState);
+    final stateTopicSuggestions = _topicSuggestionOptions(
+      session.interactiveState['topic_suggestions'],
+    );
     final currentRound = (session.interactiveState['current_round'] as num?)
         ?.toInt();
     final totalRounds =
@@ -447,6 +664,9 @@ class _QuizTranscriptItem {
     for (final event in events) {
       switch (event.eventType) {
         case 'topic_selection_started':
+          final eventTopicSuggestions = _topicSuggestionOptions(
+            event.payload['topic_suggestions'],
+          );
           _addTopicPromptItems(
             items: items,
             baseSeq: event.seq,
@@ -454,17 +674,26 @@ class _QuizTranscriptItem {
             prompt:
                 (event.payload['prompt'] as String?) ??
                 'What topic do you want to play?',
+            topicSuggestions: showTopicSuggestions
+                ? (eventTopicSuggestions.isNotEmpty
+                      ? eventTopicSuggestions
+                      : stateTopicSuggestions)
+                : const <InteractiveOption>[],
           );
           break;
+        case 'candidate_selected':
+        case 'topic_candidate_selected':
+        case 'aspect_selected':
+        case 'topic_aspect_selected':
         case 'topic_selected':
-          final topic = (event.payload['topic'] as String?)?.trim();
-          if (topic == null || topic.isEmpty) break;
+          final displayText = _selectionEventDisplayText(event);
+          if (displayText == null) break;
           items.add(
             _QuizTranscriptItem(
               kind: _QuizTranscriptItemKind.userMessage,
               seq: event.seq,
               event: event,
-              userText: topic,
+              userText: displayText,
             ),
           );
           break;
@@ -472,12 +701,16 @@ class _QuizTranscriptItem {
           final text = (event.payload['text'] as String?)?.trim();
           if (text == null || text.isEmpty) break;
           final eventPhase = (event.payload['phase'] as String?)?.trim();
+          final friendlyText =
+              _payloadDisplayText(event.payload) ??
+              _routeChoiceLabel(text, phase: eventPhase);
+          if (friendlyText == null && _looksLikeInternalChoiceId(text)) break;
           items.add(
             _QuizTranscriptItem(
               kind: _QuizTranscriptItemKind.userMessage,
               seq: event.seq,
               event: event,
-              userText: _routeChoiceLabel(text, phase: eventPhase) ?? text,
+              userText: friendlyText ?? text,
             ),
           );
           break;
@@ -510,6 +743,12 @@ class _QuizTranscriptItem {
           break;
         case 'interactive_turn':
           final turn = InteractiveTurn.fromJson(event.payload);
+          if (currentTurn != null && event.seq == currentTurn.seq) {
+            // A snapshot can race an input and pair an older event payload
+            // with the newer canonical current turn at the same watermark.
+            // Render the canonical turn below so its live choices win.
+            break;
+          }
           final texts = _turnTexts(turn);
           for (final text in texts) {
             items.add(
@@ -522,7 +761,15 @@ class _QuizTranscriptItem {
             );
           }
           items.addAll(
-            _turnChoiceItems(turn, event.seq, phase: phase, event: event),
+            _turnChoiceItems(
+              turn,
+              event.seq,
+              phase: phase,
+              topicSelectionStage: topicSelectionStage,
+              interactiveState: session.interactiveState,
+              allowGuidedChoices: false,
+              event: event,
+            ),
           );
           break;
         case 'question_generation_started':
@@ -692,24 +939,217 @@ class _QuizTranscriptItem {
       );
     }
 
-    final currentTurn = session.currentTurn;
-    if (currentTurn != null &&
-        !events.any(
-          (event) =>
-              event.eventType == 'interactive_turn' &&
-              event.seq == currentTurn.seq,
-        )) {
-      for (final text in _turnTexts(currentTurn)) {
-        items.add(
+    if (currentTurn != null) {
+      final currentTurnItems = <_QuizTranscriptItem>[
+        for (final text in _turnTexts(currentTurn))
           _QuizTranscriptItem(
             kind: _QuizTranscriptItemKind.aiMessage,
             seq: currentTurn.seq,
             statusTitle: text,
           ),
+        ..._turnChoiceItems(
+          currentTurn,
+          currentTurn.seq,
+          phase: phase,
+          topicSelectionStage: topicSelectionStage,
+          interactiveState: session.interactiveState,
+          allowGuidedChoices: !topicAspectIsLoading,
+        ),
+      ];
+
+      // The canonical turn replaces any equal-sequence event payload, but it
+      // can still be older than events which arrived after it. This happens
+      // when a timer confirmation immediately activates a preloaded question.
+      // Keep that hand-off above the question instead of appending it at the
+      // bottom of the transcript.
+      var insertionIndex = items.indexWhere(
+        (item) => item.event != null && item.event!.seq > currentTurn.seq,
+      );
+      if (phase == 'question_active') {
+        final activeQuestionIndex = items.indexWhere(
+          (item) =>
+              item.kind == _QuizTranscriptItemKind.question &&
+              item.seq > currentTurn.seq,
         );
+        if (activeQuestionIndex != -1 &&
+            (insertionIndex == -1 || activeQuestionIndex < insertionIndex)) {
+          insertionIndex = activeQuestionIndex;
+        }
       }
-      items.addAll(
-        _turnChoiceItems(currentTurn, currentTurn.seq, phase: phase),
+      if (insertionIndex == -1) {
+        items.addAll(currentTurnItems);
+      } else {
+        items.insertAll(insertionIndex, currentTurnItems);
+      }
+    }
+
+    if (isTopicAspectStage) {
+      _QuizTranscriptItem? latestPathActionFooter;
+      for (final item in items) {
+        if (item.kind == _QuizTranscriptItemKind.topicPathActionSuggestions) {
+          latestPathActionFooter = item;
+        }
+      }
+      if (topicAspectIsLoading) {
+        items.add(
+          _QuizTranscriptItem(
+            kind: _QuizTranscriptItemKind.pendingAssistant,
+            seq: session.lastSeq + 2,
+            statusTitle: 'Finding topic aspects',
+            showLoading: true,
+          ),
+        );
+      } else if (topicPathActionsExpanded) {
+        // Expanded root-topic actions must come only from the canonical turn.
+        // Do not resurrect the state-backed aspect catalogue underneath them.
+      } else if (topicAspectStatus == 'failed') {
+        items.add(
+          _QuizTranscriptItem(
+            kind: _QuizTranscriptItemKind.topicAspectRetry,
+            seq: session.lastSeq + 2,
+            choiceOptions: const [
+              InteractiveOption(
+                id: 'custom_aspect',
+                label: 'Type my own aspect',
+              ),
+            ],
+            choiceTurnId: currentTurn?.turnId,
+          ),
+        );
+        if (latestPathActionFooter == null) {
+          final depth =
+              (session.interactiveState['topic_drilldown_depth'] as num?)
+                  ?.toInt() ??
+              0;
+          items.add(
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.topicPathActionSuggestions,
+              seq: session.lastSeq + 3,
+              choiceOptions: _orderedTopicPathActions([
+                if (depth > 0) ...const [
+                  InteractiveOption(id: 'quiz', label: 'Take me to quiz'),
+                  InteractiveOption(id: 'chat', label: 'Chat with Aura'),
+                  InteractiveOption(
+                    id: 'change_aspect',
+                    label: 'Choose another aspect',
+                  ),
+                ],
+                const InteractiveOption(
+                  id: 'retry_aspects',
+                  label: 'Try suggestions again',
+                ),
+              ]),
+              choiceTurnId: currentTurn?.turnId,
+            ),
+          );
+        }
+      } else {
+        var aspectOptions = _topicAspectOptions(
+          session.interactiveState['pending_topic_aspects'],
+        );
+        final depth =
+            (session.interactiveState['topic_drilldown_depth'] as num?)
+                ?.toInt() ??
+            0;
+        if (aspectOptions.isNotEmpty &&
+            depth == 0 &&
+            topicAspectStatus == 'ready' &&
+            !aspectOptions.any(
+              (option) =>
+                  option.id.trim().toLowerCase() == 'continue_with_topic',
+            )) {
+          aspectOptions = [
+            ...aspectOptions,
+            const InteractiveOption(
+              id: 'continue_with_topic',
+              label: 'Continue',
+            ),
+          ];
+        }
+        final hasCurrentAspectFooter = items.any(
+          (item) => item.kind == _QuizTranscriptItemKind.topicAspectSuggestions,
+        );
+        if (aspectOptions.isNotEmpty && !hasCurrentAspectFooter) {
+          items.add(
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.topicAspectSuggestions,
+              seq: session.lastSeq + 2,
+              choiceOptions: aspectOptions,
+              choiceTurnId: currentTurn?.turnId,
+            ),
+          );
+        } else if (topicAspectStatus == 'max_depth' &&
+            !hasCurrentAspectFooter &&
+            session.interactiveState['allow_custom_aspect'] == true) {
+          items.add(
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.topicAspectSuggestions,
+              seq: session.lastSeq + 2,
+              choiceOptions: const [
+                InteractiveOption(
+                  id: 'custom_aspect',
+                  label: 'Type my own aspect',
+                ),
+              ],
+              choiceTurnId: currentTurn?.turnId,
+            ),
+          );
+        }
+      }
+    }
+
+    if (phase == 'timer_selection' &&
+        sessionType == 'solo' &&
+        !items.any(
+          (item) => item.kind == _QuizTranscriptItemKind.timerSuggestions,
+        )) {
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.timerSuggestions,
+          seq: session.lastSeq + 2,
+          choiceOptions: const [
+            InteractiveOption(id: 'timed', label: 'Timed'),
+            InteractiveOption(id: 'untimed', label: 'Untimed'),
+          ],
+          choiceTurnId: currentTurn?.turnId,
+        ),
+      );
+    }
+
+    if (showQuizTopicDecision) {
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.quizTopicDecisionSuggestions,
+          seq: session.lastSeq + 3,
+          choiceOptions: const [
+            InteractiveOption(
+              id: 'continue_topic',
+              label: 'Continue last topic',
+            ),
+            InteractiveOption(id: 'new_topic', label: 'Choose a new topic'),
+          ],
+          choiceTurnId: currentTurn?.turnId,
+        ),
+      );
+    } else if (showSoloModeSwitch) {
+      final normalizedMode = soloViewMode?.trim().toLowerCase();
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.persistentModeSuggestions,
+          seq: session.lastSeq + 3,
+          choiceOptions: [
+            if (normalizedMode != 'quiz' || phase == 'post_question_prompt')
+              InteractiveOption(
+                id: 'quiz',
+                label: normalizedMode == 'quiz'
+                    ? 'Next question'
+                    : 'Take me to quiz',
+              ),
+            if (normalizedMode != 'chat')
+              const InteractiveOption(id: 'chat', label: 'Chat with Aura'),
+          ],
+          choiceTurnId: currentTurn?.turnId,
+        ),
       );
     }
 
@@ -725,6 +1165,9 @@ class _QuizTranscriptItem {
           items: items,
           baseSeq: session.lastSeq + 2,
           prompt: topicPrompt,
+          topicSuggestions: showTopicSuggestions
+              ? stateTopicSuggestions
+              : const <InteractiveOption>[],
         );
       } else {
         items.add(
@@ -865,6 +1308,7 @@ class _QuizTranscriptItem {
     required int baseSeq,
     required String prompt,
     StorySessionEvent? event,
+    List<InteractiveOption> topicSuggestions = const <InteractiveOption>[],
   }) {
     final chunks = _topicPromptChunks(prompt);
     for (var i = 0; i < chunks.length; i += 1) {
@@ -877,6 +1321,51 @@ class _QuizTranscriptItem {
         ),
       );
     }
+    if (topicSuggestions.isNotEmpty) {
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.topicSuggestions,
+          seq: baseSeq + chunks.length,
+          choiceOptions: topicSuggestions,
+        ),
+      );
+    }
+  }
+
+  static List<InteractiveOption> _topicSuggestionOptions(dynamic raw) {
+    return ((raw as List?) ?? const <dynamic>[])
+        .whereType<Map>()
+        .map((item) => InteractiveOption.fromJson(item.cast<String, dynamic>()))
+        .where((option) => option.id.isNotEmpty || option.label.isNotEmpty)
+        .toList();
+  }
+
+  static List<InteractiveOption> _topicAspectOptions(dynamic raw) {
+    final parsed = ((raw as List?) ?? const <dynamic>[])
+        .whereType<Map>()
+        .map((item) {
+          final json = item.cast<String, dynamic>();
+          final option = InteractiveOption.fromJson(json);
+          final value = json['value']?.toString().trim();
+          return InteractiveOption(
+            id: option.id,
+            label: option.label.isNotEmpty
+                ? option.label
+                : (value?.isNotEmpty == true ? value! : option.id),
+            metadata: {
+              ...option.metadata,
+              if (value?.isNotEmpty == true) 'value': value,
+            },
+          );
+        })
+        .where((option) => option.id.isNotEmpty)
+        .toList(growable: false);
+    return _orderedTopicAspectOptions(parsed);
+  }
+
+  static bool _hasPendingTopicClarification(Map<String, dynamic> state) {
+    final pendingOptions = state['pending_topic_options'];
+    return pendingOptions is List && pendingOptions.isNotEmpty;
   }
 
   static List<String> _topicPromptChunks(String value) {
@@ -914,10 +1403,25 @@ class _QuizTranscriptItem {
   }
 
   static List<String> _turnTexts(InteractiveTurn turn) {
+    final hasExpandedRootTopicActions = turn.blocks
+        .whereType<InteractiveChoiceGroupBlock>()
+        .any((block) {
+          final choiceKind = block.metadata['choice_kind']
+              ?.toString()
+              .trim()
+              .toLowerCase();
+          final depth = int.tryParse(block.metadata['depth']?.toString() ?? '');
+          return choiceKind == 'solo_topic_path_actions' &&
+              depth == 0 &&
+              block.metadata['topic_path_actions_expanded'] == true;
+        });
     final texts = <String>[];
     for (final block in turn.blocks) {
       if (block case InteractiveTextBlock b) {
-        final text = b.text.trim();
+        final text = _normalizeRootTopicActionPrompt(
+          b.text,
+          enabled: hasExpandedRootTopicActions,
+        );
         if (text.isNotEmpty) texts.add(text);
       } else if (block case InteractiveSystemBlock b) {
         final text = b.text.trim();
@@ -930,27 +1434,125 @@ class _QuizTranscriptItem {
     return texts;
   }
 
+  static String _normalizeRootTopicActionPrompt(
+    String value, {
+    required bool enabled,
+  }) {
+    final text = value.trim();
+    if (!enabled) return text;
+
+    const prefix = 'Would you like to take a quiz about ';
+    const retiredSuffix = ', chat with Aura, or choose an aspect first?';
+    if (!text.startsWith(prefix) || !text.endsWith(retiredSuffix)) {
+      return text;
+    }
+    final topic = text
+        .substring(prefix.length, text.length - retiredSuffix.length)
+        .trim();
+    return topic.isEmpty ? text : '$prefix$topic or chat with Aura?';
+  }
+
+  static String _effectiveTranscriptPhase({
+    required InteractiveSessionState session,
+    required String rawPhase,
+    required String sessionType,
+    required InteractiveTurn? currentTurn,
+  }) {
+    if (rawPhase != 'topic_selection' ||
+        sessionType != 'solo' ||
+        currentTurn == null) {
+      return rawPhase;
+    }
+    final isModeTurn =
+        currentTurn.statePatch['phase'] == 'mode_selection' ||
+        currentTurn.blocks.whereType<InteractiveChoiceGroupBlock>().any(
+          (block) => block.metadata['choice_kind'] == 'solo_quiz_mode',
+        );
+    if (!isModeTurn) return rawPhase;
+
+    final latestTopicPromptSeq = session.events
+        .where((event) => event.eventType == 'topic_selection_started')
+        .fold<int>(
+          0,
+          (latest, event) => event.seq > latest ? event.seq : latest,
+        );
+    return currentTurn.seq > latestTopicPromptSeq ? 'mode_selection' : rawPhase;
+  }
+
   static List<_QuizTranscriptItem> _turnChoiceItems(
     InteractiveTurn turn,
     int seq, {
     required String phase,
+    required String? topicSelectionStage,
+    required Map<String, dynamic> interactiveState,
+    required bool allowGuidedChoices,
     StorySessionEvent? event,
   }) {
     final items = <_QuizTranscriptItem>[];
     for (final block in turn.blocks) {
       if (block case InteractiveChoiceGroupBlock b) {
         if (b.options.isEmpty) continue;
-        final choiceKind = (b.metadata['choice_kind'] as String?)?.trim();
+        final choiceKind = (b.metadata['choice_kind'] as String?)
+            ?.trim()
+            .toLowerCase();
+        final isTopicAspectStage =
+            phase == 'topic_selection' && topicSelectionStage == 'aspect';
         if (choiceKind == 'solo_quiz_mode' && phase != 'mode_selection') {
           continue;
         }
+        if (choiceKind == 'solo_quiz_timer' && phase != 'timer_selection') {
+          continue;
+        }
+        if (choiceKind == 'solo_topic_clarification' &&
+            phase != 'topic_selection') {
+          continue;
+        }
+        if ((choiceKind == 'solo_topic_aspect' ||
+                choiceKind == 'solo_topic_path_actions') &&
+            (!isTopicAspectStage ||
+                !allowGuidedChoices ||
+                !_guidedChoiceMatchesState(b, interactiveState))) {
+          continue;
+        }
+        final topicAspectStatus = interactiveState['topic_aspect_status']
+            ?.toString()
+            .trim()
+            .toLowerCase();
+        final topicPathActionsExpanded =
+            interactiveState['topic_path_actions_expanded'] == true;
+        if (choiceKind == 'solo_topic_aspect' &&
+            (topicPathActionsExpanded ||
+                topicAspectStatus == 'failed' ||
+                topicAspectStatus == 'max_depth')) {
+          continue;
+        }
+        final isSoloModeChoice = choiceKind == 'solo_quiz_mode';
+        final isSoloTimerChoice = choiceKind == 'solo_quiz_timer';
+        final isTopicAspectChoice = choiceKind == 'solo_topic_aspect';
+        final isTopicPathActions = choiceKind == 'solo_topic_path_actions';
         items.add(
           _QuizTranscriptItem(
-            kind: _QuizTranscriptItemKind.choiceGroup,
+            kind: isSoloModeChoice
+                ? _QuizTranscriptItemKind.modeSuggestions
+                : isSoloTimerChoice
+                ? _QuizTranscriptItemKind.timerSuggestions
+                : isTopicAspectChoice
+                ? _QuizTranscriptItemKind.topicAspectSuggestions
+                : isTopicPathActions
+                ? _QuizTranscriptItemKind.topicPathActionSuggestions
+                : _QuizTranscriptItemKind.choiceGroup,
             seq: seq,
             event: event,
             choicePrompt: b.prompt,
-            choiceOptions: b.options,
+            choiceOptions: isSoloModeChoice
+                ? _orderedSoloModeOptions(b.options)
+                : isSoloTimerChoice
+                ? _orderedSoloTimerOptions(b.options)
+                : isTopicAspectChoice
+                ? _orderedTopicAspectOptions(b.options)
+                : isTopicPathActions
+                ? _orderedTopicPathActions(b.options)
+                : b.options,
             choiceTurnId: turn.turnId,
           ),
         );
@@ -959,13 +1561,301 @@ class _QuizTranscriptItem {
     return items;
   }
 
+  static bool _guidedChoiceMatchesState(
+    InteractiveChoiceGroupBlock block,
+    Map<String, dynamic> state,
+  ) {
+    final stateRevision =
+        state['topic_aspect_revision']?.toString().trim() ?? '';
+    final blockRevision = block.metadata['revision']?.toString().trim() ?? '';
+    if (stateRevision != blockRevision) return false;
+
+    final stateDepth = (state['topic_drilldown_depth'] as num?)?.toInt();
+    final blockDepth = (block.metadata['depth'] as num?)?.toInt();
+    if (stateDepth != blockDepth) return false;
+
+    final stateActionsExpanded = state['topic_path_actions_expanded'] == true;
+    final blockActionsExpanded =
+        block.metadata['topic_path_actions_expanded'] == true;
+    if (stateActionsExpanded != blockActionsExpanded) return false;
+
+    final topicPath = state['topic_path'];
+    final selectedTopicPath = state['selected_topic_path'];
+    final statePath = _normalizedGuidedPath(
+      topicPath is List && topicPath.isNotEmpty ? topicPath : selectedTopicPath,
+    );
+    final blockPath = _normalizedGuidedPath(block.metadata['topic_path']);
+    if (statePath.length != blockPath.length) return false;
+    for (var index = 0; index < statePath.length; index++) {
+      if (statePath[index] != blockPath[index]) return false;
+    }
+    return true;
+  }
+
+  static List<String> _normalizedGuidedPath(dynamic raw) {
+    final values = <String>[];
+    for (final entry in (raw as List?) ?? const <dynamic>[]) {
+      final normalized = _guidedPathEntryLabel(
+        entry,
+      )?.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+      if (normalized?.isNotEmpty == true) values.add(normalized!);
+    }
+    return values;
+  }
+
+  static List<InteractiveOption> _orderedSoloModeOptions(
+    List<InteractiveOption> options,
+  ) {
+    int rank(InteractiveOption option) => switch (option.id.toLowerCase()) {
+      'quiz' || 'quiz_now' => 0,
+      'chat' || 'discuss' || 'discussion' => 1,
+      _ => 2,
+    };
+
+    final relabeled = options.map((option) {
+      final normalizedId = option.id.trim().toLowerCase();
+      final label = switch (normalizedId) {
+        'quiz' || 'quiz_now' => 'Take me to quiz',
+        'chat' || 'discuss' || 'discussion' => 'Chat with Aura',
+        _ => option.label,
+      };
+      return InteractiveOption(
+        id: option.id,
+        label: label,
+        metadata: option.metadata,
+      );
+    });
+    return [...relabeled]
+      ..sort((left, right) => rank(left).compareTo(rank(right)));
+  }
+
+  static List<InteractiveOption> _orderedSoloTimerOptions(
+    List<InteractiveOption> options,
+  ) {
+    int rank(InteractiveOption option) => switch (option.id.toLowerCase()) {
+      'timed' || 'timer' => 0,
+      'untimed' || 'no_timer' => 1,
+      _ => 2,
+    };
+
+    return [...options]
+      ..sort((left, right) => rank(left).compareTo(rank(right)));
+  }
+
+  static List<InteractiveOption> _orderedTopicAspectOptions(
+    List<InteractiveOption> options,
+  ) {
+    final customOptions = options.where(
+      (option) => option.id.trim().toLowerCase() == 'custom_aspect',
+    );
+    final continueOptions = options.where(
+      (option) => option.id.trim().toLowerCase() == 'continue_with_topic',
+    );
+    final regularOptions = <InteractiveOption>[];
+    final seenIds = <String>{};
+    for (final option in options) {
+      final normalizedId = option.id.trim().toLowerCase();
+      if (normalizedId.isEmpty ||
+          normalizedId == 'custom_aspect' ||
+          normalizedId == 'continue_with_topic') {
+        continue;
+      }
+      if (!seenIds.add(normalizedId)) continue;
+      regularOptions.add(option);
+      if (regularOptions.length == 3) break;
+    }
+    if (regularOptions.isEmpty) return const <InteractiveOption>[];
+    final customOption = customOptions.isEmpty
+        ? const InteractiveOption(
+            id: 'custom_aspect',
+            label: 'Type my own aspect',
+          )
+        : InteractiveOption(
+            id: customOptions.first.id,
+            label: 'Type my own aspect',
+            metadata: customOptions.first.metadata,
+          );
+    final continueOption = continueOptions.isEmpty
+        ? null
+        : InteractiveOption(
+            id: continueOptions.first.id,
+            label: 'Continue',
+            metadata: continueOptions.first.metadata,
+          );
+    return [
+      ...regularOptions,
+      customOption,
+      if (continueOption != null) continueOption,
+    ];
+  }
+
+  static List<InteractiveOption> _orderedTopicPathActions(
+    List<InteractiveOption> options,
+  ) {
+    int rank(String id) => switch (id) {
+      'quiz' ||
+      'quiz_now' ||
+      'continue_quiz' ||
+      'continue_to_quiz' ||
+      'continue_topic' => 0,
+      'chat' || 'chat_with_aura' || 'discuss' || 'discussion' => 1,
+      'another_aspect' ||
+      'change_aspect' ||
+      'choose_aspect' ||
+      'choose_another' ||
+      'choose_another_aspect' ||
+      'new_aspect' => 2,
+      'retry_aspects' => 3,
+      _ => 4,
+    };
+
+    InteractiveOption relabel(InteractiveOption option) {
+      final id = option.id.trim().toLowerCase();
+      final label = switch (id) {
+        'quiz' ||
+        'quiz_now' ||
+        'continue_quiz' ||
+        'continue_to_quiz' ||
+        'continue_topic' => 'Take me to quiz',
+        'chat' ||
+        'chat_with_aura' ||
+        'discuss' ||
+        'discussion' => 'Chat with Aura',
+        'another_aspect' ||
+        'change_aspect' ||
+        'choose_another' ||
+        'choose_another_aspect' ||
+        'new_aspect' => 'Choose another aspect',
+        'choose_aspect' => 'Choose an aspect',
+        'retry_aspects' => 'Try suggestions again',
+        _ => option.label,
+      };
+      return InteractiveOption(
+        id: option.id,
+        label: label,
+        metadata: option.metadata,
+      );
+    }
+
+    // Continuing with the root topic finalizes the broad scope. Filter the
+    // retired back-navigation action from cached or older server turns too.
+    final ordered = options
+        .where((option) => option.id.trim().toLowerCase() != 'choose_aspect')
+        .map(relabel)
+        .toList(growable: false);
+    ordered.sort(
+      (left, right) => rank(
+        left.id.trim().toLowerCase(),
+      ).compareTo(rank(right.id.trim().toLowerCase())),
+    );
+    return ordered;
+  }
+
   static String? _routeChoiceLabel(String text, {String? phase}) {
-    if (phase != null && phase != 'mode_selection') return null;
-    return switch (text.trim().toLowerCase()) {
-      'chat' || 'discuss' || 'discussion' => 'Chat',
-      'quiz' || 'quiz_now' => 'Quiz',
+    final normalized = text.trim().toLowerCase();
+    if (normalized == 'continue_topic' &&
+        (phase == null || phase == 'post_question_prompt')) {
+      return 'Next question';
+    }
+    if (normalized == 'chat_with_aura') return 'Chat with Aura';
+    final topicPathActionLabel = switch (normalized) {
+      'continue_quiz' || 'continue_to_quiz' => 'Take me to quiz',
+      'choose_aspect' => 'Choose an aspect',
+      'another_aspect' ||
+      'change_aspect' ||
+      'choose_another' ||
+      'choose_another_aspect' ||
+      'new_aspect' => 'Choose another aspect',
+      'custom_aspect' => 'Type my own aspect',
+      'retry_aspects' => 'Try suggestions again',
       _ => null,
     };
+    if (topicPathActionLabel != null) return topicPathActionLabel;
+    if (phase == null || phase == 'mode_selection') {
+      final modeLabel = switch (normalized) {
+        'chat' || 'discuss' || 'discussion' => 'Chat with Aura',
+        'quiz' || 'quiz_now' => 'Take me to quiz',
+        _ => null,
+      };
+      if (modeLabel != null) return modeLabel;
+    }
+    if (phase == null || phase == 'timer_selection') {
+      return switch (normalized) {
+        'timed' || 'timer' => 'Timed',
+        'untimed' || 'no_timer' => 'Untimed',
+        _ => null,
+      };
+    }
+    return null;
+  }
+
+  static String? _selectionEventDisplayText(StorySessionEvent event) {
+    if (event.eventType == 'topic_aspect_selected') {
+      final action =
+          event.payload['action']?.toString().trim().toLowerCase() ??
+          event.payload['option_id']?.toString().trim().toLowerCase();
+      if (action == 'choose_aspect') return null;
+      if (action == 'continue_with_topic') {
+        final displayText = _payloadDisplayText(event.payload);
+        if (displayText != null &&
+            displayText.toLowerCase() != 'continue' &&
+            !_looksLikeInternalChoiceId(displayText)) {
+          return displayText;
+        }
+        final path = event.payload['topic_path'];
+        if (path is! List || path.isEmpty) return null;
+        final rootTopic = _guidedPathEntryLabel(path.first);
+        return rootTopic == null ? null : "Let's keep $rootTopic broad.";
+      }
+    }
+    final displayText = _payloadDisplayText(event.payload);
+    if (displayText != null) return displayText;
+    if (event.eventType != 'topic_selected') return null;
+    final legacyTopic = event.payload['topic']?.toString().trim();
+    return legacyTopic?.isNotEmpty == true ? legacyTopic : null;
+  }
+
+  static String? _guidedPathEntryLabel(dynamic entry) {
+    if (entry is String) {
+      final value = entry.trim();
+      return value.isEmpty ? null : value;
+    }
+    if (entry is! Map) return null;
+    for (final key in const [
+      'display_text',
+      'label',
+      'value',
+      'name',
+      'aspect',
+      'topic',
+    ]) {
+      final value = entry[key]?.toString().trim();
+      if (value?.isNotEmpty == true) return value;
+    }
+    return null;
+  }
+
+  static String? _payloadDisplayText(Map<String, dynamic> payload) {
+    final displayText = payload['display_text']?.toString().trim();
+    return displayText?.isNotEmpty == true ? displayText : null;
+  }
+
+  static bool _looksLikeInternalChoiceId(String text) {
+    return const {
+      'continue_topic',
+      'continue_quiz',
+      'continue_to_quiz',
+      'continue_with_topic',
+      'chat_with_aura',
+      'change_aspect',
+      'choose_aspect',
+      'choose_another',
+      'choose_another_aspect',
+      'another_aspect',
+      'new_aspect',
+      'custom_aspect',
+      'retry_aspects',
+    }.contains(text.trim().toLowerCase());
   }
 
   static bool _isCurrentUserEvent(StorySessionEvent event, String? userId) {
@@ -992,9 +1882,11 @@ class _QuizTranscriptItem {
     final participantId = (payload['participant_id'] as String?)?.trim() ?? '';
     final optionId = (payload['option_id'] as String?)?.trim() ?? '';
     final round = payload['round']?.toString() ?? '';
+    final turnId = (payload['turn_id'] as String?)?.trim() ?? '';
     return [
       event.seq,
       event.eventType,
+      turnId,
       questionId,
       participantId,
       optionId,
@@ -1020,6 +1912,13 @@ class _QuizTranscriptRow extends StatelessWidget {
     required this.pendingKeys,
     required this.recentStreamedAssistantText,
     required this.onChoice,
+    this.onTopicSuggestion,
+    this.onCustomTopicRequested,
+    this.customTopicCallLink,
+    required this.hideCustomTopicSuggestion,
+    required this.soloViewMode,
+    required this.alignSoloOptionsRight,
+    required this.quizInteractionEnabled,
     required this.onQuizAnswer,
     required this.onRetryGeneration,
     this.onAdvanceQuestion,
@@ -1036,6 +1935,13 @@ class _QuizTranscriptRow extends StatelessWidget {
   final Set<String> pendingKeys;
   final String? recentStreamedAssistantText;
   final ValueChanged<String> onChoice;
+  final ValueChanged<String>? onTopicSuggestion;
+  final VoidCallback? onCustomTopicRequested;
+  final LayerLink? customTopicCallLink;
+  final bool hideCustomTopicSuggestion;
+  final String? soloViewMode;
+  final bool alignSoloOptionsRight;
+  final bool quizInteractionEnabled;
   final QuizAnswerCallback onQuizAnswer;
   final VoidCallback onRetryGeneration;
   final VoidCallback? onAdvanceQuestion;
@@ -1060,10 +1966,76 @@ class _QuizTranscriptRow extends StatelessWidget {
         options: item.choiceOptions,
         turnId: item.choiceTurnId,
         pendingKeys: pendingKeys,
+        alignOptionsRight:
+            session.interactiveState['session_type'] == 'solo' &&
+            alignSoloOptionsRight,
         onSelected: onChoice,
       ),
-      _QuizTranscriptItemKind.pendingAssistant => const _ChatMessageBubble(
-        child: _QuizLoadingContent(),
+      _QuizTranscriptItemKind.topicSuggestions => _TopicSuggestionButtons(
+        options: hideCustomTopicSuggestion
+            ? item.choiceOptions
+                  .where((option) => !_isCustomTopicOrAspectId(option.id))
+                  .toList(growable: false)
+            : item.choiceOptions,
+        disabled: pendingKeys.any((key) => key.contains('-text-')),
+        onTopicSelected: onTopicSuggestion,
+        onCustomTopicRequested: onCustomTopicRequested,
+        customTopicCallLink: customTopicCallLink,
+        compactOptionsToContent: true,
+        alignOptionsRight: alignSoloOptionsRight,
+      ),
+      _QuizTranscriptItemKind.topicAspectSuggestions => _TopicAspectButtons(
+        options: item.choiceOptions,
+        hideCustomAspect: hideCustomTopicSuggestion,
+        onSelected: onChoice,
+        onCustomAspectRequested: onCustomTopicRequested,
+        callLink: customTopicCallLink,
+        alignOptionsRight: alignSoloOptionsRight,
+      ),
+      _QuizTranscriptItemKind.topicPathActionSuggestions =>
+        _TopicPathActionButtons(
+          options: item.choiceOptions,
+          onSelected: onChoice,
+          callLink: customTopicCallLink,
+          alignOptionsRight: alignSoloOptionsRight,
+        ),
+      _QuizTranscriptItemKind.topicAspectRetry => _TopicAspectRetryButtons(
+        options: item.choiceOptions,
+        hideCustomAspect: hideCustomTopicSuggestion,
+        onSelected: onChoice,
+        onCustomAspectRequested: onCustomTopicRequested,
+        callLink: customTopicCallLink,
+        alignOptionsRight: alignSoloOptionsRight,
+      ),
+      _QuizTranscriptItemKind.modeSuggestions => _ModeSuggestionButtons(
+        options: item.choiceOptions,
+        onSelected: onChoice,
+        callLink: customTopicCallLink,
+        alignOptionsRight: alignSoloOptionsRight,
+      ),
+      _QuizTranscriptItemKind.timerSuggestions => _TimerSuggestionButtons(
+        options: item.choiceOptions,
+        onSelected: onChoice,
+        callLink: customTopicCallLink,
+        alignOptionsRight: alignSoloOptionsRight,
+      ),
+      _QuizTranscriptItemKind.persistentModeSuggestions =>
+        _PersistentModeButtons(
+          options: item.choiceOptions,
+          selectedMode: soloViewMode,
+          onSelected: onChoice,
+          callLink: customTopicCallLink,
+          alignOptionsRight: alignSoloOptionsRight,
+        ),
+      _QuizTranscriptItemKind.quizTopicDecisionSuggestions =>
+        _QuizTopicDecisionButtons(
+          options: item.choiceOptions,
+          onSelected: onChoice,
+          callLink: customTopicCallLink,
+          alignOptionsRight: alignSoloOptionsRight,
+        ),
+      _QuizTranscriptItemKind.pendingAssistant => _ChatMessageBubble(
+        child: _QuizLoadingContent(title: item.statusTitle),
       ),
       _QuizTranscriptItemKind.streamingAssistant => _ChatMessageBubble(
         child: Text(
@@ -1083,6 +2055,7 @@ class _QuizTranscriptRow extends StatelessWidget {
         selectedAnswer: _selectedAnswer(item.question!.questionId),
         busyOptionId: _busyOptionId(item.question!.questionId),
         active: item.isActiveQuestion,
+        interactionEnabled: quizInteractionEnabled,
         onSelected: (optionId) =>
             onQuizAnswer(optionId, item.question!.questionId),
       ),
@@ -1090,6 +2063,7 @@ class _QuizTranscriptRow extends StatelessWidget {
         child: _AnswerProgressContent(
           answeredCount: _intFromState(item.result?['answered_count']),
           eligibleCount: _intFromState(item.result?['eligible_count']),
+          isSolo: session.interactiveState['session_type'] == 'solo',
         ),
       ),
       _QuizTranscriptItemKind.result => _QuizResultGroup(
@@ -1208,14 +2182,13 @@ class _ChatMessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const color = Color(0xED101112);
     const textColor = Colors.white;
     final maxWidth = MediaQuery.sizeOf(context).width * 0.72;
     final bubble = ConstrainedBox(
       constraints: BoxConstraints(maxWidth: maxWidth),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: color,
+          color: _aiChatSurfaceColor,
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(6),
             topRight: Radius.circular(18),
@@ -1382,6 +2355,7 @@ class _QuestionTranscriptBubble extends StatelessWidget {
     required this.selectedAnswer,
     required this.busyOptionId,
     required this.active,
+    required this.interactionEnabled,
     required this.onSelected,
   });
 
@@ -1391,6 +2365,7 @@ class _QuestionTranscriptBubble extends StatelessWidget {
   final String? selectedAnswer;
   final String? busyOptionId;
   final bool active;
+  final bool interactionEnabled;
   final ValueChanged<String> onSelected;
 
   @override
@@ -1401,6 +2376,7 @@ class _QuestionTranscriptBubble extends StatelessWidget {
         session: session,
         selectedOptionId: selectedAnswer,
         busyOptionId: busyOptionId,
+        interactionEnabled: interactionEnabled,
         onSelected: onSelected,
       );
     }
@@ -1418,6 +2394,7 @@ class _ChoiceTranscriptBubble extends StatelessWidget {
     required this.options,
     required this.turnId,
     required this.pendingKeys,
+    required this.alignOptionsRight,
     required this.onSelected,
   });
 
@@ -1425,6 +2402,7 @@ class _ChoiceTranscriptBubble extends StatelessWidget {
   final List<InteractiveOption> options;
   final String? turnId;
   final Set<String> pendingKeys;
+  final bool alignOptionsRight;
   final ValueChanged<String> onSelected;
 
   @override
@@ -1435,36 +2413,46 @@ class _ChoiceTranscriptBubble extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (prompt.trim().isNotEmpty) ...[
-                Text(
-                  prompt.trim(),
-                  style: TextStyle(
-                    color: context.secondaryTextColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  for (final option in options)
-                    _QuickReplyButton(
-                      option: option,
-                      busy: pendingKeys.contains(
-                        '$turnId-option_select-${option.id}',
+          child: SizedBox(
+            width: double.infinity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (prompt.trim().isNotEmpty) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      prompt.trim(),
+                      style: TextStyle(
+                        color: context.secondaryTextColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        height: 1.25,
                       ),
-                      onTap: () => onSelected(option.id),
                     ),
+                  ),
+                  const SizedBox(height: 8),
                 ],
-              ),
-            ],
+                Wrap(
+                  alignment: alignOptionsRight
+                      ? WrapAlignment.end
+                      : WrapAlignment.start,
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final option in options)
+                      _QuickReplyButton(
+                        option: option,
+                        busy: pendingKeys.contains(
+                          '$turnId-option_select-${option.id}',
+                        ),
+                        shrinkWrap: alignOptionsRight,
+                        onTap: () => onSelected(option.id),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1472,56 +2460,549 @@ class _ChoiceTranscriptBubble extends StatelessWidget {
   }
 }
 
+class _TopicSuggestionButtons extends StatelessWidget {
+  const _TopicSuggestionButtons({
+    required this.options,
+    required this.disabled,
+    this.onTopicSelected,
+    this.onCustomTopicRequested,
+    this.customTopicCallLink,
+    this.instruction = '',
+    this.optionKeyPrefix = 'topic-suggestion',
+    this.onOptionSelected,
+    this.selectedOptionId,
+    this.compactOptionsToContent = true,
+    this.compactOptionIds = const <String>{},
+    this.alignOptionsRight = true,
+  });
+
+  final List<InteractiveOption> options;
+  final bool disabled;
+  final ValueChanged<String>? onTopicSelected;
+  final VoidCallback? onCustomTopicRequested;
+  final LayerLink? customTopicCallLink;
+  final String instruction;
+  final String optionKeyPrefix;
+  final ValueChanged<InteractiveOption>? onOptionSelected;
+  final String? selectedOptionId;
+  final bool compactOptionsToContent;
+  final Set<String> compactOptionIds;
+  final bool alignOptionsRight;
+
+  @override
+  Widget build(BuildContext context) {
+    final viewPadding = MediaQuery.of(context).viewPadding;
+    final linkedOptionIndex = customTopicCallLink == null || options.isEmpty
+        ? -1
+        : options.length - 1;
+    final callClearance = customTopicCallLink == null ? 0.0 : 58.0;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 12 + viewPadding.left,
+        right: 8 + viewPadding.right,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (instruction.trim().isNotEmpty) ...[
+            _buildContentRow(
+              Material(
+                key: ValueKey('$optionKeyPrefix-instruction'),
+                color: _aiChatSurfaceColor,
+                borderRadius: BorderRadius.circular(8),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 40),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        instruction,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              callClearance: 0,
+            ),
+            const SizedBox(height: 8),
+          ],
+          for (var index = 0; index < options.length; index++) ...[
+            _buildOption(
+              options[index],
+              callClearance: callClearance,
+              attachCallLink: index == linkedOptionIndex,
+              compactToContent:
+                  compactOptionsToContent ||
+                  compactOptionIds.contains(
+                    options[index].id.trim().toLowerCase(),
+                  ),
+            ),
+            if (index < options.length - 1) const SizedBox(height: 6),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOption(
+    InteractiveOption option, {
+    required double callClearance,
+    required bool attachCallLink,
+    required bool compactToContent,
+  }) {
+    final button = _QuickReplyButton(
+      key: ValueKey('$optionKeyPrefix-${option.id}'),
+      option: option,
+      busy: false,
+      disabled: disabled || !_hasCallback(option),
+      useDarkSurface: true,
+      compactTopicStyle: true,
+      shrinkWrap: compactToContent,
+      selected:
+          selectedOptionId?.trim().toLowerCase() ==
+          option.id.trim().toLowerCase(),
+      onTap: () => _handleTap(option),
+    );
+    final reservesCallColumn = compactOptionIds.contains(
+      option.id.trim().toLowerCase(),
+    );
+    final optionCallClearance =
+        compactToContent && !attachCallLink && !reservesCallColumn
+        ? 0.0
+        : callClearance;
+    final row = _buildContentRow(
+      button,
+      callClearance: optionCallClearance,
+      compactToContent: compactToContent,
+      alignRight: alignOptionsRight,
+    );
+    final link = customTopicCallLink;
+    if (!attachCallLink || link == null) return row;
+    return Stack(
+      children: [
+        row,
+        Positioned.fill(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: CompositedTransformTarget(
+              key: ValueKey('$optionKeyPrefix-call-target-${option.id}'),
+              link: link,
+              child: const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContentRow(
+    Widget child, {
+    required double callClearance,
+    bool compactToContent = false,
+    bool alignRight = false,
+  }) {
+    return Row(
+      children: [
+        if (alignRight && callClearance > 0) SizedBox(width: callClearance),
+        Expanded(
+          child: Align(
+            alignment: alignRight
+                ? Alignment.centerRight
+                : Alignment.centerLeft,
+            child: compactToContent
+                ? IntrinsicWidth(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: _soloOptionMaxWidth,
+                      ),
+                      child: child,
+                    ),
+                  )
+                : ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 260),
+                    child: SizedBox(width: double.infinity, child: child),
+                  ),
+          ),
+        ),
+        if (!alignRight && callClearance > 0) SizedBox(width: callClearance),
+      ],
+    );
+  }
+
+  bool _hasCallback(InteractiveOption option) {
+    if (onOptionSelected != null) return true;
+    return _isCustomTopic(option)
+        ? onCustomTopicRequested != null
+        : onTopicSelected != null;
+  }
+
+  void _handleTap(InteractiveOption option) {
+    if (onOptionSelected != null) {
+      onOptionSelected!(option);
+      return;
+    }
+    if (_isCustomTopic(option)) {
+      onCustomTopicRequested?.call();
+      return;
+    }
+    final label = option.label.isEmpty ? option.id : option.label;
+    if (label.isNotEmpty) onTopicSelected?.call(label);
+  }
+
+  bool _isCustomTopic(InteractiveOption option) {
+    return _isCustomTopicOrAspectId(option.id);
+  }
+}
+
+class _TopicAspectButtons extends StatelessWidget {
+  const _TopicAspectButtons({
+    required this.options,
+    required this.hideCustomAspect,
+    required this.onSelected,
+    this.onCustomAspectRequested,
+    this.callLink,
+    required this.alignOptionsRight,
+  });
+
+  final List<InteractiveOption> options;
+  final bool hideCustomAspect;
+  final ValueChanged<String> onSelected;
+  final VoidCallback? onCustomAspectRequested;
+  final LayerLink? callLink;
+  final bool alignOptionsRight;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleOptions = hideCustomAspect
+        ? options
+              .where(
+                (option) => option.id.trim().toLowerCase() != 'custom_aspect',
+              )
+              .toList(growable: false)
+        : options;
+    return _TopicSuggestionButtons(
+      options: visibleOptions,
+      disabled: false,
+      instruction: '',
+      optionKeyPrefix: 'topic-aspect',
+      customTopicCallLink: visibleOptions.isEmpty ? null : callLink,
+      compactOptionIds: const {'continue_with_topic'},
+      alignOptionsRight: alignOptionsRight,
+      onOptionSelected: (option) {
+        if (option.id.trim().toLowerCase() == 'custom_aspect') {
+          onCustomAspectRequested?.call();
+          return;
+        }
+        onSelected(option.id);
+      },
+    );
+  }
+}
+
+class _TopicPathActionButtons extends StatelessWidget {
+  const _TopicPathActionButtons({
+    required this.options,
+    required this.onSelected,
+    this.callLink,
+    required this.alignOptionsRight,
+  });
+
+  final List<InteractiveOption> options;
+  final ValueChanged<String> onSelected;
+  final LayerLink? callLink;
+  final bool alignOptionsRight;
+
+  @override
+  Widget build(BuildContext context) {
+    return _TopicSuggestionButtons(
+      options: options,
+      disabled: false,
+      instruction: '',
+      optionKeyPrefix: 'topic-path-action',
+      customTopicCallLink: options.isEmpty ? null : callLink,
+      compactOptionsToContent: true,
+      alignOptionsRight: alignOptionsRight,
+      onOptionSelected: (option) => onSelected(option.id),
+    );
+  }
+}
+
+class _TopicAspectRetryButtons extends StatelessWidget {
+  const _TopicAspectRetryButtons({
+    required this.options,
+    required this.hideCustomAspect,
+    required this.onSelected,
+    this.onCustomAspectRequested,
+    this.callLink,
+    required this.alignOptionsRight,
+  });
+
+  final List<InteractiveOption> options;
+  final bool hideCustomAspect;
+  final ValueChanged<String> onSelected;
+  final VoidCallback? onCustomAspectRequested;
+  final LayerLink? callLink;
+  final bool alignOptionsRight;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleOptions = hideCustomAspect
+        ? options
+              .where(
+                (option) => option.id.trim().toLowerCase() != 'custom_aspect',
+              )
+              .toList(growable: false)
+        : options;
+    return _TopicSuggestionButtons(
+      options: visibleOptions,
+      disabled: false,
+      instruction: '',
+      optionKeyPrefix: 'topic-aspect',
+      customTopicCallLink: visibleOptions.isEmpty ? null : callLink,
+      alignOptionsRight: alignOptionsRight,
+      onOptionSelected: (option) {
+        if (option.id.trim().toLowerCase() == 'custom_aspect') {
+          onCustomAspectRequested?.call();
+          return;
+        }
+        onSelected(option.id);
+      },
+    );
+  }
+}
+
+bool _isCustomTopicOrAspectId(String id) {
+  final normalized = id.trim().toLowerCase();
+  return normalized == 'custom_topic' || normalized == 'custom_aspect';
+}
+
+class _ModeSuggestionButtons extends StatelessWidget {
+  const _ModeSuggestionButtons({
+    required this.options,
+    required this.onSelected,
+    this.callLink,
+    required this.alignOptionsRight,
+  });
+
+  final List<InteractiveOption> options;
+  final ValueChanged<String> onSelected;
+  final LayerLink? callLink;
+  final bool alignOptionsRight;
+
+  @override
+  Widget build(BuildContext context) {
+    return _TopicSuggestionButtons(
+      options: options,
+      disabled: false,
+      instruction: '',
+      optionKeyPrefix: 'mode-suggestion',
+      customTopicCallLink: callLink,
+      compactOptionsToContent: true,
+      alignOptionsRight: alignOptionsRight,
+      onOptionSelected: (option) => onSelected(option.id),
+    );
+  }
+}
+
+class _TimerSuggestionButtons extends StatelessWidget {
+  const _TimerSuggestionButtons({
+    required this.options,
+    required this.onSelected,
+    this.callLink,
+    required this.alignOptionsRight,
+  });
+
+  final List<InteractiveOption> options;
+  final ValueChanged<String> onSelected;
+  final LayerLink? callLink;
+  final bool alignOptionsRight;
+
+  @override
+  Widget build(BuildContext context) {
+    return _TopicSuggestionButtons(
+      options: options,
+      disabled: false,
+      instruction: '',
+      optionKeyPrefix: 'timer-suggestion',
+      customTopicCallLink: callLink,
+      alignOptionsRight: alignOptionsRight,
+      onOptionSelected: (option) => onSelected(option.id),
+    );
+  }
+}
+
+class _PersistentModeButtons extends StatelessWidget {
+  const _PersistentModeButtons({
+    required this.options,
+    required this.selectedMode,
+    required this.onSelected,
+    this.callLink,
+    required this.alignOptionsRight,
+  });
+
+  final List<InteractiveOption> options;
+  final String? selectedMode;
+  final ValueChanged<String> onSelected;
+  final LayerLink? callLink;
+  final bool alignOptionsRight;
+
+  @override
+  Widget build(BuildContext context) {
+    return _TopicSuggestionButtons(
+      options: options,
+      disabled: false,
+      instruction: 'Switch between Chat and Quiz.',
+      optionKeyPrefix: 'persistent-mode',
+      customTopicCallLink: callLink,
+      selectedOptionId: selectedMode,
+      compactOptionsToContent: true,
+      alignOptionsRight: alignOptionsRight,
+      onOptionSelected: (option) => onSelected(option.id),
+    );
+  }
+}
+
+class _QuizTopicDecisionButtons extends StatelessWidget {
+  const _QuizTopicDecisionButtons({
+    required this.options,
+    required this.onSelected,
+    this.callLink,
+    required this.alignOptionsRight,
+  });
+
+  final List<InteractiveOption> options;
+  final ValueChanged<String> onSelected;
+  final LayerLink? callLink;
+  final bool alignOptionsRight;
+
+  @override
+  Widget build(BuildContext context) {
+    return _TopicSuggestionButtons(
+      options: options,
+      disabled: false,
+      instruction: 'Continue your last topic or choose a new one.',
+      optionKeyPrefix: 'topic-decision',
+      customTopicCallLink: callLink,
+      alignOptionsRight: alignOptionsRight,
+      onOptionSelected: (option) => onSelected(option.id),
+    );
+  }
+}
+
 class _QuickReplyButton extends StatelessWidget {
   const _QuickReplyButton({
+    super.key,
     required this.option,
     required this.busy,
+    this.disabled = false,
+    this.useDarkSurface = false,
+    this.compactTopicStyle = false,
+    this.shrinkWrap = false,
+    this.selected = false,
     required this.onTap,
   });
 
   final InteractiveOption option;
   final bool busy;
+  final bool disabled;
+  final bool useDarkSurface;
+  final bool compactTopicStyle;
+  final bool shrinkWrap;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
     final label = option.label.isEmpty ? option.id : option.label;
-    return Material(
-      color: isDark
-          ? Colors.white.withValues(alpha: 0.16)
-          : Colors.black.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(24),
-      child: InkWell(
-        onTap: busy ? null : onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: context.primaryTextColor,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  height: 1,
-                ),
-              ),
-              if (busy) ...[
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: context.primaryTextColor,
-                  ),
-                ),
+    final foregroundColor = useDarkSurface
+        ? (disabled ? Colors.white54 : Colors.white)
+        : (disabled ? context.secondaryTextColor : context.primaryTextColor);
+    final borderRadius = compactTopicStyle
+        ? BorderRadius.circular(8)
+        : BorderRadius.circular(24);
+    final labelWidget = Text(
+      label,
+      softWrap: true,
+      textWidthBasis: TextWidthBasis.longestLine,
+      style: TextStyle(
+        color: foregroundColor,
+        fontSize: 15,
+        fontWeight: FontWeight.w800,
+        height: 1.15,
+      ),
+    );
+    final trailingWidget = busy
+        ? SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: foregroundColor,
+            ),
+          )
+        : selected
+        ? Icon(
+            label.trim().toLowerCase() == 'next question'
+                ? CupertinoIcons.chevron_right
+                : CupertinoIcons.check_mark,
+            size: 14,
+            color: foregroundColor,
+          )
+        : null;
+    final content = Padding(
+      padding: compactTopicStyle
+          ? const EdgeInsets.symmetric(
+              horizontal: _soloOptionHorizontalPadding,
+              vertical: 6,
+            )
+          : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: shrinkWrap
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(child: labelWidget),
+                if (trailingWidget != null) ...[
+                  const SizedBox(width: 8),
+                  trailingWidget,
+                ],
               ],
-            ],
-          ),
+            )
+          : Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                labelWidget,
+                if (trailingWidget != null) trailingWidget,
+              ],
+            ),
+    );
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: compactTopicStyle ? 40 : 44),
+      child: Material(
+        color: useDarkSurface
+            ? (selected ? const Color(0xFF292B2D) : _aiChatSurfaceColor)
+            : (isDark
+                  ? Colors.white.withValues(alpha: disabled ? 0.08 : 0.16)
+                  : Colors.black.withValues(alpha: disabled ? 0.04 : 0.08)),
+        borderRadius: borderRadius,
+        child: InkWell(
+          onTap: busy || disabled ? null : onTap,
+          borderRadius: borderRadius,
+          child: shrinkWrap
+              ? content
+              : Align(alignment: Alignment.centerLeft, child: content),
         ),
       ),
     );
@@ -1781,10 +3262,12 @@ class _AnswerProgressContent extends StatelessWidget {
   const _AnswerProgressContent({
     required this.answeredCount,
     required this.eligibleCount,
+    required this.isSolo,
   });
 
   final int answeredCount;
   final int eligibleCount;
+  final bool isSolo;
 
   @override
   Widget build(BuildContext context) {
@@ -1794,7 +3277,9 @@ class _AnswerProgressContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '$answeredCount/$eligibleCount players have locked in their answers',
+          isSolo
+              ? 'You have locked in your answer'
+              : '$answeredCount/$eligibleCount players have locked in their answers',
           style: const TextStyle(
             color: Colors.white,
             fontSize: 13,
@@ -2632,6 +4117,7 @@ class _LiveQuizQuestionGroup extends StatefulWidget {
     required this.session,
     required this.selectedOptionId,
     required this.busyOptionId,
+    required this.interactionEnabled,
     required this.onSelected,
   });
 
@@ -2639,6 +4125,7 @@ class _LiveQuizQuestionGroup extends StatefulWidget {
   final InteractiveSessionState session;
   final String? selectedOptionId;
   final String? busyOptionId;
+  final bool interactionEnabled;
   final ValueChanged<String> onSelected;
 
   @override
@@ -2754,13 +4241,18 @@ class _LiveQuizQuestionGroupState extends State<_LiveQuizQuestionGroup> {
                     _OptionButton(
                       option: option,
                       busy: widget.busyOptionId == option.id,
-                      disabled: answered || isExpired,
+                      disabled:
+                          !widget.interactionEnabled || answered || isExpired,
                       quizStyle: true,
                       status: selected == option.id
                           ? _OptionStatus.selected
                           : null,
                       onTap: () {
-                        if (answered || isExpired) return;
+                        if (!widget.interactionEnabled ||
+                            answered ||
+                            isExpired) {
+                          return;
+                        }
                         setState(() => _draftOptionId = option.id);
                       },
                     ),
@@ -2774,6 +4266,7 @@ class _LiveQuizQuestionGroupState extends State<_LiveQuizQuestionGroup> {
         ],
         if (questionReady &&
             _draftOptionId != null &&
+            widget.interactionEnabled &&
             !answered &&
             !isExpired) ...[
           const SizedBox(height: 10),
