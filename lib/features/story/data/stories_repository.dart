@@ -272,6 +272,7 @@ class StoriesRepository {
     String? roomType,
     String? hostDisplayName,
     int? maxParticipants,
+    bool startFresh = false,
   }) async {
     try {
       final res = await _dio.post(
@@ -283,6 +284,7 @@ class StoriesRepository {
           if (roomType != null) 'room_type': roomType,
           if (hostDisplayName != null) 'host_display_name': hostDisplayName,
           if (maxParticipants != null) 'max_participants': maxParticipants,
+          'start_fresh': startFresh,
         },
         options: Options(receiveTimeout: const Duration(seconds: 45)),
       );
@@ -362,6 +364,64 @@ class StoriesRepository {
     try {
       final res = await _dio.get('/story-sessions/$sessionId');
       return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<InteractiveSessionState> fetchInteractiveSessionHistory(
+    String sessionId, {
+    int eventLimit = 250,
+  }) async {
+    try {
+      final res = await _dio.get(
+        '/story-sessions/$sessionId',
+        queryParameters: {'limit': eventLimit.clamp(1, 250)},
+      );
+      return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<InteractiveSessionState> resumeInteractiveSession(
+    String sessionId,
+  ) async {
+    try {
+      final res = await _dio.post('/story-sessions/$sessionId/resume');
+      return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
+  Future<List<SoloInteractiveSessionSummary>> fetchSoloInteractiveHistory({
+    String? storyId,
+    int limit = 20,
+  }) async {
+    try {
+      final normalizedStoryId = storyId?.trim();
+      final res = await _dio.get(
+        '/story-sessions/me/solo-history',
+        queryParameters: {
+          if (normalizedStoryId != null && normalizedStoryId.isNotEmpty)
+            'story_id': normalizedStoryId,
+          'limit': limit.clamp(1, 50),
+        },
+      );
+      final payload = res.data;
+      if (payload is! List) return const <SoloInteractiveSessionSummary>[];
+      return payload
+          .whereType<Map>()
+          .map(
+            (entry) => SoloInteractiveSessionSummary.fromJson(
+              entry.cast<String, dynamic>(),
+            ),
+          )
+          .where(
+            (entry) => entry.sessionId.isNotEmpty && entry.storyId.isNotEmpty,
+          )
+          .toList(growable: false);
     } on DioException catch (e) {
       throw ErrorFormatter.fromDio(e);
     }

@@ -63,9 +63,11 @@ void main() {
       },
       'last_seq': 3,
       'is_completed': false,
+      'is_paused': true,
     });
 
     expect(state.joinCode, 'ABC123');
+    expect(state.isPaused, isTrue);
     expect(state.participants.single.displayName, 'Ada');
     final blocks = state.currentTurn!.blocks;
     expect(blocks[0], isA<InteractiveTextBlock>());
@@ -77,5 +79,50 @@ void main() {
     expect(blocks[6], isA<InteractivePrivatePromptBlock>());
     expect(blocks[7], isA<InteractiveSystemBlock>());
     expect(blocks[8], isA<InteractiveUnknownBlock>());
+
+    final completed = state.copyWith(isCompleted: true, isPaused: false);
+    expect(completed.isCompleted, isTrue);
+    expect(completed.isPaused, isFalse);
+    expect(state.isCompleted, isFalse);
+    expect(state.isPaused, isTrue);
+  });
+
+  test('SoloInteractiveSessionSummary parses history and safe fallbacks', () {
+    final summary = SoloInteractiveSessionSummary.fromJson({
+      'session_id': 'session-1',
+      'story_id': 'story-1',
+      'story_title': 'The Hot Seat',
+      'story_cover_image_url': 'https://example.test/cover.jpg',
+      'is_completed': false,
+      'is_paused': true,
+      'phase': 'discussion',
+      'topic_path': ['History', 'Ancient history', 'Egypt'],
+      'view_mode': 'chat',
+      'current_round': 3,
+      'score': 20,
+      'last_activity_at': '2026-07-11T10:30:00Z',
+      'created_at': '2026-07-10T09:00:00Z',
+      'preview': 'We were discussing the Old Kingdom.',
+    });
+
+    expect(summary.sessionId, 'session-1');
+    expect(summary.isResumable, isTrue);
+    expect(summary.displayTopic, 'History › Ancient history › Egypt');
+    expect(summary.currentRound, 3);
+    expect(summary.lastActivityAt.isUtc, isTrue);
+
+    final legacy = SoloInteractiveSessionSummary.fromJson({
+      'session_id': 'session-2',
+      'story_id': 'story-1',
+      'selected_topic': 'Music',
+      'is_completed': 'true',
+      'created_at': '2026-07-01T12:00:00',
+    });
+
+    expect(legacy.storyTitle, 'Music');
+    expect(legacy.topicPath, ['Music']);
+    expect(legacy.displayTopic, 'Music');
+    expect(legacy.isResumable, isFalse);
+    expect(legacy.lastActivityAt, legacy.createdAt);
   });
 }

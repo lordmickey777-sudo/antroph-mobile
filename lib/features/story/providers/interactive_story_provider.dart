@@ -16,6 +16,7 @@ class InteractiveStoryState {
   const InteractiveStoryState({
     this.session,
     this.isLoading = false,
+    this.isReadOnly = false,
     this.pendingInputKeys = const <String>{},
     this.pendingTextMessages = const <PendingInteractiveTextMessage>[],
     this.localQuizSelections = const <String, String>{},
@@ -29,6 +30,7 @@ class InteractiveStoryState {
 
   final InteractiveSessionState? session;
   final bool isLoading;
+  final bool isReadOnly;
   final Set<String> pendingInputKeys;
   final List<PendingInteractiveTextMessage> pendingTextMessages;
   final Map<String, String> localQuizSelections;
@@ -40,8 +42,9 @@ class InteractiveStoryState {
   final String? error;
 
   InteractiveStoryState copyWith({
-    InteractiveSessionState? session,
+    Object? session = _unset,
     bool? isLoading,
+    bool? isReadOnly,
     Set<String>? pendingInputKeys,
     List<PendingInteractiveTextMessage>? pendingTextMessages,
     Map<String, String>? localQuizSelections,
@@ -53,8 +56,11 @@ class InteractiveStoryState {
     Object? error = _unset,
   }) {
     return InteractiveStoryState(
-      session: session ?? this.session,
+      session: identical(session, _unset)
+          ? this.session
+          : session as InteractiveSessionState?,
       isLoading: isLoading ?? this.isLoading,
+      isReadOnly: isReadOnly ?? this.isReadOnly,
       pendingInputKeys: pendingInputKeys ?? this.pendingInputKeys,
       pendingTextMessages: pendingTextMessages ?? this.pendingTextMessages,
       localQuizSelections: localQuizSelections ?? this.localQuizSelections,
@@ -86,6 +92,8 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
   Timer? _generationWatchdogTimer;
   String? _generationWatchdogKey;
   Future<void>? _generationRecovery;
+  final Map<String, List<SoloInteractiveSessionSummary>> _soloHistoryCache =
+      <String, List<SoloInteractiveSessionSummary>>{};
   bool _isDisposed = false;
 
   @override
@@ -105,17 +113,25 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
   String get _deviceType => Platform.isIOS ? 'ios' : 'android';
   String get _deviceId => 'mobile-app';
 
-  Future<void> start({
+  Future<bool> start({
     required String storyId,
     required String interactionMode,
     String? sessionType,
     String? roomType,
+    bool startFresh = false,
   }) async {
-    if (state.isLoading) return;
+    if (state.isLoading) return false;
     final existing = state.session;
-    if (existing != null && existing.storyId == storyId) return;
+    if (!startFresh &&
+        existing != null &&
+        existing.storyId == storyId &&
+        !state.isReadOnly) {
+      return true;
+    }
 
-    state = state.copyWith(isLoading: true, error: null);
+    await _disconnectRoomSocket();
+    if (_isDisposed) return false;
+    state = const InteractiveStoryState(isLoading: true);
     try {
       final repo = ref.read(storiesRepositoryProvider);
       final session = await repo.startInteractiveSession(
@@ -125,18 +141,28 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         sessionType:
             sessionType ?? (interactionMode == 'group' ? 'group' : 'solo'),
         roomType: roomType,
+        startFresh: startFresh,
       );
-      if (_isDisposed) return;
+      if (_isDisposed) return false;
       final normalizedSession = _normalizeSessionSnapshot(session);
-      state = InteractiveStoryState(session: normalizedSession);
-      unawaited(_connectRoomSocket(session.sessionId));
+      final isReadOnly = normalizedSession.isCompleted;
+      state = InteractiveStoryState(
+        session: normalizedSession,
+        isReadOnly: isReadOnly,
+      );
+      if (!isReadOnly) {
+        unawaited(_connectRoomSocket(session.sessionId));
+      }
       _scheduleWaitingRefresh();
+      return true;
     } on ApiError catch (e) {
-      if (_isDisposed) return;
-      state = state.copyWith(isLoading: false, error: e.message);
+      if (_isDisposed) return false;
+      state = InteractiveStoryState(error: e.message);
+      return false;
     } catch (e) {
-      if (_isDisposed) return;
-      state = state.copyWith(isLoading: false, error: '$e');
+      if (_isDisposed) return false;
+      state = InteractiveStoryState(error: '$e');
+      return false;
     }
   }
 
@@ -154,7 +180,164 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       interactionMode: interactionMode,
       sessionType: sessionType,
       roomType: roomType,
+      startFresh: true,
     );
+  }
+
+  String _soloHistoryCacheKey(String? storyId) {
+    final normalized = storyId?.trim();
+    return normalized == null || normalized.isEmpty ? '__all__' : normalized;
+  }
+
+  List<SoloInteractiveSessionSummary>? cachedSoloHistory({String? storyId}) {
+    return _soloHistoryCache[_soloHistoryCacheKey(storyId)];
+  }
+
+  Future<List<SoloInteractiveSessionSummary>> fetchSoloHistory({
+    String? storyId,
+    int limit = 20,
+    bool forceRefresh = false,
+  }) async {
+    final cacheKey = _soloHistoryCacheKey(storyId);
+    if (!forceRefresh) {
+      final cached = _soloHistoryCache[cacheKey];
+      if (cached != null) return cached;
+    }
+    final history = await ref
+        .read(storiesRepositoryProvider)
+        .fetchSoloInteractiveHistory(storyId: storyId, limit: limit);
+    final cachedHistory = List<SoloInteractiveSessionSummary>.unmodifiable(
+      history,
+    );
+    _soloHistoryCache[cacheKey] = cachedHistory;
+    return cachedHistory;
+  }
+
+  Future<bool> resume(String sessionId) async {
+    final normalizedId = sessionId.trim();
+    if (normalizedId.isEmpty || state.isLoading) return false;
+
+    await _disconnectRoomSocket();
+    if (_isDisposed) return false;
+    state = const InteractiveStoryState(isLoading: true);
+    try {
+      final session = await ref
+          .read(storiesRepositoryProvider)
+          .resumeInteractiveSession(normalizedId);
+      if (_isDisposed) return false;
+      final normalizedSession = _normalizeSessionSnapshot(session);
+      final isReadOnly = normalizedSession.isCompleted;
+      state = InteractiveStoryState(
+        session: normalizedSession,
+        isReadOnly: isReadOnly,
+      );
+      if (!isReadOnly) {
+        unawaited(_connectRoomSocket(normalizedSession.sessionId));
+      }
+      _scheduleWaitingRefresh();
+      return true;
+    } on ApiError catch (e) {
+      if (_isDisposed) return false;
+      state = InteractiveStoryState(error: e.message);
+      return false;
+    } catch (e) {
+      if (_isDisposed) return false;
+      state = InteractiveStoryState(error: '$e');
+      return false;
+    }
+  }
+
+  Future<bool> loadReadOnly(String sessionId) async {
+    final normalizedId = sessionId.trim();
+    if (normalizedId.isEmpty || state.isLoading) return false;
+
+    await _disconnectRoomSocket();
+    if (_isDisposed) return false;
+    state = const InteractiveStoryState(isLoading: true, isReadOnly: true);
+    try {
+      final session = await ref
+          .read(storiesRepositoryProvider)
+          .fetchInteractiveSessionHistory(normalizedId);
+      if (_isDisposed) return false;
+      state = InteractiveStoryState(
+        session: _normalizeSessionSnapshot(session),
+        isReadOnly: true,
+      );
+      return true;
+    } on ApiError catch (e) {
+      if (_isDisposed) return false;
+      state = InteractiveStoryState(error: e.message);
+      return false;
+    } catch (e) {
+      if (_isDisposed) return false;
+      state = InteractiveStoryState(error: '$e');
+      return false;
+    }
+  }
+
+  /// Opens an exact session ID safely for deep links and stale history rows.
+  ///
+  /// A session can complete between the history request and the resume tap. In
+  /// that case the resume endpoint returns 409; fetch the canonical transcript
+  /// and open it read-only only when the server confirms it is completed.
+  Future<bool> openExact(String sessionId) async {
+    final normalizedId = sessionId.trim();
+    if (normalizedId.isEmpty || state.isLoading) return false;
+
+    await _disconnectRoomSocket();
+    if (_isDisposed) return false;
+    state = const InteractiveStoryState(isLoading: true);
+    try {
+      final session = await ref
+          .read(storiesRepositoryProvider)
+          .resumeInteractiveSession(normalizedId);
+      if (_isDisposed) return false;
+      final normalizedSession = _normalizeSessionSnapshot(session);
+      final isReadOnly = normalizedSession.isCompleted;
+      state = InteractiveStoryState(
+        session: normalizedSession,
+        isReadOnly: isReadOnly,
+      );
+      if (!isReadOnly) {
+        unawaited(_connectRoomSocket(normalizedSession.sessionId));
+        _scheduleWaitingRefresh();
+      }
+      return true;
+    } on ApiError catch (resumeError) {
+      if (_isDisposed) return false;
+      if (resumeError.statusCode != 409) {
+        state = InteractiveStoryState(error: resumeError.message);
+        return false;
+      }
+      try {
+        final canonical = await ref
+            .read(storiesRepositoryProvider)
+            .fetchInteractiveSessionHistory(normalizedId);
+        if (_isDisposed) return false;
+        final normalizedSession = _normalizeSessionSnapshot(canonical);
+        if (!normalizedSession.isCompleted) {
+          state = InteractiveStoryState(error: resumeError.message);
+          return false;
+        }
+        state = InteractiveStoryState(
+          session: normalizedSession,
+          isReadOnly: true,
+        );
+        return true;
+      } on ApiError catch (historyError) {
+        if (_isDisposed) return false;
+        state = InteractiveStoryState(error: historyError.message);
+        return false;
+      } catch (error) {
+        if (_isDisposed) return false;
+        state = InteractiveStoryState(error: '$error');
+        return false;
+      }
+    } catch (error) {
+      if (_isDisposed) return false;
+      state = InteractiveStoryState(error: '$error');
+      return false;
+    }
   }
 
   Future<void> joinPublic({
@@ -224,11 +407,18 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         state = state.copyWith(isLoading: false, error: null);
         return;
       }
+      final normalizedSession = _normalizeSessionSnapshot(session);
+      final isReadOnly = normalizedSession.isCompleted;
       state = state.copyWith(
-        session: _normalizeSessionSnapshot(session),
+        session: normalizedSession,
         isLoading: false,
+        isReadOnly: isReadOnly,
         error: null,
       );
+      if (isReadOnly) {
+        await _disconnectRoomSocket();
+        return;
+      }
       _scheduleWaitingRefresh();
     } on ApiError catch (e) {
       if (_isDisposed) return;
@@ -261,6 +451,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     if (sessionId == null || sessionId.isEmpty || state.isRetryingGeneration) {
       return;
     }
+    if (!_canMutateCurrentSession) return;
     state = state.copyWith(isRetryingGeneration: true, error: null);
 
     InteractiveSessionState? canonicalSession;
@@ -342,7 +533,8 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     if (sessionId == null ||
         sessionId.isEmpty ||
         state.isLoading ||
-        state.isAdvancingQuestion) {
+        state.isAdvancingQuestion ||
+        !_canMutateCurrentSession) {
       return;
     }
     state = state.copyWith(isAdvancingQuestion: true, error: null);
@@ -367,6 +559,12 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
   Future<void> leaveSession() async {
     final sessionId = state.session?.sessionId;
     if (sessionId == null || sessionId.isEmpty || state.isLoading) return;
+    if (!_canMutateCurrentSession) {
+      await _disconnectRoomSocket();
+      if (_isDisposed) return;
+      state = const InteractiveStoryState();
+      return;
+    }
     state = state.copyWith(isLoading: true, error: null);
     try {
       final repo = ref.read(storiesRepositoryProvider);
@@ -391,7 +589,9 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     String? questionId,
   }) async {
     final sessionId = state.session?.sessionId;
-    if (sessionId == null || sessionId.isEmpty) return;
+    if (sessionId == null || sessionId.isEmpty || !_canMutateCurrentSession) {
+      return;
+    }
     if (inputType == 'quiz_answer' && _isQuizAnswerExpired()) return;
 
     final key =
@@ -482,7 +682,12 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
   }) async {
     final sessionId = state.session?.sessionId;
     final trimmed = text.trim();
-    if (sessionId == null || sessionId.isEmpty || trimmed.isEmpty) return;
+    if (sessionId == null ||
+        sessionId.isEmpty ||
+        trimmed.isEmpty ||
+        !_canMutateCurrentSession) {
+      return;
+    }
     final key =
         '${state.session?.currentTurn?.turnId ?? state.session?.lastSeq}-text-${DateTime.now().millisecondsSinceEpoch}';
     final pendingMessage = PendingInteractiveTextMessage(
@@ -551,7 +756,12 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
   Future<void> submitPlayerChat(String text) async {
     final sessionId = state.session?.sessionId;
     final trimmed = text.trim();
-    if (sessionId == null || sessionId.isEmpty || trimmed.isEmpty) return;
+    if (sessionId == null ||
+        sessionId.isEmpty ||
+        trimmed.isEmpty ||
+        !_canMutateCurrentSession) {
+      return;
+    }
     final key =
         '${state.session?.lastSeq ?? 0}-player_chat-${DateTime.now().millisecondsSinceEpoch}';
     final pendingMessage = PendingInteractiveTextMessage(
@@ -609,9 +819,21 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     state = state.copyWith(error: null);
   }
 
+  bool get _canMutateCurrentSession {
+    final session = state.session;
+    return session != null && !state.isReadOnly && !session.isCompleted;
+  }
+
   Future<void> _connectRoomSocket(String sessionId) async {
     if (_isDisposed) return;
     if (sessionId.isEmpty) return;
+    final session = state.session;
+    if (state.isReadOnly ||
+        session == null ||
+        session.sessionId != sessionId ||
+        session.isCompleted) {
+      return;
+    }
     final token =
         ref.read(authControllerProvider.notifier).tokens?.accessToken ?? '';
     if (token.isEmpty) return;
@@ -695,6 +917,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
 
   void _handleRoomSocketMessage(dynamic data) {
     if (_isDisposed) return;
+    if (state.isReadOnly || state.session?.isCompleted == true) return;
     if (data is! String) return;
     final decoded = jsonDecode(data);
     if (decoded is! Map) return;
@@ -706,24 +929,39 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     if (type == 'room_state') {
       final snapshot = payload['snapshot'];
       if (snapshot is Map) {
-        final session = InteractiveSessionState.fromJson(
-          snapshot.cast<String, dynamic>(),
+        _applyRoomSnapshot(
+          InteractiveSessionState.fromJson(snapshot.cast<String, dynamic>()),
         );
-        if (_isOlderSessionSnapshot(session)) return;
-        final normalizedSession = _normalizeSessionSnapshot(session);
-        state = state.copyWith(
-          session: normalizedSession,
-          isRetryingGeneration:
-              state.isRetryingGeneration &&
-              _shouldKeepGenerationRetryOverlay(normalizedSession),
-        );
-        _scheduleWaitingRefresh();
       }
       return;
     }
 
     if (type != 'room_event') return;
     _applyRoomEvent(payload);
+  }
+
+  void _applyRoomSnapshot(InteractiveSessionState session) {
+    if (_isDisposed || _isOlderSessionSnapshot(session)) return;
+    final normalizedSession = _normalizeSessionSnapshot(session);
+    final isReadOnly = normalizedSession.isCompleted;
+    state = state.copyWith(
+      session: normalizedSession,
+      isReadOnly: isReadOnly,
+      isRetryingGeneration:
+          !isReadOnly &&
+          state.isRetryingGeneration &&
+          _shouldKeepGenerationRetryOverlay(normalizedSession),
+    );
+    if (isReadOnly) {
+      _resetGenerationWatchdog(clearSlowState: true);
+      unawaited(_disconnectRoomSocket());
+      return;
+    }
+    _scheduleWaitingRefresh();
+  }
+
+  void applyRoomSnapshotForTest(InteractiveSessionState session) {
+    _applyRoomSnapshot(session);
   }
 
   void _applyRoomEvent(Map<String, dynamic> event) {
@@ -936,17 +1174,22 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         )
         ? current.events
         : [...current.events, sessionEvent];
+    final didComplete = eventType == 'session_completed';
     final nextSession = _normalizeSessionSnapshot(
       current.copyWith(
         interactiveState: nextState,
         events: nextEvents,
         currentTurn: nextTurn,
         lastSeq: seq > current.lastSeq ? seq : current.lastSeq,
+        isCompleted: didComplete ? true : null,
+        isPaused: didComplete ? false : null,
       ),
     );
     state = state.copyWith(
       session: nextSession,
+      isReadOnly: didComplete ? true : state.isReadOnly,
       isRetryingGeneration:
+          !didComplete &&
           state.isRetryingGeneration &&
           _shouldKeepGenerationRetryOverlay(nextSession),
       streamingAssistantText: eventType == 'interactive_turn'
@@ -958,6 +1201,11 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
           ? _unset
           : recentStreamedAssistantText,
     );
+    if (didComplete) {
+      _resetGenerationWatchdog(clearSlowState: true);
+      unawaited(_disconnectRoomSocket());
+      return;
+    }
     _scheduleWaitingRefresh();
   }
 
@@ -970,7 +1218,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     _refreshTimer?.cancel();
     final session = state.session;
     _syncGenerationWatchdog(session);
-    if (session == null || session.isCompleted) return;
+    if (state.isReadOnly || session == null || session.isCompleted) return;
     final phase = session.interactiveState['phase'] as String?;
     final topicPromptStatus =
         session.interactiveState['topic_prompt_status'] as String?;
@@ -1009,6 +1257,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
 
   Future<void> _refreshSilently() async {
     if (_isDisposed) return;
+    if (state.isReadOnly || state.session?.isCompleted == true) return;
     final sessionId = state.session?.sessionId;
     if (sessionId == null || sessionId.isEmpty) return;
     try {
@@ -1018,12 +1267,19 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       if (state.session?.sessionId != sessionId) return;
       if (_isOlderSessionSnapshot(session)) return;
       final normalizedSession = _normalizeSessionSnapshot(session);
+      final isReadOnly = normalizedSession.isCompleted;
       state = state.copyWith(
         session: normalizedSession,
+        isReadOnly: isReadOnly,
         isRetryingGeneration:
+            !isReadOnly &&
             state.isRetryingGeneration &&
             _shouldKeepGenerationRetryOverlay(normalizedSession),
       );
+      if (isReadOnly) {
+        _resetGenerationWatchdog(clearSlowState: true);
+        unawaited(_disconnectRoomSocket());
+      }
     } catch (_) {
       // Keep the current UI state and try again while it is still waiting.
     } finally {

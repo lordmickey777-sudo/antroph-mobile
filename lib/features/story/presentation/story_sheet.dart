@@ -20,6 +20,7 @@ import 'package:antroph_mobile/features/story/models/story_detail.dart';
 import 'package:antroph_mobile/features/story/providers/story_session_provider.dart';
 import 'package:antroph_mobile/features/story/data/stories_cache.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
+import 'package:antroph_mobile/features/story/presentation/solo_interactive_history_view.dart';
 import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
 import 'package:antroph_mobile/features/subscription/providers/subscription_provider.dart';
 import 'package:antroph_mobile/features/subscription/presentation/revenuecat_actions.dart';
@@ -95,6 +96,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
     final tertiaryColor = context.tertiaryTextColor;
     final detailAsync = ref.watch(storyDetailProvider(widget.storyId));
     final detail = detailAsync.asData?.value;
+    final isDetailReady = detailAsync.hasValue && detail != null;
     final isPremium = widget.isPremium || (detail?.isPremium ?? false);
     final tags = detail?.tags ?? const <String>[];
 
@@ -137,6 +139,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                       isAdded: _isAdded,
                       isAddingToPlaylist: _isAddingToPlaylist,
                       isPremium: isPremium,
+                      isPlayEnabled: isDetailReady,
                       tags: tags,
                       onAddToPlaylist: _handleAddToPlaylist,
                       onPlayPressed: () => _handlePlayOrUnlock(isLocked),
@@ -249,6 +252,10 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
       await _showGroupGameLauncher();
       return;
     }
+    if ((detail?.interactionMode ?? 'narrative') != 'narrative') {
+      await _showSoloInteractiveLauncher();
+      return;
+    }
     await _navigateToChat();
   }
 
@@ -274,9 +281,30 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
     await _navigateToChat(launchMode: result.mode, joinCode: result.joinCode);
   }
 
+  Future<void> _showSoloInteractiveLauncher() async {
+    final result = await showSoloInteractiveLauncherSheet(
+      context,
+      storyId: widget.storyId,
+    );
+    if (!mounted || result == null) return;
+    await _navigateToChat(
+      storySessionId:
+          result.action == SoloInteractiveLaunchAction.continueSession
+          ? result.sessionId
+          : null,
+      soloStartFreshOnLaunch:
+          result.action == SoloInteractiveLaunchAction.startFresh,
+      soloOpenHistoryOnLaunch:
+          result.action == SoloInteractiveLaunchAction.viewHistory,
+    );
+  }
+
   Future<void> _navigateToChat({
     InteractiveStoryLaunchMode launchMode = InteractiveStoryLaunchMode.create,
     String? joinCode,
+    String? storySessionId,
+    bool soloStartFreshOnLaunch = false,
+    bool soloOpenHistoryOnLaunch = false,
   }) async {
     // Check auth first
     final authResult = await showAuthGuardSheet(
@@ -301,6 +329,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
         builder: (_) => StoryChatFlowPage(
           storyTitle: widget.title.isNotEmpty ? widget.title : 'Chat',
           storyId: widget.storyId,
+          storySessionId: storySessionId,
           mascotConfig: widget.mascotConfig,
           storySubtitle: widget.subtitle,
           storyImage: widget.imageAsset,
@@ -308,6 +337,8 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
           initialInteractionMode: initialInteractionMode,
           interactiveLaunchMode: launchMode,
           joinCode: joinCode,
+          soloStartFreshOnLaunch: soloStartFreshOnLaunch,
+          soloOpenHistoryOnLaunch: soloOpenHistoryOnLaunch,
         ),
       ),
     );
@@ -729,6 +760,7 @@ class _HeroCard extends ConsumerWidget {
     required this.isAdded,
     required this.isAddingToPlaylist,
     required this.isPremium,
+    required this.isPlayEnabled,
     required this.tags,
     required this.onAddToPlaylist,
     required this.onPlayPressed,
@@ -740,6 +772,7 @@ class _HeroCard extends ConsumerWidget {
   final bool isAdded;
   final bool isAddingToPlaylist;
   final bool isPremium;
+  final bool isPlayEnabled;
   final List<String> tags;
   final VoidCallback onAddToPlaylist;
   final VoidCallback onPlayPressed;
@@ -780,6 +813,7 @@ class _HeroCard extends ConsumerWidget {
                   : _ActionButton(
                       isAdded: isAdded,
                       isLoading: isAddingToPlaylist,
+                      isPlayEnabled: isPlayEnabled,
                       onAddPressed: isAddingToPlaylist ? null : onAddToPlaylist,
                       onPlayPressed: onPlayPressed,
                     ),
@@ -868,12 +902,14 @@ class _ActionButton extends StatelessWidget {
   const _ActionButton({
     required this.isAdded,
     required this.isLoading,
+    required this.isPlayEnabled,
     required this.onAddPressed,
     required this.onPlayPressed,
   });
 
   final bool isAdded;
   final bool isLoading;
+  final bool isPlayEnabled;
   final VoidCallback? onAddPressed;
   final VoidCallback onPlayPressed;
 
@@ -883,9 +919,9 @@ class _ActionButton extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         AppPillButton(
-          onPressed: onPlayPressed,
+          onPressed: isPlayEnabled ? onPlayPressed : null,
           icon: CupertinoIcons.play_fill,
-          label: 'Play',
+          label: isPlayEnabled ? 'Play' : '...',
           backgroundColor: context.actionButtonBackground,
           foregroundColor: context.actionButtonForeground,
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),

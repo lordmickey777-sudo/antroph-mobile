@@ -39,6 +39,7 @@ class InteractiveStoryRenderer extends StatelessWidget {
     this.showSoloModeSwitch = false,
     this.showQuizTopicDecision = false,
     this.alignSoloOptionsRight = true,
+    this.readOnly = false,
   });
 
   final InteractiveSessionState session;
@@ -63,6 +64,7 @@ class InteractiveStoryRenderer extends StatelessWidget {
   final bool showSoloModeSwitch;
   final bool showQuizTopicDecision;
   final bool alignSoloOptionsRight;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +86,7 @@ class InteractiveStoryRenderer extends StatelessWidget {
         showSoloModeSwitch: showSoloModeSwitch,
         showQuizTopicDecision: showQuizTopicDecision,
         alignSoloOptionsRight: alignSoloOptionsRight,
+        readOnly: readOnly,
         onChoice: onChoice,
         onTopicSuggestion: onTopicSuggestion,
         onCustomTopicRequested: onCustomTopicRequested,
@@ -230,6 +233,7 @@ class _QuizTranscriptView extends StatefulWidget {
     required this.onReplay,
     required this.onLeave,
     required this.isAdvancingQuestion,
+    required this.readOnly,
   });
 
   final InteractiveSessionState session;
@@ -254,6 +258,7 @@ class _QuizTranscriptView extends StatefulWidget {
   final VoidCallback onReplay;
   final VoidCallback onLeave;
   final bool isAdvancingQuestion;
+  final bool readOnly;
 
   @override
   State<_QuizTranscriptView> createState() => _QuizTranscriptViewState();
@@ -335,8 +340,8 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
       streamingAssistantText: widget.streamingAssistantText,
       canAdvanceQuestion: _canCurrentUserAdvance(session, widget.currentUserId),
       isAdvancingQuestion: widget.isAdvancingQuestion,
-      showSoloModeSwitch: widget.showSoloModeSwitch,
-      showQuizTopicDecision: widget.showQuizTopicDecision,
+      showSoloModeSwitch: !widget.readOnly && widget.showSoloModeSwitch,
+      showQuizTopicDecision: !widget.readOnly && widget.showQuizTopicDecision,
       soloViewMode: widget.soloViewMode,
     );
     _QuizTranscriptItem? standardBottomSuggestion;
@@ -355,6 +360,7 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
           item.kind == _QuizTranscriptItemKind.timerSuggestions ||
           item.kind == _QuizTranscriptItemKind.persistentModeSuggestions ||
           item.kind == _QuizTranscriptItemKind.quizTopicDecisionSuggestions) {
+        if (widget.readOnly) continue;
         final isOptionSuggestion =
             item.kind == _QuizTranscriptItemKind.topicAspectSuggestions ||
             item.kind == _QuizTranscriptItemKind.topicPathActionSuggestions ||
@@ -417,7 +423,10 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
           soloViewMode: widget.soloViewMode,
           alignSoloOptionsRight: widget.alignSoloOptionsRight,
           quizInteractionEnabled:
-              widget.soloViewMode != 'chat' && !widget.showQuizTopicDecision,
+              !widget.readOnly &&
+              widget.soloViewMode != 'chat' &&
+              !widget.showQuizTopicDecision,
+          readOnly: widget.readOnly,
           onQuizAnswer: widget.onQuizAnswer,
           onRetryGeneration: widget.onRetryGeneration,
           onAdvanceQuestion: widget.onAdvanceQuestion,
@@ -1919,6 +1928,7 @@ class _QuizTranscriptRow extends StatelessWidget {
     required this.soloViewMode,
     required this.alignSoloOptionsRight,
     required this.quizInteractionEnabled,
+    required this.readOnly,
     required this.onQuizAnswer,
     required this.onRetryGeneration,
     this.onAdvanceQuestion,
@@ -1942,6 +1952,7 @@ class _QuizTranscriptRow extends StatelessWidget {
   final String? soloViewMode;
   final bool alignSoloOptionsRight;
   final bool quizInteractionEnabled;
+  final bool readOnly;
   final QuizAnswerCallback onQuizAnswer;
   final VoidCallback onRetryGeneration;
   final VoidCallback? onAdvanceQuestion;
@@ -1953,7 +1964,7 @@ class _QuizTranscriptRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return switch (item.kind) {
+    final content = switch (item.kind) {
       _QuizTranscriptItemKind.aiMessage => _buildAiMessage(),
       _QuizTranscriptItemKind.userMessage => _UserMessageBubble(
         text: item.userText ?? '',
@@ -2073,8 +2084,8 @@ class _QuizTranscriptRow extends StatelessWidget {
       _QuizTranscriptItemKind.finalStandings => _ChatMessageBubble(
         child: _FinalStandingsContent(
           session: session,
-          onReplay: onReplay,
-          onLeave: onLeave,
+          onReplay: readOnly ? null : onReplay,
+          onLeave: readOnly ? null : onLeave,
         ),
       ),
       _QuizTranscriptItemKind.status => _ChatMessageBubble(
@@ -2093,9 +2104,11 @@ class _QuizTranscriptRow extends StatelessWidget {
               ),
       ),
     };
+    return IgnorePointer(ignoring: readOnly, child: content);
   }
 
   VoidCallback? _statusAction(BuildContext context) {
+    if (readOnly) return null;
     if (item.statusTitle == 'Question failed to load') {
       return onRetryGeneration;
     }
@@ -2120,6 +2133,7 @@ class _QuizTranscriptRow extends StatelessWidget {
   Widget _buildAiMessage() {
     final animationId = _itemAnimationId(item);
     final skipAnimation =
+        readOnly ||
         completedTranscriptAnimationIds.contains(animationId) ||
         !_shouldAnimateTranscriptItem(item) ||
         _sameTranscriptText(item.statusTitle, recentStreamedAssistantText);
@@ -4756,13 +4770,13 @@ class _ParticipantAvatar extends StatelessWidget {
 class _FinalStandingsContent extends StatelessWidget {
   const _FinalStandingsContent({
     required this.session,
-    required this.onReplay,
-    required this.onLeave,
+    this.onReplay,
+    this.onLeave,
   });
 
   final InteractiveSessionState session;
-  final VoidCallback onReplay;
-  final VoidCallback onLeave;
+  final VoidCallback? onReplay;
+  final VoidCallback? onLeave;
 
   @override
   Widget build(BuildContext context) {
@@ -4812,24 +4826,29 @@ class _FinalStandingsContent extends StatelessWidget {
           )
         else
           _StandingsList(rows: standings),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: onLeave,
-                child: const Text('Leave'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: FilledButton(
-                onPressed: onReplay,
-                child: const Text('Replay'),
-              ),
-            ),
-          ],
-        ),
+        if (onReplay != null || onLeave != null) ...[
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              if (onLeave != null)
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onLeave,
+                    child: const Text('Leave'),
+                  ),
+                ),
+              if (onLeave != null && onReplay != null)
+                const SizedBox(width: 10),
+              if (onReplay != null)
+                Expanded(
+                  child: FilledButton(
+                    onPressed: onReplay,
+                    child: const Text('Replay'),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }

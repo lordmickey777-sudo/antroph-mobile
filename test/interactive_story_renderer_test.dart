@@ -2691,6 +2691,76 @@ void main() {
       );
     },
   );
+
+  testWidgets('read-only history suppresses every live interaction', (
+    tester,
+  ) async {
+    var selectedChoice = '';
+    final session = InteractiveSessionState.fromJson({
+      'session_id': 'history-session',
+      'story_id': 'story-1',
+      'interaction_mode': 'interactive',
+      'ai_role': 'host',
+      'interactive_state': {
+        'template': 'quiz',
+        'phase': 'complete',
+        'session_type': 'solo',
+        'selected_topic': 'History',
+      },
+      'participants': const [],
+      'events': [
+        {
+          'id': 'history-turn-event',
+          'session_id': 'history-session',
+          'seq': 1,
+          'actor_type': 'ai',
+          'event_type': 'interactive_turn',
+          'payload': {
+            'type': 'interactive_turn.v1',
+            'session_id': 'history-session',
+            'turn_id': 'history-turn',
+            'seq': 1,
+            'speaker': {'type': 'ai', 'role': 'host'},
+            'blocks': [
+              {'kind': 'text', 'text': 'This is a saved transcript.'},
+              {
+                'kind': 'choice_group',
+                'prompt': 'Old action',
+                'options': [
+                  {'id': 'archive-option', 'label': 'Archive option'},
+                ],
+              },
+            ],
+          },
+        },
+      ],
+      'last_seq': 1,
+      'is_completed': true,
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: InteractiveStoryRenderer(
+            session: session,
+            readOnly: true,
+            showSoloModeSwitch: true,
+            onChoice: (value) => selectedChoice = value,
+            onQuizAnswer: (_, _) {},
+            onRetryGeneration: () {},
+            onReplay: () {},
+            onLeave: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('This is a saved transcript.'), findsOneWidget);
+    expect(find.text('Archive option'), findsOneWidget);
+    expect(find.text('Switch between Chat and Quiz.'), findsNothing);
+    await tester.tap(find.text('Archive option'), warnIfMissed: false);
+    await tester.pump();
+    expect(selectedChoice, isEmpty);
+  });
 }
 
 const _topicSuggestions = <Map<String, dynamic>>[

@@ -148,7 +148,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('Welcome to the story.'), findsOneWidget);
 
@@ -211,6 +211,272 @@ Which story would you like to explore?''',
       find.widgetWithText(OutlinedButton, 'Wedding Whisper'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('normal narrative story deduplicates repeated chapter buttons', (
+    tester,
+  ) async {
+    final fake = FakeVoiceChatController();
+    final storiesRepository = _FakeStoriesRepository(
+      conversation: const [
+        {
+          'speaker': 'assistant',
+          'message': '''Today, I have three stories for you to explore:
+
+1. **The Letter on the Kitchen Counter:** A folded note changes dinner.
+2. **Sunday Dinner's Silent Tension:** A family meal reveals what was avoided.
+3. **The Photograph in the Attic:** An old picture brings a buried memory back.
+
+1. **The Letter on the Kitchen Counter:** A folded note changes dinner.
+2. **Sunday Dinner's Silent Tension:** A family meal reveals what was avoided.
+3. **The Photograph in the Attic:** An old picture brings a buried memory back.
+
+Which of these stories would you like to dive into?''',
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+          storiesRepositoryProvider.overrideWithValue(storiesRepository),
+        ],
+        child: const MaterialApp(
+          home: StoryChatFlowPage(
+            storyId: 'story_1',
+            storyTitle: 'Beneath the Surface',
+            initialInteractionMode: 'narrative',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.widgetWithText(OutlinedButton, 'The Letter on the Kitchen Counter'),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(OutlinedButton, "Sunday Dinner's Silent Tension"),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(OutlinedButton, 'The Photograph in the Attic'),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(OutlinedButton, 'Try different stories'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('internal regeneration prompt displays as friendly user bubble', (
+    tester,
+  ) async {
+    final fake = FakeVoiceChatController();
+    final storiesRepository = _FakeStoriesRepository();
+    const prompt =
+        'Give me three different story options for Beneath the Surface. Make every option specific to this story room, using its title, premise, characters, themes, tone, or setting. Do not reuse generic options from another story. Use numbered options with a title and one short teaser in the same line. Do not use quotation marks or subtitles.';
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+          storiesRepositoryProvider.overrideWithValue(storiesRepository),
+        ],
+        child: const MaterialApp(
+          home: StoryChatFlowPage(
+            storyId: 'story_1',
+            storyTitle: 'Beneath the Surface',
+            initialInteractionMode: 'narrative',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), prompt);
+    await tester.pump();
+    await tester.tap(find.byIcon(CupertinoIcons.paperplane_fill));
+    await tester.pump();
+
+    expect(find.text('Try different stories'), findsWidgets);
+    expect(
+      find.textContaining('Give me three different story options'),
+      findsNothing,
+    );
+    expect(storiesRepository.sentMessages.single, prompt);
+  });
+
+  testWidgets('history hides internal story regeneration prompt', (
+    tester,
+  ) async {
+    final fake = FakeVoiceChatController();
+    final storiesRepository = _FakeStoriesRepository(
+      conversation: const [
+        {
+          'speaker': 'user',
+          'message':
+              'Give me three different story options for Beneath the Surface. Make every option specific to this story room, using its title, premise, characters, themes, tone, or setting. Do not reuse generic options from another story. Use numbered options with a title and one short teaser in the same line. Do not use quotation marks or subtitles.',
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+          storiesRepositoryProvider.overrideWithValue(storiesRepository),
+        ],
+        child: const MaterialApp(
+          home: StoryChatFlowPage(
+            storyId: 'story_1',
+            storyTitle: 'Beneath the Surface',
+            initialInteractionMode: 'narrative',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Try different stories'), findsOneWidget);
+    expect(
+      find.textContaining('Give me three different story options'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('latest story paragraph shows next and story-choice actions', (
+    tester,
+  ) async {
+    final fake = FakeVoiceChatController();
+    final storiesRepository = _FakeStoriesRepository(
+      conversation: const [
+        {
+          'speaker': 'assistant',
+          'message':
+              'The letter waits on the kitchen counter, unopened and heavy with everything no one said.',
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+          storiesRepositoryProvider.overrideWithValue(storiesRepository),
+        ],
+        child: const MaterialApp(
+          home: StoryChatFlowPage(
+            storyId: 'story_1',
+            storyTitle: 'Beneath the Surface',
+            initialInteractionMode: 'narrative',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(OutlinedButton, 'Next'), findsOneWidget);
+    expect(
+      find.widgetWithText(OutlinedButton, 'Try different stories'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Next'));
+    await tester.pump();
+
+    expect(find.text('Next'), findsWidgets);
+    expect(storiesRepository.sentMessages.single, 'Continue.');
+  });
+
+  testWidgets('story action restores previous choices before regenerating', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(430, 1100));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final fake = FakeVoiceChatController();
+    final storiesRepository = _FakeStoriesRepository(
+      conversation: const [
+        {
+          'speaker': 'assistant',
+          'message': '''Choose one story:
+
+1. **The Letter on the Kitchen Counter:** A folded note changes dinner.
+2. **Sunday Dinner's Silent Tension:** A family meal reveals what was avoided.
+3. **The Photograph in the Attic:** An old picture brings a memory back.''',
+        },
+        {
+          'speaker': 'user',
+          'message': 'I choose The Letter on the Kitchen Counter.',
+        },
+        {
+          'speaker': 'assistant',
+          'message':
+              'The letter waits on the kitchen counter, unopened and heavy with everything no one said.',
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+          storiesRepositoryProvider.overrideWithValue(storiesRepository),
+        ],
+        child: const MaterialApp(
+          home: StoryChatFlowPage(
+            storyId: 'story_1',
+            storyTitle: 'Beneath the Surface',
+            initialInteractionMode: 'narrative',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    final tryButtons = find.widgetWithText(
+      OutlinedButton,
+      'Try different stories',
+    );
+    expect(tryButtons, findsNWidgets(2));
+
+    await tester.tap(tryButtons.last);
+    await tester.pump();
+
+    expect(storiesRepository.sentMessages, isEmpty);
+    expect(
+      find.widgetWithText(OutlinedButton, 'The Letter on the Kitchen Counter'),
+      findsNWidgets(2),
+    );
+    final letterButtons = find.widgetWithText(
+      OutlinedButton,
+      'The Letter on the Kitchen Counter',
+    );
+    final originalRect = tester.getRect(letterButtons.at(0));
+    final reopenedRect = tester.getRect(letterButtons.at(1));
+    expect(reopenedRect.left, greaterThan(originalRect.left));
+    expect(
+      find.widgetWithText(OutlinedButton, "Sunday Dinner's Silent Tension"),
+      findsNWidgets(2),
+    );
+    expect(
+      find.widgetWithText(OutlinedButton, 'The Photograph in the Attic'),
+      findsNWidgets(2),
+    );
+    expect(find.widgetWithText(OutlinedButton, 'Next'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Next'));
+    await tester.pump();
+
+    expect(storiesRepository.sentMessages.single, 'Continue.');
   });
 
   testWidgets('VoiceChatScreen shows Ready for armed story state', (
@@ -373,6 +639,7 @@ class _FakeStoriesRepository extends StoriesRepository {
 
   int streamCalls = 0;
   int fetchConversationCalls = 0;
+  final List<String> sentMessages = [];
   List<Map<String, dynamic>> conversation;
 
   StorySession get _session => StorySession(
@@ -409,6 +676,7 @@ class _FakeStoriesRepository extends StoriesRepository {
     int? expectedVersion,
   }) async* {
     streamCalls++;
+    sentMessages.add(message);
     yield const StoryTextStreamEvent(type: 'token', content: 'A reply');
     yield StoryTextStreamEvent(type: 'done', session: _session);
   }

@@ -12,6 +12,7 @@ import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/story/models/story_detail.dart';
 import 'package:antroph_mobile/features/story/models/story_session.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
+import 'package:antroph_mobile/features/story/presentation/solo_interactive_history_view.dart';
 import 'package:antroph_mobile/features/story/presentation/story_voice_page.dart';
 import 'package:antroph_mobile/features/story/providers/interactive_story_provider.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
@@ -55,6 +56,8 @@ class StoryChatFlowPage extends ConsumerStatefulWidget {
     this.voicePageBuilder,
     this.interactiveLaunchMode = InteractiveStoryLaunchMode.create,
     this.joinCode,
+    this.soloStartFreshOnLaunch = false,
+    this.soloOpenHistoryOnLaunch = false,
   });
 
   final String storyId;
@@ -68,6 +71,8 @@ class StoryChatFlowPage extends ConsumerStatefulWidget {
   final WidgetBuilder? voicePageBuilder;
   final InteractiveStoryLaunchMode interactiveLaunchMode;
   final String? joinCode;
+  final bool soloStartFreshOnLaunch;
+  final bool soloOpenHistoryOnLaunch;
 
   @override
   ConsumerState<StoryChatFlowPage> createState() => _StoryChatFlowPageState();
@@ -84,6 +89,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
   String? _lastReadyStorySessionId;
   String? _textStorySessionId;
   VoiceChatController? _voiceController;
+  final _interactiveStoryTabKey = GlobalKey<_InteractiveStoryTabState>();
 
   @override
   void initState() {
@@ -199,6 +205,9 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
 
   Future<void> _handleBackPressed() async {
     if (_isInteractiveStory()) {
+      final handledLocally =
+          await _interactiveStoryTabKey.currentState?.handleBack() ?? false;
+      if (handledLocally) return;
       await _leaveGame(confirm: true);
       return;
     }
@@ -366,6 +375,13 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
         ? widget.storyTitle!
         : 'Chat';
     final storyDetail = ref.watch(storyDetailProvider(widget.storyId));
+    final resolvedInteractionMode =
+        widget.initialInteractionMode ??
+        storyDetail.asData?.value.interactionMode;
+    final showSoloHistory =
+        resolvedInteractionMode != null &&
+        resolvedInteractionMode != 'narrative' &&
+        resolvedInteractionMode != 'group';
 
     return PopScope(
       canPop: false,
@@ -421,6 +437,18 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
               softWrap: false,
             ),
             actions: [
+              if (showSoloHistory)
+                IconButton(
+                  onPressed: () {
+                    unawaited(
+                      _interactiveStoryTabKey.currentState?.showHistory() ??
+                          Future<void>.value(),
+                    );
+                  },
+                  icon: const Icon(CupertinoIcons.clock),
+                  color: context.primaryTextColor,
+                  tooltip: 'Solo session history',
+                ),
               IconButton(
                 onPressed: () => _openStoryDetails(context),
                 icon: const Icon(CupertinoIcons.info_circle),
@@ -443,10 +471,14 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
               }
               if (interactionMode != 'narrative') {
                 return _InteractiveStoryTab(
+                  key: _interactiveStoryTabKey,
                   storyId: widget.storyId,
+                  storySessionId: widget.storySessionId,
                   interactionMode: interactionMode,
                   launchMode: widget.interactiveLaunchMode,
                   joinCode: widget.joinCode,
+                  soloStartFreshOnLaunch: widget.soloStartFreshOnLaunch,
+                  soloOpenHistoryOnLaunch: widget.soloOpenHistoryOnLaunch,
                   onCall: _openVoicePage,
                   onLeave: _leaveGame,
                 );
@@ -471,18 +503,25 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
 
 class _InteractiveStoryTab extends ConsumerStatefulWidget {
   const _InteractiveStoryTab({
+    super.key,
     required this.storyId,
+    this.storySessionId,
     required this.interactionMode,
     required this.launchMode,
     this.joinCode,
+    this.soloStartFreshOnLaunch = false,
+    this.soloOpenHistoryOnLaunch = false,
     required this.onCall,
     required this.onLeave,
   });
 
   final String storyId;
+  final String? storySessionId;
   final String interactionMode;
   final InteractiveStoryLaunchMode launchMode;
   final String? joinCode;
+  final bool soloStartFreshOnLaunch;
+  final bool soloOpenHistoryOnLaunch;
   final VoidCallback onCall;
   final Future<void> Function() onLeave;
 
@@ -490,6 +529,8 @@ class _InteractiveStoryTab extends ConsumerStatefulWidget {
   ConsumerState<_InteractiveStoryTab> createState() =>
       _InteractiveStoryTabState();
 }
+
+enum _SoloEntryView { checking, launcher, history, session }
 
 class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   final _textController = TextEditingController();
@@ -509,6 +550,14 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   bool _started = false;
   String? _lastGenerationFailureKey;
   String? _stickyGenerationError;
+  _SoloEntryView _soloEntryView = _SoloEntryView.launcher;
+  List<SoloInteractiveSessionSummary> _soloSessionHistory =
+      const <SoloInteractiveSessionSummary>[];
+  bool _soloEntryBusy = false;
+  String? _soloEntryError;
+  bool _preferredSoloSessionHandled = false;
+  String? _historyReturnSessionId;
+  int _soloEntryRequestSerial = 0;
 
   @override
   void initState() {
@@ -532,6 +581,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     _started = true;
     final code = widget.joinCode?.trim() ?? '';
     if (widget.launchMode == InteractiveStoryLaunchMode.joinPublic) {
+      setState(() => _soloEntryView = _SoloEntryView.session);
       unawaited(
         ref
             .read(interactiveStoryProvider.notifier)
@@ -541,17 +591,365 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     }
     if (widget.launchMode == InteractiveStoryLaunchMode.joinByCode &&
         code.isNotEmpty) {
+      setState(() => _soloEntryView = _SoloEntryView.session);
       unawaited(ref.read(interactiveStoryProvider.notifier).joinByCode(code));
       return;
     }
+    if (widget.interactionMode == 'group') {
+      setState(() => _soloEntryView = _SoloEntryView.session);
+      unawaited(
+        ref
+            .read(interactiveStoryProvider.notifier)
+            .start(
+              storyId: widget.storyId,
+              interactionMode: widget.interactionMode,
+            ),
+      );
+      return;
+    }
+    if (widget.soloStartFreshOnLaunch) {
+      unawaited(_startSoloSession(startFresh: true));
+      return;
+    }
+    final cachedHistory = ref
+        .read(interactiveStoryProvider.notifier)
+        .cachedSoloHistory(storyId: widget.storyId);
+    setState(() {
+      if (cachedHistory != null) _soloSessionHistory = cachedHistory;
+      _soloEntryView = widget.soloOpenHistoryOnLaunch
+          ? _SoloEntryView.history
+          : _SoloEntryView.session;
+    });
     unawaited(
-      ref
-          .read(interactiveStoryProvider.notifier)
-          .start(
-            storyId: widget.storyId,
-            interactionMode: widget.interactionMode,
-          ),
+      _loadSoloEntry(
+        openHistory: widget.soloOpenHistoryOnLaunch,
+        honorPreferredSession: !widget.soloOpenHistoryOnLaunch,
+      ),
     );
+  }
+
+  SoloInteractiveSessionSummary? get _latestResumableSoloSession {
+    for (final session in _soloSessionHistory) {
+      if (session.isResumable) return session;
+    }
+    return null;
+  }
+
+  Future<void> _loadSoloEntry({
+    bool openHistory = false,
+    bool honorPreferredSession = true,
+    bool forceRefresh = false,
+  }) async {
+    if (!mounted || _soloEntryBusy) return;
+    final notifier = ref.read(interactiveStoryProvider.notifier);
+    final cachedHistory = forceRefresh
+        ? null
+        : notifier.cachedSoloHistory(storyId: widget.storyId);
+    if (cachedHistory != null) {
+      await _applySoloEntryHistory(
+        cachedHistory,
+        openHistory: openHistory,
+        honorPreferredSession: honorPreferredSession,
+      );
+      return;
+    }
+    final requestSerial = ++_soloEntryRequestSerial;
+    setState(() {
+      _soloEntryView = openHistory
+          ? _SoloEntryView.history
+          : _SoloEntryView.session;
+      _soloEntryBusy = true;
+      _soloEntryError = null;
+    });
+    try {
+      final history = await notifier.fetchSoloHistory(
+        storyId: widget.storyId,
+        limit: 50,
+        forceRefresh: forceRefresh,
+      );
+      if (!mounted || requestSerial != _soloEntryRequestSerial) return;
+      await _applySoloEntryHistory(
+        history,
+        openHistory: openHistory,
+        honorPreferredSession: honorPreferredSession,
+      );
+    } catch (error) {
+      if (!mounted || requestSerial != _soloEntryRequestSerial) return;
+      setState(() {
+        _soloEntryView = openHistory
+            ? _SoloEntryView.history
+            : _SoloEntryView.launcher;
+        _soloEntryBusy = false;
+        _soloEntryError = _soloEntryErrorText(error);
+      });
+    }
+  }
+
+  Future<void> _applySoloEntryHistory(
+    List<SoloInteractiveSessionSummary> history, {
+    required bool openHistory,
+    required bool honorPreferredSession,
+  }) async {
+    if (!mounted) return;
+    _soloSessionHistory = history;
+
+    final preferredId = widget.storySessionId?.trim();
+    if (honorPreferredSession &&
+        !_preferredSoloSessionHandled &&
+        preferredId != null &&
+        preferredId.isNotEmpty) {
+      _preferredSoloSessionHandled = true;
+      SoloInteractiveSessionSummary? preferred;
+      for (final session in history) {
+        if (session.sessionId == preferredId) {
+          preferred = session;
+          break;
+        }
+      }
+      setState(() => _soloEntryBusy = false);
+      if (preferred != null) {
+        await _openSoloHistorySession(preferred);
+        return;
+      }
+      await _openExactSoloSession(preferredId);
+      return;
+    }
+
+    if (history.isEmpty && !openHistory) {
+      setState(() => _soloEntryBusy = false);
+      await _startSoloSession(startFresh: false);
+      return;
+    }
+    if (!openHistory) {
+      final latest = _latestResumableSoloSession;
+      if (latest != null) {
+        setState(() => _soloEntryBusy = false);
+        await _openSoloHistorySession(latest);
+        return;
+      }
+    }
+    setState(() {
+      _soloEntryView = openHistory
+          ? _SoloEntryView.history
+          : _SoloEntryView.history;
+      _soloEntryBusy = false;
+      _soloEntryError = null;
+    });
+  }
+
+  Future<void> _startSoloSession({required bool startFresh}) async {
+    if (_soloEntryBusy) return;
+    final requestSerial = ++_soloEntryRequestSerial;
+    setState(() {
+      _soloEntryView = _SoloEntryView.session;
+      _soloEntryBusy = true;
+      _soloEntryError = null;
+    });
+    final notifier = ref.read(interactiveStoryProvider.notifier);
+    final opened = await notifier.start(
+      storyId: widget.storyId,
+      interactionMode: widget.interactionMode,
+      startFresh: startFresh,
+    );
+    if (!mounted || requestSerial != _soloEntryRequestSerial) return;
+    final session = ref.read(interactiveStoryProvider).session;
+    if (opened &&
+        session != null &&
+        session.storyId == widget.storyId &&
+        !ref.read(interactiveStoryProvider).isLoading) {
+      setState(() {
+        _soloEntryView = _SoloEntryView.session;
+        _soloEntryBusy = false;
+      });
+      return;
+    }
+    setState(() {
+      _soloEntryView = _SoloEntryView.session;
+      _soloEntryBusy = false;
+      _soloEntryError =
+          ref.read(interactiveStoryProvider).error ??
+          'This solo session could not be opened.';
+    });
+  }
+
+  Future<void> _openSoloHistorySession(
+    SoloInteractiveSessionSummary summary,
+  ) async {
+    if (_soloEntryBusy) return;
+    final currentState = ref.read(interactiveStoryProvider);
+    final currentSession = currentState.session;
+    if (currentSession?.sessionId == summary.sessionId &&
+        !currentState.isReadOnly) {
+      setState(() {
+        _soloEntryView = _SoloEntryView.session;
+        _soloEntryError = null;
+      });
+      return;
+    }
+    if (currentSession != null && !currentState.isReadOnly) {
+      final shouldSwitch = await _confirmSoloSessionSwitch();
+      if (!mounted || !shouldSwitch) return;
+      setState(() {
+        _soloEntryView = _SoloEntryView.session;
+        _soloEntryBusy = true;
+      });
+      await ref.read(interactiveStoryProvider.notifier).leaveSession();
+      if (!mounted) return;
+      setState(() => _soloEntryBusy = false);
+    }
+    final requestSerial = ++_soloEntryRequestSerial;
+    setState(() {
+      _soloEntryView = _SoloEntryView.session;
+      _soloEntryBusy = true;
+      _soloEntryError = null;
+    });
+    final notifier = ref.read(interactiveStoryProvider.notifier);
+    final opened = summary.isResumable
+        ? await notifier.openExact(summary.sessionId)
+        : await notifier.loadReadOnly(summary.sessionId);
+    if (!mounted || requestSerial != _soloEntryRequestSerial) return;
+    final state = ref.read(interactiveStoryProvider);
+    if (opened &&
+        state.session?.sessionId == summary.sessionId &&
+        !state.isLoading) {
+      setState(() {
+        _soloEntryView = _SoloEntryView.session;
+        _soloEntryBusy = false;
+      });
+      return;
+    }
+    setState(() {
+      _soloEntryBusy = false;
+      _soloEntryError = state.error ?? 'This session could not be opened.';
+    });
+  }
+
+  Future<void> _openExactSoloSession(String sessionId) async {
+    if (_soloEntryBusy) return;
+    final requestSerial = ++_soloEntryRequestSerial;
+    setState(() {
+      _soloEntryView = _SoloEntryView.session;
+      _soloEntryBusy = true;
+      _soloEntryError = null;
+    });
+    final opened = await ref
+        .read(interactiveStoryProvider.notifier)
+        .openExact(sessionId);
+    if (!mounted || requestSerial != _soloEntryRequestSerial) return;
+    final state = ref.read(interactiveStoryProvider);
+    if (opened && state.session?.sessionId == sessionId && !state.isLoading) {
+      setState(() {
+        _soloEntryView = _SoloEntryView.session;
+        _soloEntryBusy = false;
+      });
+      return;
+    }
+    setState(() {
+      _soloEntryView = _SoloEntryView.session;
+      _soloEntryBusy = false;
+      _soloEntryError = state.error ?? 'This session could not be opened.';
+    });
+  }
+
+  Future<void> _requestStartFresh() async {
+    if (_soloEntryBusy) return;
+    final state = ref.read(interactiveStoryProvider);
+    if (state.session != null && !state.isReadOnly) {
+      final shouldStart = await _confirmSoloSessionSwitch(startFresh: true);
+      if (!mounted || !shouldStart) return;
+    }
+    await _startSoloSession(startFresh: true);
+  }
+
+  Future<bool> _confirmSoloSessionSwitch({bool startFresh = false}) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => _LeaveGameDialog(
+        title: startFresh ? 'Start a new session?' : 'Switch sessions?',
+        message: startFresh
+            ? 'Your current solo session will stay in History, and a new one will begin.'
+            : 'Your current solo session will be paused so you can open this one.',
+        icon: CupertinoIcons.clock,
+        iconBackground: const Color(0xFF22C55E).withValues(alpha: 0.12),
+        iconColor: const Color(0xFF22C55E),
+        confirmLabel: startFresh ? 'Start new' : 'Switch',
+      ),
+    );
+    return result == true;
+  }
+
+  Future<void> showHistory() async {
+    if (widget.interactionMode == 'group' ||
+        widget.launchMode != InteractiveStoryLaunchMode.create ||
+        _soloEntryBusy) {
+      return;
+    }
+    if (_hasActiveTimedSoloQuestion()) {
+      showToast(
+        context,
+        'Finish this timed question before opening session history.',
+      );
+      return;
+    }
+    _textFocusNode.unfocus();
+    _resetCustomTopicEntry(clearText: true);
+    _historyReturnSessionId = ref
+        .read(interactiveStoryProvider)
+        .session
+        ?.sessionId;
+    await _loadSoloEntry(openHistory: true, honorPreferredSession: false);
+  }
+
+  bool _hasActiveTimedSoloQuestion() {
+    final session = ref.read(interactiveStoryProvider).session;
+    final state = session?.interactiveState;
+    if (state == null ||
+        state['session_type'] != 'solo' ||
+        state['phase'] != 'question_active') {
+      return false;
+    }
+    final expiresAt =
+        state['expires_at'] ?? ((state['question'] as Map?)?['expires_at']);
+    return expiresAt?.toString().trim().isNotEmpty == true;
+  }
+
+  void _closeHistory() {
+    if (_soloEntryBusy) return;
+    final activeSessionId = ref
+        .read(interactiveStoryProvider)
+        .session
+        ?.sessionId;
+    setState(() {
+      _soloEntryView =
+          _historyReturnSessionId != null &&
+              activeSessionId == _historyReturnSessionId
+          ? _SoloEntryView.session
+          : _SoloEntryView.launcher;
+      _soloEntryError = null;
+    });
+  }
+
+  Future<bool> handleBack() async {
+    if (_soloEntryView == _SoloEntryView.history) {
+      _closeHistory();
+      return true;
+    }
+    final providerState = ref.read(interactiveStoryProvider);
+    if (_soloEntryView == _SoloEntryView.session &&
+        providerState.isReadOnly &&
+        _soloSessionHistory.isNotEmpty) {
+      await ref.read(interactiveStoryProvider.notifier).leaveSession();
+      if (!mounted) return true;
+      await _loadSoloEntry(openHistory: true, honorPreferredSession: false);
+      return true;
+    }
+    return false;
+  }
+
+  String _soloEntryErrorText(Object error) {
+    final text = error.toString().trim();
+    if (text.isEmpty) return 'Solo history could not be loaded.';
+    return text.replaceFirst(RegExp(r'^(ApiError|Exception):\s*'), '');
   }
 
   void _sendText() {
@@ -987,6 +1385,49 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final currentUserId = ref.watch(authControllerProvider).value?.id;
     final notifier = ref.read(interactiveStoryProvider.notifier);
     final session = state.session;
+    if (_soloEntryView == _SoloEntryView.checking) {
+      return const _StorySessionLoadingShell(title: 'CHECKING SESSIONS...');
+    }
+    if (_soloEntryView == _SoloEntryView.launcher) {
+      final latest = _latestResumableSoloSession;
+      return SoloInteractiveSessionLauncher(
+        latestSession: latest,
+        hasHistory: _soloSessionHistory.isNotEmpty,
+        isBusy: _soloEntryBusy,
+        error: _soloEntryError,
+        onContinue: () {
+          if (latest != null) unawaited(_openSoloHistorySession(latest));
+        },
+        onStartFresh: () => unawaited(_requestStartFresh()),
+        onViewHistory: () {
+          setState(() {
+            _soloEntryView = _SoloEntryView.history;
+            _soloEntryError = null;
+          });
+        },
+        onRetry: () => unawaited(
+          _loadSoloEntry(honorPreferredSession: false, forceRefresh: true),
+        ),
+      );
+    }
+    if (_soloEntryView == _SoloEntryView.history) {
+      return SoloInteractiveSessionHistoryView(
+        sessions: _soloSessionHistory,
+        isBusy: _soloEntryBusy,
+        error: _soloEntryError,
+        onBack: _closeHistory,
+        onSelect: (summary) => unawaited(_openSoloHistorySession(summary)),
+        onStartFresh: () => unawaited(_requestStartFresh()),
+        onRetry: () => unawaited(
+          _loadSoloEntry(
+            openHistory: true,
+            honorPreferredSession: false,
+            forceRefresh: true,
+          ),
+        ),
+      );
+    }
+    final isReadOnlyHistory = state.isReadOnly;
     final isQuizSession = _isQuizSession(session);
     final phase = (session?.interactiveState['phase'] as String?) ?? '';
     final isSoloQuizSession =
@@ -997,7 +1438,8 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final showQuizTopicDecision = _isShowingQuizTopicDecision(session);
     final showSoloModeSwitch =
         _shouldShowSoloModeSwitch(session) && !showQuizTopicDecision;
-    final showTextComposer = _shouldShowTextComposer(session);
+    final showTextComposer =
+        !isReadOnlyHistory && _shouldShowTextComposer(session);
     final isAspectSelectionStage = _isAspectSelectionStage(session);
     final topicSuggestions = session?.interactiveState['topic_suggestions'];
     final pendingTopicOptions =
@@ -1074,6 +1516,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final hasQuizTopicDecisionAnchor =
         showQuizTopicDecision && !hasPendingBottomChoice;
     final floatSoloChoiceCall =
+        !isReadOnlyHistory &&
         isSoloQuizSession &&
         !showTextComposer &&
         ((phase == 'topic_selection' &&
@@ -1119,6 +1562,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
       children: [
         Column(
           children: [
+            if (isReadOnlyHistory) const SoloHistoryReadOnlyBanner(),
             Expanded(
               child: session == null
                   ? _StorySessionLoadingShell(
@@ -1132,6 +1576,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                       onRefresh: notifier.refresh,
                       child: InteractiveStoryRenderer(
                         session: session,
+                        readOnly: isReadOnlyHistory,
                         currentUserId: currentUserId,
                         pendingKeys: state.pendingInputKeys,
                         pendingTextMessages: state.pendingTextMessages,
@@ -1258,7 +1703,9 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                   ),
                 ),
               )
-            else if (session != null && !floatSoloChoiceCall)
+            else if (session != null &&
+                !isReadOnlyHistory &&
+                !floatSoloChoiceCall)
               _QuizGameBottomBar(
                 onCall: widget.onCall,
                 disabled: disableQuizGameControls,
@@ -1288,7 +1735,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
               ),
             ),
           ),
-        if (showQuestionGenerationOverlay)
+        if (showQuestionGenerationOverlay && !isReadOnlyHistory)
           Positioned.fill(
             child: _QuestionGenerationOverlay(
               isLoading: questionGenerationRetrying,
@@ -1473,6 +1920,7 @@ class _LeaveGameDialog extends StatelessWidget {
     this.icon = CupertinoIcons.arrow_left_circle_fill,
     this.iconBackground,
     this.iconColor = Colors.white,
+    this.confirmLabel = 'Leave',
   });
 
   final String title;
@@ -1480,6 +1928,7 @@ class _LeaveGameDialog extends StatelessWidget {
   final IconData icon;
   final Color? iconBackground;
   final Color iconColor;
+  final String confirmLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1591,9 +2040,9 @@ class _LeaveGameDialog extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text(
-                      'Leave',
-                      style: TextStyle(fontWeight: FontWeight.w900),
+                    child: Text(
+                      confirmLabel,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                   ),
                 ),
@@ -2443,20 +2892,38 @@ String _cleanStoryBubbleText(String value) {
   return text;
 }
 
+bool _isRegenerateStoryOptionsPrompt(String value) {
+  final normalized = value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  return normalized.startsWith('give me three different story options for ') &&
+      normalized.contains('do not reuse generic options') &&
+      normalized.contains('use numbered options');
+}
+
+String _friendlyStoryUserBubbleText(String value) {
+  if (_isRegenerateStoryOptionsPrompt(value)) {
+    return 'Try different stories';
+  }
+  return _cleanStoryBubbleText(value);
+}
+
 class _StoryOptionButtons extends StatefulWidget {
   const _StoryOptionButtons({
     required this.options,
     required this.onSelected,
     required this.onRegenerate,
+    this.onNext,
     this.selectedTitle,
     this.disabled = false,
+    this.alignRight = false,
   });
 
   final List<_ParsedStoryOption> options;
   final ValueChanged<_ParsedStoryOption> onSelected;
   final VoidCallback onRegenerate;
+  final VoidCallback? onNext;
   final String? selectedTitle;
   final bool disabled;
+  final bool alignRight;
 
   @override
   State<_StoryOptionButtons> createState() => _StoryOptionButtonsState();
@@ -2483,11 +2950,16 @@ class _StoryOptionButtonsState extends State<_StoryOptionButtons> {
     final selectedTitle = widget.selectedTitle ?? _draftOption?.title;
     final optionsDisabled = widget.disabled;
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: widget.alignRight
+          ? Alignment.centerRight
+          : Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 280),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: widget.alignRight
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
           children: [
             for (var i = 0; i < widget.options.length; i++) ...[
               _StoryOptionButton(
@@ -2507,11 +2979,21 @@ class _StoryOptionButtonsState extends State<_StoryOptionButtons> {
                 onConfirm: () => widget.onSelected(_draftOption!),
               ),
             ],
+            if (widget.onNext != null) ...[
+              const SizedBox(height: 8),
+              _StoryContinuationButton(
+                label: 'Next',
+                icon: CupertinoIcons.chevron_right,
+                disabled: widget.disabled,
+                onPressed: widget.onNext!,
+              ),
+            ],
             const SizedBox(height: 8),
             _StoryActionButton(
               label: 'Try different stories',
               disabled: widget.disabled,
               selected: _confirmRegenerate,
+              alignRight: widget.alignRight,
               onPressed: _selectRegenerate,
             ),
             if (_confirmRegenerate) ...[
@@ -2623,18 +3105,20 @@ class _StoryActionButton extends StatelessWidget {
     required this.disabled,
     required this.selected,
     required this.onPressed,
+    this.alignRight = false,
   });
 
   final String label;
   final bool disabled;
   final bool selected;
   final VoidCallback onPressed;
+  final bool alignRight;
 
   @override
   Widget build(BuildContext context) {
     const accent = Color(0xFFF59E0B);
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 190),
         child: SizedBox(
@@ -2774,6 +3258,104 @@ class _StoryOptionConfirmBar extends StatelessWidget {
   }
 }
 
+class _StoryContinuationActions extends StatelessWidget {
+  const _StoryContinuationActions({
+    required this.disabled,
+    required this.onNext,
+    required this.onTryDifferentStories,
+  });
+
+  final bool disabled;
+  final VoidCallback onNext;
+  final VoidCallback onTryDifferentStories;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _StoryContinuationButton(
+            label: 'Next',
+            icon: CupertinoIcons.chevron_right,
+            disabled: disabled,
+            onPressed: onNext,
+          ),
+          const SizedBox(height: 8),
+          _StoryContinuationButton(
+            label: 'Try different stories',
+            disabled: disabled,
+            onPressed: onTryDifferentStories,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StoryContinuationButton extends StatelessWidget {
+  const _StoryContinuationButton({
+    required this.label,
+    required this.disabled,
+    required this.onPressed,
+    this.icon,
+  });
+
+  final String label;
+  final bool disabled;
+  final VoidCallback onPressed;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    const background = Color(0xF0131415);
+    const accent = Color(0xFFF59E0B);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 220),
+      child: OutlinedButton(
+        onPressed: disabled ? null : onPressed,
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          foregroundColor: Colors.white,
+          disabledForegroundColor: Colors.white54,
+          side: BorderSide(
+            color: accent.withValues(alpha: disabled ? 0.42 : 0.82),
+            width: 1.1,
+          ),
+          backgroundColor: background,
+          disabledBackgroundColor: background,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  height: 1.15,
+                ),
+              ),
+            ),
+            if (icon != null) ...[
+              const SizedBox(width: 8),
+              Icon(icon, size: 14, color: Colors.white),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   final _textController = TextEditingController();
   final _listScrollController = ScrollController();
@@ -2786,6 +3368,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   bool _isSendingText = false;
   bool _isSubmittingStoryOption = false;
   String? _textSessionError;
+  List<_ParsedStoryOption>? _reopenedStoryOptions;
 
   @override
   void initState() {
@@ -2889,7 +3472,9 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       final entry = history[i];
       final speaker = (entry['speaker'] as String?)?.trim() ?? '';
       final rawText = (entry['message'] as String?)?.trim() ?? '';
-      final text = speaker == 'user' ? _cleanStoryBubbleText(rawText) : rawText;
+      final text = speaker == 'user'
+          ? _friendlyStoryUserBubbleText(rawText)
+          : rawText;
       if (text.isEmpty) continue;
       messages.add(
         ChatMessageModel(
@@ -2943,11 +3528,11 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     unawaited(_sendTextStoryTurn(text));
   }
 
-  Future<void> _sendTextStoryTurn(String text) async {
+  Future<void> _sendTextStoryTurn(String text, {String? visibleText}) async {
     final userMessage = ChatMessageModel(
       id: 'story_text_user_${DateTime.now().microsecondsSinceEpoch}',
       role: ChatRole.user,
-      message: text,
+      message: visibleText ?? _friendlyStoryUserBubbleText(text),
       ts: DateTime.now(),
     );
     final assistantMessageId =
@@ -2955,6 +3540,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     setState(() {
       _isSendingText = true;
       _textSessionError = null;
+      _reopenedStoryOptions = null;
       _messages.add(userMessage);
       _messages.add(
         ChatMessageModel(
@@ -3062,6 +3648,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     setState(() {
       _confirmedStoryOptionTitle = option.title;
       _isSubmittingStoryOption = true;
+      _reopenedStoryOptions = null;
     });
     try {
       await _sendTextStoryTurn('I choose ${option.title}.');
@@ -3083,16 +3670,57 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     setState(() {
       _confirmedStoryOptionTitle = null;
       _isSubmittingStoryOption = true;
+      _reopenedStoryOptions = null;
     });
     try {
       await _sendTextStoryTurn(
-        'Give me three different story options for ${widget.storyTitle}. Use numbered options with a title and one short teaser in the same line. Do not use quotation marks or subtitles.',
+        'Give me three different story options for ${widget.storyTitle}. Make every option specific to this story room, using its title, premise, characters, themes, tone, or setting. Do not reuse generic options from another story. Use numbered options with a title and one short teaser in the same line. Do not use quotation marks or subtitles.',
+        visibleText: 'Try different stories',
       );
     } finally {
       if (mounted) {
         setState(() => _isSubmittingStoryOption = false);
       }
     }
+  }
+
+  Future<void> _requestNextStoryParagraph() async {
+    if (_isSubmittingStoryOption || _isSendingText) return;
+
+    if (_isStartingTextSession) {
+      showToast(context, 'Connecting...', variant: ToastVariant.info);
+      return;
+    }
+
+    await _sendTextStoryTurn('Continue.', visibleText: 'Next');
+  }
+
+  void _restorePreviousStoryOptions() {
+    for (final message in _messages.reversed) {
+      final parsedOptions = _parseStoryOptions(message);
+      if (parsedOptions != null && parsedOptions.options.isNotEmpty) {
+        setState(() {
+          _confirmedStoryOptionTitle = null;
+          _reopenedStoryOptions = parsedOptions.options;
+        });
+        _scrollToBottom();
+        return;
+      }
+    }
+
+    unawaited(_regenerateStoryOptions());
+  }
+
+  bool _shouldShowStoryContinuationActions({
+    required ChatMessageModel message,
+    required int index,
+    required int visibleMessageCount,
+    required _ParsedStoryOptions? parsedOptions,
+  }) {
+    if (message.isUser || message.isStreaming) return false;
+    if (parsedOptions != null) return false;
+    if (message.message.trim().isEmpty) return false;
+    return index == visibleMessageCount - 1;
   }
 
   void _scrollToBottom() {
@@ -3118,20 +3746,32 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         widget.enableStoryOptions ||
         _isBeneathTheSurfaceTitle(widget.storyTitle);
     final lowerMessage = message.message.toLowerCase();
+    final lines = message.message.split('\n');
+    final parsedLineOptions = <_ParsedStoryOption>[];
+    for (final line in lines) {
+      final option = _parseStoryOptionLine(line);
+      if (option != null) parsedLineOptions.add(option);
+    }
     final looksLikeStoryOptionMenu =
         lowerMessage.contains('story options') ||
         lowerMessage.contains('stories to explore') ||
         lowerMessage.contains('stories to choose') ||
+        lowerMessage.contains('three meaningful stories') ||
+        lowerMessage.contains('three unique stories') ||
+        lowerMessage.contains('one of three') ||
+        lowerMessage.contains('have three') ||
         lowerMessage.contains('choose a story') ||
         lowerMessage.contains('select a story') ||
         lowerMessage.contains('which story') ||
         lowerMessage.contains('resonates with you') ||
         (isConfiguredStoryMenu && lowerMessage.contains('choose'));
-    if (!looksLikeStoryOptionMenu) return null;
+    final hasNumberedStoryOptions =
+        isConfiguredStoryMenu && parsedLineOptions.length >= 2;
+    if (!looksLikeStoryOptionMenu && !hasNumberedStoryOptions) return null;
 
-    final lines = message.message.split('\n');
-    final options = <_ParsedStoryOption>[];
     final displayLines = <String>[];
+    final options = <_ParsedStoryOption>[];
+    final seenOptionTitles = <String>{};
 
     for (final line in lines) {
       final option = _parseStoryOptionLine(line);
@@ -3150,7 +3790,13 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         }
         continue;
       }
-      options.add(option);
+      final normalizedTitle = option.title.trim().toLowerCase().replaceAll(
+        RegExp(r'\s+'),
+        ' ',
+      );
+      if (seenOptionTitles.add(normalizedTitle)) {
+        options.add(option);
+      }
     }
 
     if (options.length < 2) return null;
@@ -3221,6 +3867,19 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
             itemBuilder: (context, index) {
               final message = visibleMessages[index];
               final parsedOptions = _parseStoryOptions(message);
+              final reopenedOptions =
+                  index == visibleMessages.length - 1 &&
+                      parsedOptions == null &&
+                      !message.isUser
+                  ? _reopenedStoryOptions
+                  : null;
+              final showContinuationActions =
+                  _shouldShowStoryContinuationActions(
+                    message: message,
+                    index: index,
+                    visibleMessageCount: visibleMessages.length,
+                    parsedOptions: parsedOptions,
+                  );
               final displayMessage = parsedOptions == null
                   ? message
                   : message.copyWith(message: parsedOptions.displayText);
@@ -3237,19 +3896,33 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                       maxWidth: bubbleMaxWidth,
                       renderMarkdownBold: !displayMessage.isUser,
                     ),
-                    if (parsedOptions != null) ...[
+                    if (parsedOptions != null || reopenedOptions != null) ...[
                       const SizedBox(height: 10),
                       _StoryOptionButtons(
-                        options: parsedOptions.options,
+                        options: parsedOptions?.options ?? reopenedOptions!,
+                        alignRight: reopenedOptions != null,
                         selectedTitle: _confirmedStoryOptionTitle,
                         disabled:
                             _isSubmittingStoryOption ||
                             _isSendingText ||
                             _isStartingTextSession,
+                        onNext: reopenedOptions == null
+                            ? null
+                            : () => unawaited(_requestNextStoryParagraph()),
                         onRegenerate: () =>
                             unawaited(_regenerateStoryOptions()),
                         onSelected: (option) =>
                             unawaited(_confirmStoryOption(option)),
+                      ),
+                    ] else if (showContinuationActions) ...[
+                      const SizedBox(height: 10),
+                      _StoryContinuationActions(
+                        disabled:
+                            _isSubmittingStoryOption ||
+                            _isSendingText ||
+                            _isStartingTextSession,
+                        onNext: () => unawaited(_requestNextStoryParagraph()),
+                        onTryDifferentStories: _restorePreviousStoryOptions,
                       ),
                     ],
                   ],

@@ -491,6 +491,92 @@ class PendingInteractiveTextMessage {
   final String text;
 }
 
+/// A lightweight, durable entry used by the solo interactivity launcher and
+/// history list. Full transcript state is fetched only after the user opens an
+/// entry.
+class SoloInteractiveSessionSummary {
+  const SoloInteractiveSessionSummary({
+    required this.sessionId,
+    required this.storyId,
+    required this.storyTitle,
+    this.storyCoverImageUrl,
+    required this.isCompleted,
+    required this.isPaused,
+    this.phase,
+    this.topicPath = const <String>[],
+    this.viewMode,
+    this.currentRound = 0,
+    this.score = 0,
+    required this.lastActivityAt,
+    required this.createdAt,
+    this.completedAt,
+    this.preview,
+  });
+
+  final String sessionId;
+  final String storyId;
+  final String storyTitle;
+  final String? storyCoverImageUrl;
+  final bool isCompleted;
+  final bool isPaused;
+  final String? phase;
+  final List<String> topicPath;
+  final String? viewMode;
+  final int currentRound;
+  final int score;
+  final DateTime lastActivityAt;
+  final DateTime createdAt;
+  final DateTime? completedAt;
+  final String? preview;
+
+  bool get isResumable => !isCompleted;
+
+  String get displayTopic =>
+      topicPath.isEmpty ? storyTitle : topicPath.join(' › ');
+
+  factory SoloInteractiveSessionSummary.fromJson(Map<String, dynamic> json) {
+    final createdAt =
+        _parseDate(json['created_at']) ??
+        _parseDate(json['last_activity_at']) ??
+        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+    final lastActivityAt =
+        _parseDate(json['last_activity_at']) ??
+        _parseDate(json['updated_at']) ??
+        _parseDate(json['completed_at']) ??
+        createdAt;
+    final topicPath = _parseTopicPath(
+      json['topic_path'] ?? json['selected_topic_path'],
+    );
+    final selectedTopic = _nonEmptyString(json['selected_topic']);
+    if (topicPath.isEmpty && selectedTopic != null) {
+      topicPath.add(selectedTopic);
+    }
+
+    return SoloInteractiveSessionSummary(
+      sessionId: _nonEmptyString(json['session_id']) ?? '',
+      storyId: _nonEmptyString(json['story_id']) ?? '',
+      storyTitle:
+          _nonEmptyString(json['story_title']) ??
+          selectedTopic ??
+          'Solo interactivity',
+      storyCoverImageUrl:
+          _nonEmptyString(json['story_cover_image_url']) ??
+          _nonEmptyString(json['cover_image_url']),
+      isCompleted: _parseBool(json['is_completed']),
+      isPaused: _parseBool(json['is_paused']),
+      phase: _nonEmptyString(json['phase']),
+      topicPath: List<String>.unmodifiable(topicPath),
+      viewMode: _nonEmptyString(json['view_mode']),
+      currentRound: _parseInt(json['current_round']),
+      score: _parseInt(json['score']),
+      lastActivityAt: lastActivityAt,
+      createdAt: createdAt,
+      completedAt: _parseDate(json['completed_at']),
+      preview: _nonEmptyString(json['preview']),
+    );
+  }
+}
+
 class InteractiveSessionState {
   const InteractiveSessionState({
     required this.sessionId,
@@ -504,6 +590,7 @@ class InteractiveSessionState {
     this.currentTurn,
     this.lastSeq = 0,
     this.isCompleted = false,
+    this.isPaused = false,
     this.createdAt,
     this.updatedAt,
   });
@@ -519,6 +606,7 @@ class InteractiveSessionState {
   final InteractiveTurn? currentTurn;
   final int lastSeq;
   final bool isCompleted;
+  final bool isPaused;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -547,7 +635,8 @@ class InteractiveSessionState {
             )
           : null,
       lastSeq: (json['last_seq'] as num?)?.toInt() ?? 0,
-      isCompleted: json['is_completed'] as bool? ?? false,
+      isCompleted: _parseBool(json['is_completed']),
+      isPaused: _parseBool(json['is_paused']),
       createdAt: _parseDate(json['created_at']),
       updatedAt: _parseDate(json['updated_at']),
     );
@@ -559,6 +648,8 @@ class InteractiveSessionState {
     List<StorySessionEvent>? events,
     InteractiveTurn? currentTurn,
     int? lastSeq,
+    bool? isCompleted,
+    bool? isPaused,
   }) {
     return InteractiveSessionState(
       sessionId: sessionId,
@@ -571,7 +662,8 @@ class InteractiveSessionState {
       events: events ?? this.events,
       currentTurn: currentTurn ?? this.currentTurn,
       lastSeq: lastSeq ?? this.lastSeq,
-      isCompleted: isCompleted,
+      isCompleted: isCompleted ?? this.isCompleted,
+      isPaused: isPaused ?? this.isPaused,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
@@ -654,4 +746,32 @@ DateTime? _parseDate(dynamic raw) {
     return DateTime.tryParse(hasTimezone ? value : '${value}Z')?.toUtc();
   }
   return null;
+}
+
+String? _nonEmptyString(dynamic raw) {
+  final value = raw?.toString().trim();
+  return value == null || value.isEmpty ? null : value;
+}
+
+int _parseInt(dynamic raw) {
+  if (raw is num) return raw.toInt();
+  return int.tryParse(raw?.toString() ?? '') ?? 0;
+}
+
+bool _parseBool(dynamic raw) {
+  if (raw is bool) return raw;
+  if (raw is num) return raw != 0;
+  return raw?.toString().trim().toLowerCase() == 'true';
+}
+
+List<String> _parseTopicPath(dynamic raw) {
+  if (raw is String) {
+    return raw
+        .split(RegExp(r'\s*(?:›|>|/)\s*'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList();
+  }
+  if (raw is! List) return <String>[];
+  return raw.map(_nonEmptyString).whereType<String>().toList(growable: true);
 }

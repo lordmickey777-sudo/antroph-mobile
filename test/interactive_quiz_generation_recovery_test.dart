@@ -1336,6 +1336,110 @@ void main() {
     expect(find.byKey(const ValueKey('solo-topic-text-field')), findsOneWidget);
     await _disposeQuizPage(tester);
   });
+
+  testWidgets('solo history browsing keeps the active session connected', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 7, 11, 12);
+    final repository = _QuizStoriesRepository(
+      session: _session(phase: 'discussion', sessionType: 'solo'),
+      history: [
+        SoloInteractiveSessionSummary(
+          sessionId: 'session-1',
+          storyId: 'story-1',
+          storyTitle: 'Quiz story',
+          isCompleted: false,
+          isPaused: true,
+          topicPath: const ['History', 'Ancient Egypt'],
+          viewMode: 'chat',
+          currentRound: 2,
+          lastActivityAt: now,
+          createdAt: now.subtract(const Duration(hours: 1)),
+        ),
+      ],
+    );
+    await _pumpQuizPage(
+      tester,
+      repository: repository,
+      userId: 'solo-user',
+      interactionMode: 'interactive',
+    );
+
+    expect(repository.startCalls, 0);
+    expect(repository.soloHistoryCalls, 1);
+    expect(find.text('CHECKING SESSIONS...'), findsNothing);
+    expect(find.byKey(const ValueKey('continue-solo-session')), findsNothing);
+    await tester.pump();
+    await tester.pump();
+    expect(repository.resumeCalls, 1);
+
+    await tester.tap(find.byTooltip('Solo session history'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Solo session history'), findsOneWidget);
+    expect(repository.soloHistoryCalls, 1);
+    expect(repository.leaveCalls, 0);
+
+    await tester.tap(find.byKey(const ValueKey('close-solo-history')));
+    await tester.pump();
+    expect(find.text('Solo session history'), findsNothing);
+    expect(repository.leaveCalls, 0);
+    final pageContext = tester.element(find.byType(StoryChatFlowPage));
+    final container = ProviderScope.containerOf(pageContext);
+    expect(
+      container.read(interactiveStoryProvider).session?.sessionId,
+      'session-1',
+    );
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('timed solo question blocks history without leaving', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 7, 11, 12);
+    final base = _session(phase: 'question_active', sessionType: 'solo');
+    final repository = _QuizStoriesRepository(
+      session: base.copyWith(
+        interactiveState: {
+          ...base.interactiveState,
+          'expires_at': now.add(const Duration(seconds: 30)).toIso8601String(),
+        },
+      ),
+      history: [
+        SoloInteractiveSessionSummary(
+          sessionId: 'session-1',
+          storyId: 'story-1',
+          storyTitle: 'Quiz story',
+          isCompleted: false,
+          isPaused: true,
+          topicPath: const ['Science'],
+          viewMode: 'quiz',
+          currentRound: 1,
+          lastActivityAt: now,
+          createdAt: now,
+        ),
+      ],
+    );
+    await _pumpQuizPage(
+      tester,
+      repository: repository,
+      userId: 'solo-user',
+      interactionMode: 'interactive',
+    );
+    await tester.tap(find.byKey(const ValueKey('continue-solo-session')));
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('Solo session history'));
+    await tester.pump();
+    expect(
+      find.text('Finish this timed question before opening session history.'),
+      findsOneWidget,
+    );
+    expect(find.text('Solo session history'), findsNothing);
+    expect(repository.leaveCalls, 0);
+    await _disposeQuizPage(tester);
+  });
 }
 
 Future<void> _disposeQuizPage(WidgetTester tester) async {
@@ -1993,6 +2097,7 @@ class _QuizStoriesRepository extends StoriesRepository {
     this.retryError,
     this.conflictSession,
     this.restartSession,
+    this.history = const <SoloInteractiveSessionSummary>[],
   }) : super(dio: Dio());
 
   InteractiveSessionState session;
@@ -2000,9 +2105,13 @@ class _QuizStoriesRepository extends StoriesRepository {
   final ApiError? retryError;
   final InteractiveSessionState? conflictSession;
   final InteractiveSessionState? restartSession;
+  final List<SoloInteractiveSessionSummary> history;
   int fetchCalls = 0;
   int retryCalls = 0;
   int startCalls = 0;
+  int resumeCalls = 0;
+  int leaveCalls = 0;
+  int soloHistoryCalls = 0;
   final List<InteractiveInput> submittedInputs = [];
 
   @override
@@ -2014,12 +2123,35 @@ class _QuizStoriesRepository extends StoriesRepository {
     String? roomType,
     String? hostDisplayName,
     int? maxParticipants,
+    bool startFresh = false,
   }) async {
     startCalls += 1;
     if (startCalls > 1 && restartSession != null) {
       session = restartSession!;
     }
     return session;
+  }
+
+  @override
+  Future<List<SoloInteractiveSessionSummary>> fetchSoloInteractiveHistory({
+    String? storyId,
+    int limit = 20,
+  }) async {
+    soloHistoryCalls += 1;
+    return history;
+  }
+
+  @override
+  Future<InteractiveSessionState> resumeInteractiveSession(
+    String sessionId,
+  ) async {
+    resumeCalls += 1;
+    return session;
+  }
+
+  @override
+  Future<void> leaveInteractiveSession(String sessionId) async {
+    leaveCalls += 1;
   }
 
   @override

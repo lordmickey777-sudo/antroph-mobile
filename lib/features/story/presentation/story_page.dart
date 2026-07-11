@@ -19,6 +19,7 @@ import 'package:antroph_mobile/widgets/empty_state.dart';
 import 'package:antroph_mobile/widgets/app_action_button.dart';
 import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
+import 'package:antroph_mobile/features/story/presentation/solo_interactive_history_view.dart';
 import 'package:antroph_mobile/features/story/presentation/story_sheet.dart';
 import 'package:antroph_mobile/widgets/scroll_fade_gradient.dart';
 import 'package:antroph_mobile/features/story/data/story_search_storage_service.dart';
@@ -1945,11 +1946,28 @@ class _CommunityStoriesSliver extends ConsumerWidget {
   ) async {
     var launchMode = InteractiveStoryLaunchMode.create;
     String? joinCode;
+    String? storySessionId;
+    var soloStartFreshOnLaunch = false;
+    var soloOpenHistoryOnLaunch = false;
     if (story.interactionMode == 'group') {
       final result = await showGroupGameLauncherSheet(context);
       if (!context.mounted || result == null) return;
       launchMode = result.mode;
       joinCode = result.joinCode;
+    } else if (story.interactionMode != 'narrative') {
+      final result = await showSoloInteractiveLauncherSheet(
+        context,
+        storyId: story.id,
+      );
+      if (!context.mounted || result == null) return;
+      storySessionId =
+          result.action == SoloInteractiveLaunchAction.continueSession
+          ? result.sessionId
+          : null;
+      soloStartFreshOnLaunch =
+          result.action == SoloInteractiveLaunchAction.startFresh;
+      soloOpenHistoryOnLaunch =
+          result.action == SoloInteractiveLaunchAction.viewHistory;
     }
     final authResult = await showAuthGuardSheet(
       context,
@@ -1966,11 +1984,14 @@ class _CommunityStoriesSliver extends ConsumerWidget {
         builder: (_) => StoryChatFlowPage(
           storyTitle: story.title.isNotEmpty ? story.title : 'Chat',
           storyId: story.id,
+          storySessionId: storySessionId,
           storySubtitle: story.description,
           storyImage: story.coverImageUrl,
           initialInteractionMode: story.interactionMode,
           interactiveLaunchMode: launchMode,
           joinCode: joinCode,
+          soloStartFreshOnLaunch: soloStartFreshOnLaunch,
+          soloOpenHistoryOnLaunch: soloOpenHistoryOnLaunch,
         ),
       ),
     );
