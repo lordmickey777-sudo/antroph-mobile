@@ -13,10 +13,11 @@ void main() {
           "items": [
             {
               "title": "AI Story",
-              "subtitle": "Smartest AI",
+              "description": "Smartest AI",
               "image": "assets/images/default.png",
               "users": 123,
               "views": 456,
+              "user_can_access": false,
               "rive_element_id": "space_robot",
               "rive_element": {
                 "id": "space_robot",
@@ -42,7 +43,10 @@ void main() {
     expect(parsed.sections.length, 2);
     expect(parsed.sections.first.title, 'Recommended');
     expect(parsed.sections.first.items.first.title, 'AI Story');
+    expect(parsed.sections.first.items.first.subtitle, 'Smartest AI');
+    expect(parsed.sections.first.items.first.description, 'Smartest AI');
     expect(parsed.sections.first.items.first.users, 123);
+    expect(parsed.sections.first.items.first.userCanAccess, isFalse);
     expect(parsed.sections.first.items.first.riveElementId, 'space_robot');
     expect(parsed.sections.first.items.first.riveElement?.name, 'Cosmo');
     expect(parsed.sections.last.items.first.views, 90);

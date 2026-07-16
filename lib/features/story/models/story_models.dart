@@ -26,11 +26,15 @@ class StoryCardDto {
     required this.storyId,
     required this.title,
     required this.subtitle,
+    required this.description,
     required this.image,
     required this.users,
     required this.views,
     required this.isAdded,
     this.isPremium = false,
+    this.minimumSubscriptionTier,
+    this.effectiveMinimumSubscriptionTier,
+    this.userCanAccess = true,
     this.interactionMode = 'narrative',
     this.aiRole = 'narrator',
     this.riveElementId,
@@ -40,6 +44,7 @@ class StoryCardDto {
   final String storyId;
   final String title;
   final String subtitle;
+  final String description;
 
   /// Can be an asset path or a remote URL.
   final String image;
@@ -47,6 +52,9 @@ class StoryCardDto {
   final int views;
   final bool isAdded;
   final bool isPremium;
+  final String? minimumSubscriptionTier;
+  final String? effectiveMinimumSubscriptionTier;
+  final bool userCanAccess;
   final String interactionMode;
   final String aiRole;
   final String? riveElementId;
@@ -61,12 +69,24 @@ class StoryCardDto {
         (json['id'] as String?)?.trim() ??
         '',
     title: (json['title'] as String?)?.trim() ?? '',
-    subtitle: (json['subtitle'] as String?)?.trim() ?? '',
+    subtitle:
+        (json['subtitle'] as String?)?.trim() ??
+        (json['description'] as String?)?.trim() ??
+        '',
+    description:
+        (json['description'] as String?)?.trim() ??
+        (json['subtitle'] as String?)?.trim() ??
+        '',
     image: (json['image'] as String?)?.trim() ?? '',
     users: (json['users'] as num?)?.toInt() ?? 0,
     views: (json['views'] as num?)?.toInt() ?? 0,
     isAdded: json['is_added'] as bool? ?? false,
     isPremium: json['is_premium'] as bool? ?? false,
+    minimumSubscriptionTier: (json['minimum_subscription_tier'] as String?)
+        ?.trim(),
+    effectiveMinimumSubscriptionTier:
+        (json['effective_minimum_subscription_tier'] as String?)?.trim(),
+    userCanAccess: json['user_can_access'] as bool? ?? true,
     interactionMode:
         (json['interaction_mode'] as String?)?.trim() ?? 'narrative',
     aiRole: (json['ai_role'] as String?)?.trim() ?? 'narrator',
@@ -79,11 +99,17 @@ class StoryCardDto {
     'story_id': storyId,
     'title': title,
     'subtitle': subtitle,
+    'description': description,
     'image': image,
     'users': users,
     'views': views,
     'is_added': isAdded,
     'is_premium': isPremium,
+    if (minimumSubscriptionTier != null)
+      'minimum_subscription_tier': minimumSubscriptionTier,
+    if (effectiveMinimumSubscriptionTier != null)
+      'effective_minimum_subscription_tier': effectiveMinimumSubscriptionTier,
+    'user_can_access': userCanAccess,
     'interaction_mode': interactionMode,
     'ai_role': aiRole,
     if (riveElementId != null) 'rive_element_id': riveElementId,
@@ -100,6 +126,9 @@ class FeaturedStoryDto {
     required this.author,
     required this.isAdded,
     this.isPremium = false,
+    this.minimumSubscriptionTier,
+    this.effectiveMinimumSubscriptionTier,
+    this.userCanAccess = true,
     this.interactionMode = 'narrative',
     this.aiRole = 'narrator',
     this.riveElementId,
@@ -113,6 +142,9 @@ class FeaturedStoryDto {
   final String author;
   final bool isAdded;
   final bool isPremium;
+  final String? minimumSubscriptionTier;
+  final String? effectiveMinimumSubscriptionTier;
+  final bool userCanAccess;
   final String interactionMode;
   final String aiRole;
   final String? riveElementId;
@@ -129,6 +161,11 @@ class FeaturedStoryDto {
         author: (json['author'] as String?)?.trim() ?? '',
         isAdded: json['is_added'] as bool? ?? false,
         isPremium: json['is_premium'] as bool? ?? false,
+        minimumSubscriptionTier: (json['minimum_subscription_tier'] as String?)
+            ?.trim(),
+        effectiveMinimumSubscriptionTier:
+            (json['effective_minimum_subscription_tier'] as String?)?.trim(),
+        userCanAccess: json['user_can_access'] as bool? ?? true,
         interactionMode:
             (json['interaction_mode'] as String?)?.trim() ?? 'narrative',
         aiRole: (json['ai_role'] as String?)?.trim() ?? 'narrator',
@@ -144,6 +181,11 @@ class FeaturedStoryDto {
     'author': author,
     'is_added': isAdded,
     'is_premium': isPremium,
+    if (minimumSubscriptionTier != null)
+      'minimum_subscription_tier': minimumSubscriptionTier,
+    if (effectiveMinimumSubscriptionTier != null)
+      'effective_minimum_subscription_tier': effectiveMinimumSubscriptionTier,
+    'user_can_access': userCanAccess,
     'interaction_mode': interactionMode,
     'ai_role': aiRole,
     if (riveElementId != null) 'rive_element_id': riveElementId,

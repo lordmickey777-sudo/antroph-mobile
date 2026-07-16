@@ -35,17 +35,20 @@ class StorySheetContent extends ConsumerStatefulWidget {
     required this.subtitle,
     required this.imageAsset,
     required this.scrollController,
+    this.cachedDescription,
     this.mascotConfig,
     this.users,
     this.views,
     this.isAdded = false,
     this.isPremium = false,
+    this.userCanAccess = true,
     this.activeGameCode,
   });
 
   final String storyId;
   final String title;
   final String subtitle;
+  final String? cachedDescription;
   final String imageAsset;
   final ScrollController scrollController;
   final MascotConfig? mascotConfig;
@@ -53,6 +56,7 @@ class StorySheetContent extends ConsumerStatefulWidget {
   final int? views;
   final bool isAdded;
   final bool isPremium;
+  final bool userCanAccess;
   final String? activeGameCode;
 
   @override
@@ -94,16 +98,22 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
     final sessionState = ref.watch(storySessionProvider);
     final textColor = context.primaryTextColor;
     final tertiaryColor = context.tertiaryTextColor;
-    final detailAsync = ref.watch(storyDetailProvider(widget.storyId));
-    final detail = detailAsync.asData?.value;
-    final isDetailReady = detailAsync.hasValue && detail != null;
-    final isPremium = widget.isPremium || (detail?.isPremium ?? false);
+    final detailAsync = widget.userCanAccess
+        ? ref.watch(storyDetailProvider(widget.storyId))
+        : null;
+    final detail = detailAsync?.asData?.value;
+    final isDetailReady =
+        widget.userCanAccess && detailAsync?.hasValue == true && detail != null;
+    final isPremium =
+        widget.isPremium ||
+        !widget.userCanAccess ||
+        (detail?.isPremium ?? false);
     final tags = detail?.tags ?? const <String>[];
 
     final isSubscribedAsync = ref.watch(isSubscribedProvider);
     final isSubscribed = isSubscribedAsync.asData?.value ?? false;
 
-    final isLocked = isPremium && !isSubscribed;
+    final isLocked = !widget.userCanAccess || (isPremium && !isSubscribed);
     if (!_didPresentPremiumPrompt && isSubscribedAsync.hasValue && isLocked) {
       _didPresentPremiumPrompt = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -139,7 +149,7 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                       isAdded: _isAdded,
                       isAddingToPlaylist: _isAddingToPlaylist,
                       isPremium: isPremium,
-                      isPlayEnabled: isDetailReady,
+                      isPlayEnabled: isLocked || isDetailReady,
                       tags: tags,
                       onAddToPlaylist: _handleAddToPlaylist,
                       onPlayPressed: () => _handlePlayOrUnlock(isLocked),
@@ -158,19 +168,26 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
                       _ActiveGameCodeCard(code: widget.activeGameCode!.trim()),
                       const SizedBox(height: 16),
                     ],
-                    detailAsync.when(
-                      loading: () => const _StoryDetailShimmer(),
-                      error: (err, _) => Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: TypographyText(
-                          'Could not load details.',
-                          variant: TypographyVariant.body2,
-                          color: tertiaryColor,
-                          fontSize: 13,
+                    if (!widget.userCanAccess)
+                      _CachedStoryDescription(
+                        text: widget.cachedDescription ?? widget.subtitle,
+                      )
+                    else
+                      detailAsync!.when(
+                        loading: () => _CachedStoryDescription(
+                          text: widget.cachedDescription ?? widget.subtitle,
                         ),
+                        error: (err, _) => Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: TypographyText(
+                            'Could not load details.',
+                            variant: TypographyVariant.body2,
+                            color: tertiaryColor,
+                            fontSize: 13,
+                          ),
+                        ),
+                        data: (d) => _StoryDescription(detail: d),
                       ),
-                      data: (d) => _StoryDescription(detail: d),
-                    ),
                     SizedBox(height: bottom + 40),
                   ],
                 ),
@@ -992,6 +1009,25 @@ class _StoryDescription extends StatelessWidget {
       detail.description,
       variant: TypographyVariant.body1,
       color: secondaryTextColor,
+      fontSize: 14,
+      height: 1.35,
+    );
+  }
+}
+
+class _CachedStoryDescription extends StatelessWidget {
+  const _CachedStoryDescription({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final description = text.trim();
+    if (description.isEmpty) return const _StoryDetailShimmer();
+    return TypographyText(
+      description,
+      variant: TypographyVariant.body1,
+      color: context.secondaryTextColor,
       fontSize: 14,
       height: 1.35,
     );

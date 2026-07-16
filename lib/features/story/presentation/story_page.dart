@@ -175,10 +175,12 @@ class _StoryPageState extends ConsumerState<StoryPage>
       storyId: card.storyId,
       title: card.title,
       subtitle: card.subtitle,
+      cachedDescription: card.description,
       image: card.image,
       mascotConfig: card.mascotConfig,
       isAdded: card.isAdded,
       isPremium: card.isPremium,
+      userCanAccess: card.userCanAccess,
     );
   }
 
@@ -192,10 +194,12 @@ class _StoryPageState extends ConsumerState<StoryPage>
       storyId: story.id,
       title: story.title,
       subtitle: story.description,
+      cachedDescription: story.description,
       image: story.coverImageUrl,
       mascotConfig: story.mascotConfig,
       isAdded: story.isAdded,
       isPremium: story.isPremium,
+      userCanAccess: story.userCanAccess,
     );
   }
 
@@ -205,9 +209,11 @@ class _StoryPageState extends ConsumerState<StoryPage>
     required String title,
     required String subtitle,
     required String image,
+    String? cachedDescription,
     MascotConfig? mascotConfig,
     bool isAdded = false,
     bool isPremium = false,
+    bool userCanAccess = true,
   }) {
     showAppBottomSheet(
       context: context,
@@ -215,10 +221,12 @@ class _StoryPageState extends ConsumerState<StoryPage>
         storyId: storyId,
         title: title,
         subtitle: subtitle,
+        cachedDescription: cachedDescription,
         imageAsset: image.isNotEmpty ? image : 'assets/images/default.png',
         mascotConfig: mascotConfig,
         isAdded: isAdded,
         isPremium: isPremium,
+        userCanAccess: userCanAccess,
         scrollController: scrollController,
       ),
     );
@@ -1367,7 +1375,7 @@ class _FeaturedStoryCard extends StatelessWidget {
                   right: 0,
                   bottom: 0,
                   child: Container(
-                    height: 86,
+                    height: 108,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
@@ -1388,8 +1396,8 @@ class _FeaturedStoryCard extends StatelessWidget {
                     story.title,
                     variant: TypographyVariant.body1,
                     color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
                     maxLines: 2,
                   ),
                 ),
@@ -1654,7 +1662,7 @@ class _StoryCard extends StatelessWidget {
                   right: 0,
                   bottom: 0,
                   child: Container(
-                    height: 60,
+                    height: 66,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
@@ -1676,8 +1684,8 @@ class _StoryCard extends StatelessWidget {
                     item.title,
                     variant: TypographyVariant.body1,
                     color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
                     maxLines: 2,
                   ),
                 ),
