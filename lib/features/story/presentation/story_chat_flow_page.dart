@@ -2803,10 +2803,15 @@ class _ParsedStoryOption {
 }
 
 class _ParsedStoryOptions {
-  const _ParsedStoryOptions({required this.displayText, required this.options});
+  const _ParsedStoryOptions({
+    required this.displayText,
+    required this.options,
+    this.panelTitle,
+  });
 
   final String displayText;
   final List<_ParsedStoryOption> options;
+  final String? panelTitle;
 }
 
 String _cleanStoryOptionTitle(String value) {
@@ -2906,144 +2911,160 @@ String _friendlyStoryUserBubbleText(String value) {
   return _cleanStoryBubbleText(value);
 }
 
-class _StoryOptionButtons extends StatefulWidget {
-  const _StoryOptionButtons({
+class _StoryOptionsInputPanel extends StatelessWidget {
+  const _StoryOptionsInputPanel({
     required this.options,
     required this.onSelected,
     required this.onRegenerate,
+    required this.onToggleCollapsed,
+    this.title = 'What kind of story sounds good?',
     this.onNext,
     this.selectedTitle,
     this.disabled = false,
-    this.alignRight = false,
+    this.collapsed = false,
   });
 
   final List<_ParsedStoryOption> options;
   final ValueChanged<_ParsedStoryOption> onSelected;
   final VoidCallback onRegenerate;
+  final VoidCallback onToggleCollapsed;
+  final String title;
   final VoidCallback? onNext;
   final String? selectedTitle;
   final bool disabled;
-  final bool alignRight;
-
-  @override
-  State<_StoryOptionButtons> createState() => _StoryOptionButtonsState();
-}
-
-class _StoryOptionButtonsState extends State<_StoryOptionButtons> {
-  _ParsedStoryOption? _draftOption;
-  bool _confirmRegenerate = false;
-
-  @override
-  void didUpdateWidget(covariant _StoryOptionButtons oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final optionsChanged =
-        oldWidget.options.map((option) => option.displayText).join('|') !=
-        widget.options.map((option) => option.displayText).join('|');
-    if (optionsChanged || widget.selectedTitle != null) {
-      _draftOption = null;
-      _confirmRegenerate = false;
-    }
-  }
+  final bool collapsed;
 
   @override
   Widget build(BuildContext context) {
-    final selectedTitle = widget.selectedTitle ?? _draftOption?.title;
-    final optionsDisabled = widget.disabled;
-    return Align(
-      alignment: widget.alignRight
-          ? Alignment.centerRight
-          : Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 280),
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.bottomCenter,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: widget.alignRight
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (var i = 0; i < widget.options.length; i++) ...[
-              _StoryOptionButton(
-                option: widget.options[i],
-                onSelected: _selectDraftOption,
-                selected: widget.options[i].title == selectedTitle,
-                disabled: optionsDisabled,
+            Padding(
+              padding: EdgeInsets.only(bottom: collapsed ? 8 : 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (collapsed)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 2),
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            height: 1.2,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    const Spacer(),
+                  Transform.translate(
+                    offset: collapsed ? Offset.zero : const Offset(0, 4),
+                    child: SizedBox.square(
+                      dimension: 28,
+                      child: IconButton(
+                        tooltip: collapsed ? 'Show options' : 'Hide options',
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: disabled ? null : onToggleCollapsed,
+                        icon: Icon(
+                          collapsed
+                              ? CupertinoIcons.chevron_up
+                              : CupertinoIcons.chevron_down,
+                          size: 20,
+                          color: disabled ? Colors.white30 : Colors.white54,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              if (i != widget.options.length - 1) const SizedBox(height: 8),
-            ],
-            if (_draftOption != null) ...[
-              const SizedBox(height: 10),
-              _StoryOptionConfirmBar(
-                title: _draftOption!.title,
-                disabled: widget.disabled,
-                onCancel: _clearDraftAction,
-                onConfirm: () => widget.onSelected(_draftOption!),
-              ),
-            ],
-            if (widget.onNext != null) ...[
-              const SizedBox(height: 8),
-              _StoryContinuationButton(
-                label: 'Next',
-                icon: CupertinoIcons.chevron_right,
-                disabled: widget.disabled,
-                onPressed: widget.onNext!,
-              ),
-            ],
-            const SizedBox(height: 8),
-            _StoryActionButton(
-              label: 'Try different stories',
-              disabled: widget.disabled,
-              selected: _confirmRegenerate,
-              alignRight: widget.alignRight,
-              onPressed: _selectRegenerate,
             ),
-            if (_confirmRegenerate) ...[
-              const SizedBox(height: 10),
-              _StoryOptionConfirmBar(
-                title: 'Try different stories',
-                disabled: widget.disabled,
-                onCancel: _clearDraftAction,
-                onConfirm: widget.onRegenerate,
+            if (!collapsed) ...[
+              Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  height: 1.2,
+                ),
               ),
+              const SizedBox(height: 10),
+              if (options.isNotEmpty) ...[
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    physics: const NeverScrollableScrollPhysics(),
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      color: Colors.white.withValues(alpha: 0.13),
+                    ),
+                    itemBuilder: (context, index) {
+                      final option = options[index];
+                      return _StoryOptionSheetRow(
+                        index: index,
+                        option: option,
+                        selected: option.title == selectedTitle,
+                        disabled: disabled,
+                        onSelected: onSelected,
+                      );
+                    },
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Divider(height: 1, color: Colors.white.withValues(alpha: 0.13)),
+              _StoryActionOptionRow(
+                label: 'Try different stories',
+                disabled: disabled,
+                icon: CupertinoIcons.arrow_clockwise,
+                onPressed: onRegenerate,
+              ),
+              if (onNext != null) ...[
+                Divider(height: 1, color: Colors.white.withValues(alpha: 0.13)),
+                _StoryActionOptionRow(
+                  label: 'Next',
+                  disabled: disabled,
+                  icon: CupertinoIcons.chevron_right,
+                  onPressed: onNext!,
+                ),
+              ],
             ],
           ],
         ),
       ),
     );
   }
-
-  void _selectDraftOption(_ParsedStoryOption option) {
-    if (option.title == widget.selectedTitle) return;
-    HapticFeedback.selectionClick();
-    setState(() {
-      _draftOption = option;
-      _confirmRegenerate = false;
-    });
-  }
-
-  void _selectRegenerate() {
-    HapticFeedback.selectionClick();
-    setState(() {
-      _draftOption = null;
-      _confirmRegenerate = true;
-    });
-  }
-
-  void _clearDraftAction() {
-    setState(() {
-      _draftOption = null;
-      _confirmRegenerate = false;
-    });
-  }
 }
 
-class _StoryOptionButton extends StatelessWidget {
-  const _StoryOptionButton({
+class _StoryOptionSheetRow extends StatelessWidget {
+  const _StoryOptionSheetRow({
+    required this.index,
     required this.option,
-    required this.onSelected,
     required this.selected,
     required this.disabled,
+    required this.onSelected,
   });
 
+  final int index;
   final _ParsedStoryOption option;
   final ValueChanged<_ParsedStoryOption> onSelected;
   final bool selected;
@@ -3051,305 +3072,123 @@ class _StoryOptionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const defaultBorderColor = Color(0xFFFFC928);
-    const selectedBorderColor = Color(0xFF2FEF73);
-    const optionBackground = Color(0xF0131415);
-    final borderColor = selected ? selectedBorderColor : defaultBorderColor;
-    final borderAlpha = disabled ? 0.52 : 1.0;
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton(
-        onPressed: disabled ? null : () => onSelected(option),
-        style: OutlinedButton.styleFrom(
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          foregroundColor: Colors.white,
-          disabledForegroundColor: Colors.white54,
-          side: BorderSide(
-            color: borderColor.withValues(alpha: borderAlpha),
-            width: selected ? 1.7 : 1.25,
-          ),
-          backgroundColor: optionBackground,
-          disabledBackgroundColor: optionBackground,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    option.title,
-                    style: TextStyle(
-                      color: selected ? Colors.white : Colors.white70,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      height: 1.25,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: disabled
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onSelected(option);
+              },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: selected
+                      ? const Color(0xFFF59E0B).withValues(alpha: 0.34)
+                      : Colors.black.withValues(alpha: 0.42),
+                  shape: BoxShape.circle,
+                ),
+                child: SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: Center(
+                    child: Text(
+                      '${index + 1}',
+                      style: TextStyle(
+                        color: disabled ? Colors.white38 : Colors.white70,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StoryActionButton extends StatelessWidget {
-  const _StoryActionButton({
-    required this.label,
-    required this.disabled,
-    required this.selected,
-    required this.onPressed,
-    this.alignRight = false,
-  });
-
-  final String label;
-  final bool disabled;
-  final bool selected;
-  final VoidCallback onPressed;
-  final bool alignRight;
-
-  @override
-  Widget build(BuildContext context) {
-    const accent = Color(0xFFF59E0B);
-    return Align(
-      alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 190),
-        child: SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: disabled ? null : onPressed,
-            style: OutlinedButton.styleFrom(
-              alignment: Alignment.centerLeft,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              foregroundColor: Colors.white,
-              disabledForegroundColor: Colors.white54,
-              side: BorderSide(
-                color: accent.withValues(
-                  alpha: disabled ? 0.42 : (selected ? 0.96 : 0.72),
-                ),
-                width: selected ? 1.35 : 1,
-              ),
-              backgroundColor: selected
-                  ? accent.withValues(alpha: 0.18)
-                  : const Color(0xF0131415),
-              disabledBackgroundColor: selected
-                  ? accent.withValues(alpha: 0.18)
-                  : const Color(0xF0131415),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: selected ? Colors.white : Colors.white70,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StoryOptionConfirmBar extends StatelessWidget {
-  const _StoryOptionConfirmBar({
-    required this.title,
-    required this.disabled,
-    required this.onCancel,
-    required this.onConfirm,
-  });
-
-  final String title;
-  final bool disabled;
-  final VoidCallback onCancel;
-  final VoidCallback onConfirm;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xF0131415),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Confirm $title',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  height: 1.25,
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              height: 30,
-              child: TextButton(
-                onPressed: disabled ? null : onCancel,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  foregroundColor: Colors.white70,
-                  disabledForegroundColor: Colors.white30,
-                  textStyle: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  option.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: disabled ? Colors.white38 : Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    height: 1.2,
                   ),
                 ),
-                child: const Text('Cancel'),
               ),
-            ),
-            const SizedBox(width: 4),
-            SizedBox(
-              height: 30,
-              child: FilledButton(
-                onPressed: disabled ? null : onConfirm,
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  backgroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.white24,
-                  foregroundColor: const Color(0xFF111111),
-                  disabledForegroundColor: Colors.white54,
-                  textStyle: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                child: disabled
-                    ? const SizedBox(
-                        width: 10,
-                        height: 10,
-                        child: CircularProgressIndicator(strokeWidth: 1.5),
-                      )
-                    : const Text('Confirm'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StoryContinuationActions extends StatelessWidget {
-  const _StoryContinuationActions({
-    required this.disabled,
-    required this.onNext,
-    required this.onTryDifferentStories,
-  });
-
-  final bool disabled;
-  final VoidCallback onNext;
-  final VoidCallback onTryDifferentStories;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _StoryContinuationButton(
-            label: 'Next',
-            icon: CupertinoIcons.chevron_right,
-            disabled: disabled,
-            onPressed: onNext,
-          ),
-          const SizedBox(height: 8),
-          _StoryContinuationButton(
-            label: 'Try different stories',
-            disabled: disabled,
-            onPressed: onTryDifferentStories,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StoryContinuationButton extends StatelessWidget {
-  const _StoryContinuationButton({
-    required this.label,
-    required this.disabled,
-    required this.onPressed,
-    this.icon,
-  });
-
-  final String label;
-  final bool disabled;
-  final VoidCallback onPressed;
-  final IconData? icon;
-
-  @override
-  Widget build(BuildContext context) {
-    const background = Color(0xF0131415);
-    const accent = Color(0xFFF59E0B);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 220),
-      child: OutlinedButton(
-        onPressed: disabled ? null : onPressed,
-        style: OutlinedButton.styleFrom(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-          foregroundColor: Colors.white,
-          disabledForegroundColor: Colors.white54,
-          side: BorderSide(
-            color: accent.withValues(alpha: disabled ? 0.42 : 0.82),
-            width: 1.1,
-          ),
-          backgroundColor: background,
-          disabledBackgroundColor: background,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  height: 1.15,
-                ),
-              ),
-            ),
-            if (icon != null) ...[
-              const SizedBox(width: 8),
-              Icon(icon, size: 14, color: Colors.white),
             ],
-          ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StoryActionOptionRow extends StatelessWidget {
+  const _StoryActionOptionRow({
+    required this.label,
+    required this.disabled,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool disabled;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: disabled
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onPressed();
+              },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.42),
+                  shape: BoxShape.circle,
+                ),
+                child: SizedBox.square(
+                  dimension: 32,
+                  child: Center(
+                    child: Icon(
+                      icon,
+                      size: 16,
+                      color: disabled ? Colors.white38 : Colors.white70,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: disabled ? Colors.white38 : Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -3359,9 +3198,12 @@ class _StoryContinuationButton extends StatelessWidget {
 class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   final _textController = TextEditingController();
   final _listScrollController = ScrollController();
+  final _composerKey = GlobalKey();
   final List<ChatMessageModel> _messages = <ChatMessageModel>[];
   bool _canSend = false;
   int _lastMessageCount = 0;
+  double _composerHeight = 0;
+  Timer? _panelScrollTimer;
   String? _confirmedStoryOptionTitle;
   StorySession? _textSession;
   bool _isStartingTextSession = true;
@@ -3369,6 +3211,10 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   bool _isSubmittingStoryOption = false;
   String? _textSessionError;
   List<_ParsedStoryOption>? _reopenedStoryOptions;
+  bool _lastHadComposerOptions = false;
+  bool _isComposerPanelCollapsed = false;
+  String? _dismissedStoryOptionsKey;
+  bool _dismissedContinuationActions = false;
 
   @override
   void initState() {
@@ -3391,6 +3237,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
 
   @override
   void dispose() {
+    _panelScrollTimer?.cancel();
     _textController.dispose();
     _listScrollController.dispose();
     super.dispose();
@@ -3432,6 +3279,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       if (session.id.isNotEmpty) {
         widget.onSessionReady(session.id);
       }
+      _scrollToBottom(jump: true, retries: 4);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -3457,7 +3305,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
           ..addAll(refreshedMessages);
         _textSessionError = null;
       });
-      _scrollToBottom();
+      _scrollToBottom(jump: true, retries: 4);
     } catch (_) {
       // Keep the existing chat visible. A later text send or page reopen will
       // fetch the canonical history again.
@@ -3541,6 +3389,9 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       _isSendingText = true;
       _textSessionError = null;
       _reopenedStoryOptions = null;
+      _isComposerPanelCollapsed = false;
+      _dismissedStoryOptionsKey = null;
+      _dismissedContinuationActions = false;
       _messages.add(userMessage);
       _messages.add(
         ChatMessageModel(
@@ -3649,6 +3500,9 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       _confirmedStoryOptionTitle = option.title;
       _isSubmittingStoryOption = true;
       _reopenedStoryOptions = null;
+      _isComposerPanelCollapsed = false;
+      _dismissedStoryOptionsKey = null;
+      _dismissedContinuationActions = false;
     });
     try {
       await _sendTextStoryTurn('I choose ${option.title}.');
@@ -3671,6 +3525,9 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       _confirmedStoryOptionTitle = null;
       _isSubmittingStoryOption = true;
       _reopenedStoryOptions = null;
+      _isComposerPanelCollapsed = false;
+      _dismissedStoryOptionsKey = null;
+      _dismissedContinuationActions = false;
     });
     try {
       await _sendTextStoryTurn(
@@ -3695,6 +3552,17 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     await _sendTextStoryTurn('Continue.', visibleText: 'Next');
   }
 
+  Future<void> _sendSuggestedStoryAnswer(_ParsedStoryOption option) async {
+    if (_isSubmittingStoryOption || _isSendingText) return;
+
+    if (_isStartingTextSession) {
+      showToast(context, 'Connecting...', variant: ToastVariant.info);
+      return;
+    }
+
+    await _sendTextStoryTurn(option.title);
+  }
+
   void _restorePreviousStoryOptions() {
     for (final message in _messages.reversed) {
       final parsedOptions = _parseStoryOptions(message);
@@ -3702,6 +3570,9 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         setState(() {
           _confirmedStoryOptionTitle = null;
           _reopenedStoryOptions = parsedOptions.options;
+          _isComposerPanelCollapsed = false;
+          _dismissedStoryOptionsKey = null;
+          _dismissedContinuationActions = false;
         });
         _scrollToBottom();
         return;
@@ -3709,6 +3580,13 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     }
 
     unawaited(_regenerateStoryOptions());
+  }
+
+  void _toggleComposerPanelCollapsed() {
+    setState(() {
+      _isComposerPanelCollapsed = !_isComposerPanelCollapsed;
+    });
+    _scrollToBottomAfterPanelAnimation();
   }
 
   bool _shouldShowStoryContinuationActions({
@@ -3723,15 +3601,124 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     return index == visibleMessageCount - 1;
   }
 
-  void _scrollToBottom() {
-    if (!_listScrollController.hasClients) return;
+  String? _trailingAssistantQuestion(ChatMessageModel message) {
+    if (message.role != ChatRole.assistant || message.isStreaming) return null;
+    final text = _cleanStoryBubbleText(message.message);
+    final match = RegExp(
+      r'(?:^|[.!?]\s+)([^.!?]*\?)\s*$',
+      dotAll: true,
+    ).firstMatch(text);
+    final question = match?.group(1)?.trim();
+    if (question == null || question.length < 8) return null;
+    return question;
+  }
+
+  String? _composerContinuationQuestion(
+    List<ChatMessageModel> visibleMessages,
+  ) {
+    if (visibleMessages.isEmpty) return null;
+    return _trailingAssistantQuestion(visibleMessages.last);
+  }
+
+  List<_ParsedStoryOption> _suggestedAnswersForQuestion(String? question) {
+    final lower = (question ?? '').toLowerCase();
+    if (lower.isEmpty) return const <_ParsedStoryOption>[];
+
+    if (lower.contains('insight') || lower.contains('draw from')) {
+      return const [
+        _ParsedStoryOption(
+          title: 'She might realize calm is something she can return to.',
+        ),
+        _ParsedStoryOption(
+          title: 'She could see that worry is only one part of her.',
+        ),
+      ];
+    }
+
+    if (lower.startsWith('how might') || lower.startsWith('how could')) {
+      return const [
+        _ParsedStoryOption(title: 'It could help them see the choice clearly.'),
+        _ParsedStoryOption(title: 'It might reveal what matters most to them.'),
+      ];
+    }
+
+    if (lower.contains('feel')) {
+      return const [
+        _ParsedStoryOption(title: 'She might feel a little more grounded.'),
+        _ParsedStoryOption(title: 'She could feel nervous, but less alone.'),
+      ];
+    }
+
+    return const [
+      _ParsedStoryOption(title: 'She can pause and listen to what feels true.'),
+      _ParsedStoryOption(title: 'She might take one small honest step.'),
+    ];
+  }
+
+  ChatMessageModel _messageWithoutTrailingQuestion(ChatMessageModel message) {
+    final question = _trailingAssistantQuestion(message);
+    if (question == null) return message;
+    final index = message.message.lastIndexOf(question);
+    if (index <= 0) return message;
+    final text = message.message.substring(0, index).trimRight();
+    if (text.isEmpty) return message;
+    return message.copyWith(message: text);
+  }
+
+  void _scrollToBottom({bool jump = false, int retries = 2}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_listScrollController.hasClients) return;
-      _listScrollController.animateTo(
-        _listScrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
+      if (!mounted) return;
+      if (!_listScrollController.hasClients) {
+        if (retries > 0) {
+          _scrollToBottom(jump: jump, retries: retries - 1);
+        }
+        return;
+      }
+      final bottom = _listScrollController.position.maxScrollExtent;
+      if (jump) {
+        _listScrollController.jumpTo(bottom);
+      } else {
+        _listScrollController.animateTo(
+          bottom,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  void _scrollToBottomAfterPanelAnimation() {
+    _scrollToBottom();
+    _panelScrollTimer?.cancel();
+    _panelScrollTimer = Timer(const Duration(milliseconds: 240), () {
+      if (!mounted) return;
+      _scrollToBottom();
+    });
+  }
+
+  void _scrollChatFromComposerDrag(DragUpdateDetails details) {
+    if (!_listScrollController.hasClients) return;
+    final delta = details.primaryDelta ?? details.delta.dy;
+    if (delta == 0) return;
+
+    final position = _listScrollController.position;
+    final target = (position.pixels - delta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if (target == position.pixels) return;
+    _listScrollController.jumpTo(target);
+  }
+
+  void _syncComposerHeight() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final renderObject = _composerKey.currentContext?.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.hasSize) return;
+      final height = renderObject.size.height;
+      if (height <= 0 || (height - _composerHeight).abs() < 0.5) return;
+      setState(() => _composerHeight = height);
+      _scrollToBottom();
     });
   }
 
@@ -3801,13 +3788,61 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
 
     if (options.length < 2) return null;
     if (message.isStreaming && options.length < 3) return null;
-    final displayText = displayLines.join('\n').trim();
+    final panelTitle = displayLines.reversed
+        .map((line) => _cleanStoryBubbleText(line))
+        .firstWhere((line) => line.endsWith('?'), orElse: () => '')
+        .trim();
+    final displayText = displayLines
+        .where((line) => _cleanStoryBubbleText(line) != panelTitle)
+        .join('\n')
+        .trim();
     return _ParsedStoryOptions(
-      displayText: displayText.isEmpty
-          ? 'Choose a story to explore.'
-          : displayText,
+      displayText: displayText,
       options: options,
+      panelTitle: panelTitle.isEmpty ? null : panelTitle,
     );
+  }
+
+  _ParsedStoryOptions? _composerStoryOptionMenu(
+    List<ChatMessageModel> visibleMessages,
+  ) {
+    if (visibleMessages.isEmpty) return null;
+    final latestMessage = visibleMessages.last;
+    if (latestMessage.isUser) return null;
+    final parsedOptions = _parseStoryOptions(latestMessage);
+    final options = parsedOptions?.options ?? _reopenedStoryOptions;
+    if (options == null || options.isEmpty) return null;
+    if (_storyOptionsKey(options) == _dismissedStoryOptionsKey) return null;
+    return _ParsedStoryOptions(
+      displayText: parsedOptions?.displayText ?? '',
+      options: options,
+      panelTitle: parsedOptions?.panelTitle,
+    );
+  }
+
+  List<_ParsedStoryOption>? _composerStoryOptions(
+    List<ChatMessageModel> visibleMessages,
+  ) {
+    return _composerStoryOptionMenu(visibleMessages)?.options;
+  }
+
+  bool _showComposerContinuationActions(
+    List<ChatMessageModel> visibleMessages,
+  ) {
+    if (_dismissedContinuationActions) return false;
+    if (visibleMessages.isEmpty) return false;
+    final latestMessage = visibleMessages.last;
+    final parsedOptions = _parseStoryOptions(latestMessage);
+    return _shouldShowStoryContinuationActions(
+      message: latestMessage,
+      index: visibleMessages.length - 1,
+      visibleMessageCount: visibleMessages.length,
+      parsedOptions: parsedOptions,
+    );
+  }
+
+  String _storyOptionsKey(List<_ParsedStoryOption> options) {
+    return options.map((option) => option.displayText).join('|');
   }
 
   @override
@@ -3830,14 +3865,68 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         : const Color(0xFFF3F3F3);
     final mutedText = isDark ? Colors.white60 : Colors.black54;
     final screenWidth = MediaQuery.of(context).size.width;
-    final bubbleMaxWidth = (screenWidth * 0.82).clamp(0.0, 420.0);
+    final assistantBubbleMaxWidth = (screenWidth * 0.94).clamp(0.0, 560.0);
+    final userBubbleMaxWidth = (screenWidth * 0.76).clamp(0.0, 360.0);
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final canSubmitText =
         _canSend && !_isSendingText && !_isStartingTextSession;
+    final composerStoryOptionMenu = _composerStoryOptionMenu(visibleMessages);
+    final composerOptions = composerStoryOptionMenu?.options;
+    final hasComposerOptions =
+        composerOptions != null && composerOptions.isNotEmpty;
+    final hasComposerContinuationActions = _showComposerContinuationActions(
+      visibleMessages,
+    );
+    final composerContinuationQuestion = hasComposerContinuationActions
+        ? _composerContinuationQuestion(visibleMessages)
+        : null;
+    final composerContinuationSuggestions = _suggestedAnswersForQuestion(
+      composerContinuationQuestion,
+    );
+    final hasComposerExtension =
+        hasComposerOptions || hasComposerContinuationActions;
+    final composerOptionsDisabled =
+        _isSubmittingStoryOption || _isSendingText || _isStartingTextSession;
+    final composerSurface = hasComposerExtension
+        ? const Color(0xFF20211F)
+        : mutedSurface;
+    final composerRadius = BorderRadius.circular(
+      hasComposerExtension ? 24 : 28,
+    );
+    final hasContinuationSuggestions =
+        hasComposerContinuationActions &&
+        composerContinuationSuggestions.isNotEmpty;
+    final fallbackBottomPadding = _isComposerPanelCollapsed
+        ? 132.0
+        : hasComposerOptions
+        ? 390.0
+        : hasComposerContinuationActions
+        ? (hasContinuationSuggestions ? 420.0 : 260.0)
+        : 104.0;
+    final maxBottomPadding = _isComposerPanelCollapsed
+        ? 156.0
+        : hasContinuationSuggestions
+        ? 460.0
+        : hasComposerOptions
+        ? 430.0
+        : double.infinity;
+    final measuredBottomPadding = _composerHeight + keyboardHeight + 16;
+    final listBottomPadding = measuredBottomPadding > 16
+        ? math.min(
+            math.max(measuredBottomPadding, fallbackBottomPadding),
+            maxBottomPadding,
+          )
+        : fallbackBottomPadding;
+
+    _syncComposerHeight();
 
     if (visibleMessages.length != _lastMessageCount) {
       _lastMessageCount = visibleMessages.length;
-      _scrollToBottom();
+      _scrollToBottom(jump: _isStartingTextSession);
+    }
+    if (hasComposerExtension != _lastHadComposerOptions) {
+      _lastHadComposerOptions = hasComposerExtension;
+      _scrollToBottomAfterPanelAnimation();
     }
     if (visibleMessages.isNotEmpty && visibleMessages.last.isStreaming) {
       _scrollToBottom();
@@ -3856,33 +3945,48 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       );
     }
 
-    return Column(
+    return Stack(
       children: [
-        Expanded(
+        Positioned.fill(
           child: ListView.separated(
             controller: _listScrollController,
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(12, 18, 12, listBottomPadding),
             itemCount: visibleMessages.length,
             separatorBuilder: (_, __) => const SizedBox(height: 14),
             itemBuilder: (context, index) {
               final message = visibleMessages[index];
               final parsedOptions = _parseStoryOptions(message);
-              final reopenedOptions =
-                  index == visibleMessages.length - 1 &&
-                      parsedOptions == null &&
-                      !message.isUser
-                  ? _reopenedStoryOptions
-                  : null;
-              final showContinuationActions =
+              if (parsedOptions != null) {
+                final introText = parsedOptions.displayText.trim();
+                if (introText.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                final displayMessage = message.copyWith(message: introText);
+                return _AnimatedBubble(
+                  key: ValueKey('${message.id}_intro'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ChatBubble(
+                        message: displayMessage,
+                        onRetry: () {},
+                        maxWidth: assistantBubbleMaxWidth,
+                        renderMarkdownBold: true,
+                      ),
+                    ],
+                  ),
+                );
+              }
+              final displayMessage =
                   _shouldShowStoryContinuationActions(
                     message: message,
                     index: index,
                     visibleMessageCount: visibleMessages.length,
                     parsedOptions: parsedOptions,
-                  );
-              final displayMessage = parsedOptions == null
-                  ? message
-                  : message.copyWith(message: parsedOptions.displayText);
+                  )
+                  ? _messageWithoutTrailingQuestion(message)
+                  : message;
               return _AnimatedBubble(
                 key: ValueKey(message.id),
                 child: Column(
@@ -3893,137 +3997,255 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                     ChatBubble(
                       message: displayMessage,
                       onRetry: () {},
-                      maxWidth: bubbleMaxWidth,
+                      maxWidth: displayMessage.isUser
+                          ? userBubbleMaxWidth
+                          : assistantBubbleMaxWidth,
                       renderMarkdownBold: !displayMessage.isUser,
                     ),
-                    if (parsedOptions != null || reopenedOptions != null) ...[
-                      const SizedBox(height: 10),
-                      _StoryOptionButtons(
-                        options: parsedOptions?.options ?? reopenedOptions!,
-                        alignRight: reopenedOptions != null,
-                        selectedTitle: _confirmedStoryOptionTitle,
-                        disabled:
-                            _isSubmittingStoryOption ||
-                            _isSendingText ||
-                            _isStartingTextSession,
-                        onNext: reopenedOptions == null
-                            ? null
-                            : () => unawaited(_requestNextStoryParagraph()),
-                        onRegenerate: () =>
-                            unawaited(_regenerateStoryOptions()),
-                        onSelected: (option) =>
-                            unawaited(_confirmStoryOption(option)),
-                      ),
-                    ] else if (showContinuationActions) ...[
-                      const SizedBox(height: 10),
-                      _StoryContinuationActions(
-                        disabled:
-                            _isSubmittingStoryOption ||
-                            _isSendingText ||
-                            _isStartingTextSession,
-                        onNext: () => unawaited(_requestNextStoryParagraph()),
-                        onTryDifferentStories: _restorePreviousStoryOptions,
-                      ),
-                    ],
                   ],
                 ),
               );
             },
           ),
         ),
-        AnimatedPadding(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.only(bottom: keyboardHeight),
-          child: SafeArea(
-            top: false,
-            minimum: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: mutedSurface,
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _textController,
-                            maxLines: 5,
-                            minLines: 1,
-                            textCapitalization: TextCapitalization.sentences,
-                            cursorColor: context.primaryTextColor,
-                            style: TextStyle(
-                              color: context.primaryTextColor,
-                              fontSize: 16,
-                              height: 1.35,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'Message',
-                              hintStyle: TextStyle(
-                                color: mutedText,
-                                fontSize: 16,
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: AnimatedPadding(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            padding: EdgeInsets.only(bottom: keyboardHeight),
+            child: SizedBox(
+              key: _composerKey,
+              width: double.infinity,
+              child: SafeArea(
+                top: false,
+                minimum: hasComposerExtension
+                    ? const EdgeInsets.fromLTRB(10, 8, 10, 16)
+                    : const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onVerticalDragUpdate: hasComposerExtension
+                            ? _scrollChatFromComposerDrag
+                            : null,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: composerSurface,
+                            borderRadius: composerRadius,
+                            border: hasComposerExtension
+                                ? Border.all(
+                                    color: Colors.white.withValues(alpha: 0.22),
+                                    width: 1,
+                                  )
+                                : null,
+                            boxShadow: hasComposerExtension
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.32,
+                                      ),
+                                      blurRadius: 18,
+                                      offset: const Offset(0, -6),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (hasComposerOptions) ...[
+                                _StoryOptionsInputPanel(
+                                  title:
+                                      composerStoryOptionMenu?.panelTitle ??
+                                      'What kind of story sounds good?',
+                                  options: composerOptions,
+                                  selectedTitle: _confirmedStoryOptionTitle,
+                                  disabled: composerOptionsDisabled,
+                                  collapsed: _isComposerPanelCollapsed,
+                                  onNext: _reopenedStoryOptions == null
+                                      ? null
+                                      : () => unawaited(
+                                          _requestNextStoryParagraph(),
+                                        ),
+                                  onRegenerate: () =>
+                                      unawaited(_regenerateStoryOptions()),
+                                  onToggleCollapsed:
+                                      _toggleComposerPanelCollapsed,
+                                  onSelected: (option) =>
+                                      unawaited(_confirmStoryOption(option)),
+                                ),
+                              ] else if (hasComposerContinuationActions) ...[
+                                _StoryOptionsInputPanel(
+                                  title:
+                                      composerContinuationQuestion ??
+                                      'What would you like to do next?',
+                                  options: composerContinuationSuggestions,
+                                  disabled: composerOptionsDisabled,
+                                  collapsed: _isComposerPanelCollapsed,
+                                  onNext: () =>
+                                      unawaited(_requestNextStoryParagraph()),
+                                  onRegenerate: _restorePreviousStoryOptions,
+                                  onToggleCollapsed:
+                                      _toggleComposerPanelCollapsed,
+                                  onSelected: (option) => unawaited(
+                                    _sendSuggestedStoryAnswer(option),
+                                  ),
+                                ),
+                              ],
+                              if (hasComposerExtension) ...[
+                                Divider(
+                                  height: 1,
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.09)
+                                      : Colors.black.withValues(alpha: 0.08),
+                                ),
+                                const SizedBox(height: 4),
+                              ],
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  if (hasComposerExtension)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 18),
+                                      child: Transform.translate(
+                                        offset: const Offset(0, -4),
+                                        child: DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withValues(
+                                              alpha: 0.42,
+                                            ),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: SizedBox.square(
+                                            dimension: 32,
+                                            child: Center(
+                                              child: Icon(
+                                                CupertinoIcons.pencil,
+                                                color: mutedText,
+                                                size: 16,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  Expanded(
+                                    child: Transform.translate(
+                                      offset: hasComposerExtension
+                                          ? const Offset(0, -4)
+                                          : Offset.zero,
+                                      child: TextField(
+                                        controller: _textController,
+                                        maxLines: 5,
+                                        minLines: 1,
+                                        textCapitalization:
+                                            TextCapitalization.sentences,
+                                        cursorColor: context.primaryTextColor,
+                                        style: TextStyle(
+                                          color: context.primaryTextColor,
+                                          fontSize: 16,
+                                          height: 1.35,
+                                        ),
+                                        decoration: InputDecoration(
+                                          hintText: hasComposerOptions
+                                              ? 'Type your own answer...'
+                                              : 'Message',
+                                          hintStyle: TextStyle(
+                                            color: mutedText,
+                                            fontSize: 16,
+                                          ),
+                                          border: InputBorder.none,
+                                          contentPadding: EdgeInsets.fromLTRB(
+                                            hasComposerExtension ? 12 : 18,
+                                            14,
+                                            8,
+                                            14,
+                                          ),
+                                          isDense: true,
+                                        ),
+                                        onSubmitted: (_) =>
+                                            unawaited(_onSend()),
+                                      ),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      right: 6,
+                                      bottom: 6,
+                                    ),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 180,
+                                      ),
+                                      curve: Curves.easeOut,
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: canSubmitText
+                                            ? (isDark
+                                                  ? Colors.white
+                                                  : Colors.black)
+                                            : Colors.transparent,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: IconButton(
+                                        onPressed: canSubmitText
+                                            ? () => unawaited(_onSend())
+                                            : null,
+                                        splashRadius: 20,
+                                        icon: Icon(
+                                          CupertinoIcons.paperplane_fill,
+                                          color: canSubmitText
+                                              ? (isDark
+                                                    ? Colors.black
+                                                    : Colors.white)
+                                              : mutedText,
+                                          size: 19,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (hasComposerExtension)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        right: 6,
+                                        bottom: 6,
+                                      ),
+                                      child: _CircleIconButton(
+                                        icon: Icons.call_rounded,
+                                        tooltip: 'Voice',
+                                        background: const Color(0xFF22C55E),
+                                        foreground: Colors.white,
+                                        onTap: widget.onCall,
+                                      ),
+                                    ),
+                                ],
                               ),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.fromLTRB(
-                                18,
-                                14,
-                                8,
-                                14,
-                              ),
-                              isDense: true,
-                            ),
-                            onSubmitted: (_) => unawaited(_onSend()),
+                            ],
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6, bottom: 6),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            curve: Curves.easeOut,
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: canSubmitText
-                                  ? (isDark ? Colors.white : Colors.black)
-                                  : Colors.transparent,
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              onPressed: canSubmitText
-                                  ? () => unawaited(_onSend())
-                                  : null,
-                              splashRadius: 20,
-                              icon: Icon(
-                                CupertinoIcons.paperplane_fill,
-                                color: canSubmitText
-                                    ? (isDark ? Colors.black : Colors.white)
-                                    : mutedText,
-                                size: 19,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
+                    if (!hasComposerExtension) ...[
+                      const SizedBox(width: 12),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: _CircleIconButton(
+                          icon: Icons.call_rounded,
+                          tooltip: 'Voice',
+                          background: const Color(0xFF22C55E),
+                          foreground: Colors.white,
+                          onTap: widget.onCall,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: _CircleIconButton(
-                    icon: Icons.call_rounded,
-                    tooltip: 'Voice',
-                    background: const Color(0xFF22C55E),
-                    foreground: Colors.white,
-                    onTap: widget.onCall,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
