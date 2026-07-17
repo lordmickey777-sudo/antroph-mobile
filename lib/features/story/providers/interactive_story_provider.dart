@@ -606,6 +606,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     required String optionId,
     required String inputType,
     String? questionId,
+    String? displayText,
   }) async {
     final sessionId = state.session?.sessionId;
     if (sessionId == null || sessionId.isEmpty || !_canMutateCurrentSession) {
@@ -645,9 +646,12 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
 
     try {
       final repo = ref.read(storiesRepositoryProvider);
-      final requestMetadata = inputType == 'option_select'
-          ? _guidedAspectExpectationMetadata(state.session)
-          : const <String, dynamic>{};
+      final requestMetadata = <String, dynamic>{
+        if (inputType == 'option_select')
+          ..._guidedAspectExpectationMetadata(state.session),
+        if (displayText != null && displayText.trim().isNotEmpty)
+          'display_text': displayText.trim(),
+      };
       final response = await repo.submitInteractiveInput(
         sessionId: sessionId,
         input: InteractiveInput(

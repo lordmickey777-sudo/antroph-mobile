@@ -39,6 +39,7 @@ class InteractiveStoryRenderer extends StatelessWidget {
     this.soloViewMode,
     this.showSoloModeSwitch = false,
     this.showQuizTopicDecision = false,
+    this.hideSoloOptionSuggestions = false,
     this.alignSoloOptionsRight = true,
     this.showAdvanceQuestionStatusAction = true,
     this.showAdvanceQuestionStatus = true,
@@ -68,6 +69,7 @@ class InteractiveStoryRenderer extends StatelessWidget {
   final String? soloViewMode;
   final bool showSoloModeSwitch;
   final bool showQuizTopicDecision;
+  final bool hideSoloOptionSuggestions;
   final bool alignSoloOptionsRight;
   final bool showAdvanceQuestionStatusAction;
   final bool showAdvanceQuestionStatus;
@@ -94,6 +96,7 @@ class InteractiveStoryRenderer extends StatelessWidget {
         soloViewMode: soloViewMode,
         showSoloModeSwitch: showSoloModeSwitch,
         showQuizTopicDecision: showQuizTopicDecision,
+        hideSoloOptionSuggestions: hideSoloOptionSuggestions,
         alignSoloOptionsRight: alignSoloOptionsRight,
         showAdvanceQuestionStatusAction: showAdvanceQuestionStatusAction,
         showAdvanceQuestionStatus: showAdvanceQuestionStatus,
@@ -234,6 +237,7 @@ class _QuizTranscriptView extends StatefulWidget {
     this.soloViewMode,
     required this.showSoloModeSwitch,
     required this.showQuizTopicDecision,
+    required this.hideSoloOptionSuggestions,
     required this.alignSoloOptionsRight,
     required this.showAdvanceQuestionStatusAction,
     required this.showAdvanceQuestionStatus,
@@ -263,6 +267,7 @@ class _QuizTranscriptView extends StatefulWidget {
   final String? soloViewMode;
   final bool showSoloModeSwitch;
   final bool showQuizTopicDecision;
+  final bool hideSoloOptionSuggestions;
   final bool alignSoloOptionsRight;
   final bool showAdvanceQuestionStatusAction;
   final bool showAdvanceQuestionStatus;
@@ -363,6 +368,8 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
       isAdvancingQuestion: widget.isAdvancingQuestion,
       showSoloModeSwitch: !widget.readOnly && widget.showSoloModeSwitch,
       showQuizTopicDecision: !widget.readOnly && widget.showQuizTopicDecision,
+      hideSoloOptionSuggestions:
+          widget.readOnly || widget.hideSoloOptionSuggestions,
       showAdvanceQuestionStatusAction: widget.showAdvanceQuestionStatusAction,
       showAdvanceQuestionStatus: widget.showAdvanceQuestionStatus,
       soloViewMode: widget.soloViewMode,
@@ -640,6 +647,7 @@ class _QuizTranscriptItem {
     bool isAdvancingQuestion = false,
     bool showSoloModeSwitch = false,
     bool showQuizTopicDecision = false,
+    bool hideSoloOptionSuggestions = false,
     bool showAdvanceQuestionStatusAction = true,
     bool showAdvanceQuestionStatus = true,
     String? soloViewMode,
@@ -687,6 +695,7 @@ class _QuizTranscriptItem {
         (topicAspectStatus == 'generating' || topicAspectStatus == 'loading');
     final showTopicSuggestions =
         phase == 'topic_selection' &&
+        !hideSoloOptionSuggestions &&
         !isTopicAspectStage &&
         sessionType == 'solo' &&
         !pendingKeys.any((key) => key.contains('-text-')) &&
@@ -1239,7 +1248,7 @@ class _QuizTranscriptItem {
           choiceTurnId: currentTurn?.turnId,
         ),
       );
-    } else if (showSoloModeSwitch) {
+    } else if (showSoloModeSwitch && !hideSoloOptionSuggestions) {
       final normalizedMode = soloViewMode?.trim().toLowerCase();
       items.add(
         _QuizTranscriptItem(
