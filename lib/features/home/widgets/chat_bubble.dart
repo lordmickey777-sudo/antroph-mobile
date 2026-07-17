@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:antroph_mobile/features/home/models/chat_models.dart';
 
@@ -13,12 +15,14 @@ class ChatBubble extends StatelessWidget {
     required this.onRetry,
     required this.maxWidth,
     this.renderMarkdownBold = false,
+    this.loadingLabel = 'Thinking…',
   });
 
   final ChatMessageModel message;
   final VoidCallback onRetry;
   final double maxWidth;
   final bool renderMarkdownBold;
+  final String loadingLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +55,7 @@ class ChatBubble extends StatelessWidget {
             bottomLeft: Radius.circular(12),
             bottomRight: Radius.circular(26),
           );
-    final showsTypingOnly = isStreaming && message.message.trim().isEmpty;
+    final showsStatusOnly = isStreaming && message.message.trim().isEmpty;
 
     return Align(
       alignment: alignment,
@@ -63,7 +67,7 @@ class ChatBubble extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (!showsTypingOnly)
+              if (!showsStatusOnly)
                 _BubbleText(
                   text: message.message,
                   renderMarkdownBold: renderMarkdownBold,
@@ -74,9 +78,11 @@ class ChatBubble extends StatelessWidget {
                     fontWeight: FontWeight.w400,
                   ),
                 ),
-              if (isStreaming) ...[
-                SizedBox(height: showsTypingOnly ? 0 : 8),
-                _TypingDots(color: statusColor),
+              if (showsStatusOnly)
+                _StreamingStatusLabel(loadingLabel, color: statusColor)
+              else if (isStreaming) ...[
+                const SizedBox(height: 8),
+                _StreamingStatusLabel(loadingLabel, color: statusColor),
               ] else if (message.isPending || message.isFailed) ...[
                 const SizedBox(height: 8),
                 ChatStatusRow(message: message, onRetry: onRetry),
@@ -86,6 +92,201 @@ class ChatBubble extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _StreamingStatusLabel extends StatefulWidget {
+  const _StreamingStatusLabel(this.label, {required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  State<_StreamingStatusLabel> createState() => _StreamingStatusLabelState();
+}
+
+class _StreamingStatusLabelState extends State<_StreamingStatusLabel>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  List<String> get _labelWidthBasis => switch (widget.label) {
+    'Connecting…' ||
+    'Preparing…' ||
+    'Loading…' => const ['Connecting…', 'Preparing…', 'Loading…'],
+    _ => const ['Thinking…', 'Processing…', 'Generating…'],
+  };
+
+  Size _measureLabelBox(BuildContext context, List<String> labels) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    const style = TextStyle(
+      fontSize: 15,
+      height: 1.45,
+      fontWeight: FontWeight.w500,
+    );
+    var width = 0.0;
+    var height = 0.0;
+    for (final label in labels) {
+      final painter = TextPainter(
+        text: TextSpan(text: _visualStatusLabel(label), style: style),
+        textDirection: direction,
+        textScaler: textScaler,
+      )..layout();
+      width = math.max(width, painter.width);
+      height = math.max(height, painter.height);
+    }
+    return Size(width + 8, height + 6);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final labelBoxSize = _measureLabelBox(context, _labelWidthBasis);
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        return SizedBox(
+          width: labelBoxSize.width,
+          height: labelBoxSize.height,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 240),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(opacity: animation, child: child);
+              },
+              child: _HandwritingStatusLabel(
+                key: ValueKey(widget.label),
+                label: widget.label,
+                color: widget.color,
+                progress: _controller.value,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _visualStatusLabel(String label) => label.replaceAll('…', '...');
+
+class _HandwritingStatusLabel extends StatelessWidget {
+  const _HandwritingStatusLabel({
+    super.key,
+    required this.label,
+    required this.color,
+    required this.progress,
+  });
+
+  final String label;
+  final Color color;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayLabel = _visualStatusLabel(label);
+    final easedProgress = Curves.easeInOutCubic.transform(
+      (progress / 0.62).clamp(0.0, 1.0),
+    );
+    final cursorOpacity = progress < 0.76
+        ? 1.0
+        : 1.0 - ((progress - 0.76) / 0.24).clamp(0.0, 1.0);
+    return Semantics(
+      label: label,
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          ExcludeSemantics(
+            child: ClipRect(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                widthFactor: easedProgress,
+                child: Text(
+                  displayLabel,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(
+                    color: color.withValues(alpha: 0.94),
+                    fontSize: 15,
+                    height: 1.45,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: _cursorLeft(context, displayLabel, easedProgress),
+            top: 2,
+            bottom: 2,
+            child: ExcludeSemantics(
+              child: Opacity(
+                opacity: cursorOpacity,
+                child: Container(
+                  width: 1.6,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.74),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: ExcludeSemantics(
+              child: Opacity(
+                opacity: 0,
+                child: Text(
+                  label,
+                  style: const TextStyle(fontSize: 15, height: 1.45),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double _cursorLeft(BuildContext context, String label, double progress) {
+    final painter = TextPainter(
+      text: const TextSpan(
+        style: TextStyle(
+          fontSize: 15,
+          height: 1.45,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    );
+    painter.text = TextSpan(
+      text: label,
+      style: const TextStyle(
+        fontSize: 15,
+        height: 1.45,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+    painter.layout();
+    return (painter.width * progress).clamp(0.0, painter.width + 1);
   }
 }
 
@@ -126,64 +327,6 @@ class _BubbleText extends StatelessWidget {
     }
 
     return Text.rich(TextSpan(style: style, children: spans));
-  }
-}
-
-class _TypingDots extends StatefulWidget {
-  const _TypingDots({required this.color});
-
-  final Color color;
-
-  @override
-  State<_TypingDots> createState() => _TypingDotsState();
-}
-
-class _TypingDotsState extends State<_TypingDots>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(3, (index) {
-            final progress = (_controller.value - (index * 0.18)) % 1.0;
-            final opacity = 0.3 + ((1 - ((progress - 0.5).abs() * 2)) * 0.7);
-            return Padding(
-              padding: EdgeInsets.only(right: index == 2 ? 0 : 6),
-              child: Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  color: widget.color.withValues(
-                    alpha: opacity.clamp(0.2, 1.0),
-                  ),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            );
-          }),
-        );
-      },
-    );
   }
 }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:antroph_mobile/features/home/models/realtime_voice_bridge_models.dart';
@@ -70,7 +71,14 @@ void main() {
     tester,
   ) async {
     final fake = FakeVoiceChatController();
-    final storiesRepository = _FakeStoriesRepository();
+    final streamGate = Completer<void>();
+    final tokenGate = Completer<void>();
+    final doneGate = Completer<void>();
+    final storiesRepository = _FakeStoriesRepository(
+      streamGate: streamGate,
+      tokenGate: tokenGate,
+      doneGate: doneGate,
+    );
 
     await tester.pumpWidget(
       ProviderScope(
@@ -96,9 +104,76 @@ void main() {
     await tester.pump();
 
     expect(find.text('Tell me more'), findsOneWidget);
+    expect(find.text('Thinking…'), findsOneWidget);
     expect(find.byType(ChatBubble), findsNWidgets(2));
     expect(storiesRepository.streamCalls, 1);
     expect(fake.sendTextPromptCalls, 0);
+
+    streamGate.complete();
+    await tester.pump();
+
+    expect(find.text('Processing…'), findsOneWidget);
+
+    tokenGate.complete();
+    await tester.pump();
+
+    expect(find.text('Generating…'), findsOneWidget);
+
+    doneGate.complete();
+  });
+
+  testWidgets('failed story retry reconnects room before resending', (
+    tester,
+  ) async {
+    final fake = FakeVoiceChatController();
+    final storiesRepository = _FakeStoriesRepository(
+      streamFailuresRemaining: 1,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+          storiesRepositoryProvider.overrideWithValue(storiesRepository),
+        ],
+        child: MaterialApp(
+          home: StoryChatFlowPage(
+            storyId: 'story_1',
+            storyTitle: 'Test Story',
+            initialInteractionMode: 'narrative',
+            voicePageBuilder: _testVoicePageBuilder,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), 'She can pause.');
+    await tester.pump();
+    await tester.tap(find.byIcon(CupertinoIcons.paperplane_fill));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Failed'), findsOneWidget);
+    expect(storiesRepository.startSessionCalls, 1);
+    expect(storiesRepository.fetchConversationCalls, 1);
+    expect(storiesRepository.streamCalls, 1);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(storiesRepository.startSessionCalls, 2);
+    expect(storiesRepository.fetchConversationCalls, 2);
+    expect(storiesRepository.streamCalls, 2);
+    expect(storiesRepository.sentMessages, [
+      'She can pause.',
+      'She can pause.',
+    ]);
+    expect(find.text('A reply'), findsOneWidget);
+    expect(find.text('Failed'), findsNothing);
+
+    await tester.pump(const Duration(seconds: 3));
   });
 
   testWidgets('voice turns are appended to the text chat after voice closes', (
@@ -263,6 +338,70 @@ Which story would you like to explore?''',
     expect(find.text('The Silent Promise'), findsOneWidget);
     expect(find.text('Across the Miles'), findsOneWidget);
     expect(find.text('Wedding Whisper'), findsOneWidget);
+  });
+
+  testWidgets('story choice asks for perspective before sending', (
+    tester,
+  ) async {
+    final fake = FakeVoiceChatController();
+    final storiesRepository = _FakeStoriesRepository(
+      conversation: const [
+        {
+          'speaker': 'assistant',
+          'message': '''Here are three stories to choose from:
+
+1. **The Silent Promise:** A newly married couple discovers commitment.
+2. **Across the Miles:** Two long-distance partners navigate love.
+3. **Wedding Whisper:** A wedding planner finds unexpected romance.''',
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          voiceChatControllerProvider.overrideWith(() => fake),
+          storiesRepositoryProvider.overrideWithValue(storiesRepository),
+        ],
+        child: const MaterialApp(
+          home: StoryChatFlowPage(
+            storyId: 'story_1',
+            storyTitle: 'Love in Translation',
+            initialInteractionMode: 'narrative',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.text('The Silent Promise'));
+    await tester.pump();
+
+    expect(storiesRepository.sentMessages, isEmpty);
+    expect(
+      find.text('How should "The Silent Promise" be told?'),
+      findsOneWidget,
+    );
+    expect(find.text('First person'), findsOneWidget);
+    expect(find.text('Third-person close'), findsOneWidget);
+    expect(find.text('Omniscient narrator'), findsOneWidget);
+
+    await tester.tap(find.text('First person'));
+    await tester.pump();
+
+    expect(
+      find.text('Narrate "The Silent Promise" in first person perspective'),
+      findsOneWidget,
+    );
+    expect(
+      storiesRepository.sentMessages.single,
+      contains('The Silent Promise'),
+    );
+    expect(
+      storiesRepository.sentMessages.single,
+      contains('Tell it in first person'),
+    );
   });
 
   testWidgets('story option menu keeps introduction visible', (tester) async {
@@ -1037,12 +1176,23 @@ class FakeVoiceChatController extends VoiceChatController {
 }
 
 class _FakeStoriesRepository extends StoriesRepository {
-  _FakeStoriesRepository({this.conversation = const []}) : super(dio: Dio());
+  _FakeStoriesRepository({
+    this.conversation = const [],
+    this.streamGate,
+    this.tokenGate,
+    this.doneGate,
+    this.streamFailuresRemaining = 0,
+  }) : super(dio: Dio());
 
+  int startSessionCalls = 0;
   int streamCalls = 0;
   int fetchConversationCalls = 0;
+  int streamFailuresRemaining;
   final List<String> sentMessages = [];
   List<Map<String, dynamic>> conversation;
+  final Completer<void>? streamGate;
+  final Completer<void>? tokenGate;
+  final Completer<void>? doneGate;
 
   StorySession get _session => StorySession(
     id: 'session_1',
@@ -1061,7 +1211,10 @@ class _FakeStoriesRepository extends StoriesRepository {
     required String storyId,
     required String deviceType,
     required String deviceId,
-  }) async => _session;
+  }) async {
+    startSessionCalls++;
+    return _session;
+  }
 
   @override
   Future<List<Map<String, dynamic>>> fetchStoryConversation({
@@ -1079,7 +1232,22 @@ class _FakeStoriesRepository extends StoriesRepository {
   }) async* {
     streamCalls++;
     sentMessages.add(message);
+    if (streamGate != null) {
+      await streamGate!.future;
+    }
+    if (streamFailuresRemaining > 0) {
+      streamFailuresRemaining--;
+      throw Exception('Story stream failed');
+    }
+    yield const StoryTextStreamEvent(type: 'status', status: 'processing');
+    if (tokenGate != null) {
+      await tokenGate!.future;
+    }
+    yield const StoryTextStreamEvent(type: 'status', status: 'generating');
     yield const StoryTextStreamEvent(type: 'token', content: 'A reply');
+    if (doneGate != null) {
+      await doneGate!.future;
+    }
     yield StoryTextStreamEvent(type: 'done', session: _session);
   }
 }

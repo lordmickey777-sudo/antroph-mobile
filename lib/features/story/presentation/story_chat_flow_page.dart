@@ -16,6 +16,7 @@ import 'package:antroph_mobile/features/story/presentation/solo_interactive_hist
 import 'package:antroph_mobile/features/story/presentation/story_voice_page.dart';
 import 'package:antroph_mobile/features/story/providers/interactive_story_provider.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
+import 'package:antroph_mobile/features/story/widgets/group_quiz_results_view.dart';
 import 'package:antroph_mobile/features/story/widgets/interactive_story_renderer.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
@@ -535,6 +536,8 @@ enum _SoloEntryView { checking, launcher, history, session }
 class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   final _textController = TextEditingController();
   final _textFocusNode = FocusNode();
+  final _groupMessageFieldKey = GlobalKey();
+  final _groupOptionPanelKey = GlobalKey();
   final _customTopicCallLink = LayerLink();
   bool _canSend = false;
   bool _customTopicEntryEnabled = false;
@@ -547,6 +550,10 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   bool _showQuizTopicDecision = false;
   bool _resumeQuizAfterNewTopic = false;
   bool _isRestartingForNewTopic = false;
+  bool _groupHostAdvancePanelCollapsed = false;
+  bool _groupCompletedPanelCollapsed = true;
+  bool _groupSetupPanelCollapsed = false;
+  double _groupOptionPanelHeight = 0;
   bool _started = false;
   String? _lastGenerationFailureKey;
   String? _stickyGenerationError;
@@ -566,7 +573,32 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
       final next = _textController.text.trim().isNotEmpty;
       if (next != _canSend) setState(() => _canSend = next);
     });
+    _textFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+  }
+
+  void _syncGroupOptionPanelHeight(bool visible) {
+    if (!visible) {
+      if (_groupOptionPanelHeight != 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _groupOptionPanelHeight = 0);
+        });
+      }
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final renderObject = _groupOptionPanelKey.currentContext
+          ?.findRenderObject();
+      if (renderObject is! RenderBox) return;
+      final height = renderObject.size.height;
+      if (height <= 0 || (height - _groupOptionPanelHeight).abs() < 0.5) {
+        return;
+      }
+      setState(() => _groupOptionPanelHeight = height);
+    });
   }
 
   @override
@@ -971,7 +1003,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final isGroupQuizChat =
         state['template'] == 'quiz' &&
         state['session_type'] == 'group' &&
-        state['phase'] == 'showing_results';
+        (state['phase'] == 'showing_results' || state['phase'] == 'completed');
     final isPostSetupSoloChat =
         session != null &&
         state['session_type'] == 'solo' &&
@@ -996,7 +1028,15 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final state = session.interactiveState;
     final phase = (state['phase'] as String?) ?? '';
     final sessionType = (state['session_type'] as String?) ?? '';
-    if (sessionType == 'group' && phase == 'showing_results') return true;
+    if (sessionType == 'group' &&
+        (phase == 'showing_results' || phase == 'completed')) {
+      return true;
+    }
+    if (sessionType == 'group' &&
+        phase == 'group_setup' &&
+        state['group_setup_stage'] == 'topic_subject') {
+      return true;
+    }
     if (sessionType != 'solo') return false;
     if (_hasCompletedSoloQuizSetup(session) &&
         _shouldShowSoloModeSwitch(session) &&
@@ -1194,6 +1234,28 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
           sessionType: 'solo',
         );
     if (mounted) setState(() => _isRestartingForNewTopic = false);
+  }
+
+  void _advanceGroupHostQuiz(
+    InteractiveSessionState session,
+    String? currentUserId,
+  ) {
+    if (_groupHostAdvancePanelActionLabel(session) == 'Show final results') {
+      unawaited(
+        showGroupQuizResultsBottomSheet(
+          context,
+          session: session,
+          currentUserId: currentUserId,
+        ),
+      );
+      unawaited(
+        ref
+            .read(interactiveStoryProvider.notifier)
+            .advanceQuestion(showLoading: false),
+      );
+      return;
+    }
+    unawaited(ref.read(interactiveStoryProvider.notifier).advanceQuestion());
   }
 
   void _syncSoloViewState(InteractiveStoryState next) {
@@ -1545,6 +1607,56 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final disableQuizGameControls =
         isGroupQuizSession &&
         (phase == 'generation_failed' || state.isRetryingGeneration);
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final canHostAdvanceGroupQuiz =
+        session != null &&
+        isGroupQuizSession &&
+        _canCurrentUserHostGroupQuiz(session, currentUserId) &&
+        _isGroupQuizManualAdvancePhase(session);
+    final groupSetupChoice = session != null && isGroupQuizSession
+        ? _activeGroupSetupChoice(session)
+        : null;
+    final canHostSetupGroupQuiz =
+        session != null &&
+        isGroupQuizSession &&
+        groupSetupChoice != null &&
+        _canCurrentUserHostGroupQuiz(session, currentUserId);
+    final showGroupSetupOptions =
+        canHostSetupGroupQuiz &&
+        !hasPendingBottomChoice &&
+        !_textFocusNode.hasFocus &&
+        keyboardHeight == 0;
+    final showGroupHostAdvanceOptions =
+        canHostAdvanceGroupQuiz &&
+        !state.isAdvancingQuestion &&
+        (!_textFocusNode.hasFocus || keyboardHeight == 0);
+    final showGroupFocusedComposer =
+        canHostAdvanceGroupQuiz &&
+        !state.isAdvancingQuestion &&
+        _textFocusNode.hasFocus &&
+        keyboardHeight > 0;
+    final showGroupCompletedOptions =
+        session != null && isGroupQuizSession && _isGroupQuizCompleted(session);
+    final showGroupOptionPanel =
+        showGroupCompletedOptions ||
+        showGroupHostAdvanceOptions ||
+        showGroupSetupOptions;
+    final fallbackGroupOptionPanelPadding = showGroupCompletedOptions
+        ? (_groupCompletedPanelCollapsed ? 118.0 : 250.0)
+        : showGroupSetupOptions
+        ? (_groupSetupPanelCollapsed ? 150.0 : 340.0)
+        : showGroupHostAdvanceOptions
+        ? (_groupHostAdvancePanelCollapsed ? 150.0 : 300.0)
+        : 0.0;
+    final measuredGroupOptionPanelPadding = _groupOptionPanelHeight > 0
+        ? _groupOptionPanelHeight + 18
+        : 0.0;
+    final groupOptionPanelPadding = showGroupOptionPanel
+        ? math.max(
+            fallbackGroupOptionPanelPadding,
+            measuredGroupOptionPanelPadding,
+          )
+        : 0.0;
     final questionGenerationError =
         (session?.interactiveState['generation_error'] as String?)?.trim();
     final effectiveQuestionGenerationError =
@@ -1556,7 +1668,8 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         ? const Color(0xFF1A1A1A)
         : const Color(0xFFF3F3F3);
     final mutedText = isDark ? Colors.white60 : Colors.black54;
-    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+
+    _syncGroupOptionPanelHeight(showGroupOptionPanel);
 
     return Stack(
       children: [
@@ -1564,7 +1677,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
           children: [
             if (isReadOnlyHistory) const SoloHistoryReadOnlyBanner(),
             Expanded(
-              child: session == null
+              child: state.isLoading || session == null
                   ? _StorySessionLoadingShell(
                       title:
                           widget.launchMode ==
@@ -1588,6 +1701,11 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                         showSoloModeSwitch: showSoloModeSwitch,
                         showQuizTopicDecision: showQuizTopicDecision,
                         alignSoloOptionsRight: !showTextComposer,
+                        showAdvanceQuestionStatusAction:
+                            !showGroupHostAdvanceOptions,
+                        showAdvanceQuestionStatus: !showGroupHostAdvanceOptions,
+                        showFinalStandingsActions: !showGroupCompletedOptions,
+                        bottomOverlayPadding: groupOptionPanelPadding,
                         isAdvancingQuestion: state.isAdvancingQuestion,
                         onRetryGeneration: () => unawaited(
                           notifier.recoverGeneration(
@@ -1622,90 +1740,100 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                       ),
                     ),
             ),
-            if (showTextComposer)
+            if (showTextComposer &&
+                !showGroupHostAdvanceOptions &&
+                !showGroupFocusedComposer &&
+                !showGroupSetupOptions &&
+                !showGroupCompletedOptions)
               AnimatedPadding(
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeOut,
                 padding: EdgeInsets.only(bottom: keyboardHeight),
-                child: SafeArea(
-                  top: false,
-                  minimum: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: mutedSurface,
-                            borderRadius: BorderRadius.circular(28),
-                          ),
-                          child: TextField(
-                            key: const ValueKey('solo-topic-text-field'),
-                            controller: _textController,
-                            focusNode: _textFocusNode,
-                            maxLines: 4,
-                            minLines: 1,
-                            textCapitalization: TextCapitalization.sentences,
-                            cursorColor: context.primaryTextColor,
-                            style: TextStyle(
-                              color: context.primaryTextColor,
-                              fontSize: 16,
-                              height: 1.35,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(color: Colors.transparent),
+                  child: SafeArea(
+                    top: false,
+                    minimum: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: mutedSurface,
+                              borderRadius: BorderRadius.circular(28),
                             ),
-                            decoration: InputDecoration(
-                              hintText: phase == 'topic_selection'
-                                  ? isAspectSelectionStage
-                                        ? 'Type your own aspect'
-                                        : 'Type your own topic'
-                                  : phase == 'showing_results'
-                                  ? 'Message the room'
-                                  : 'Message',
-                              hintStyle: TextStyle(
-                                color: mutedText,
+                            child: TextField(
+                              key: const ValueKey('solo-topic-text-field'),
+                              controller: _textController,
+                              focusNode: _textFocusNode,
+                              maxLines: 4,
+                              minLines: 1,
+                              textCapitalization: TextCapitalization.sentences,
+                              cursorColor: context.primaryTextColor,
+                              style: TextStyle(
+                                color: context.primaryTextColor,
                                 fontSize: 16,
+                                height: 1.35,
                               ),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.fromLTRB(
-                                18,
-                                14,
-                                18,
-                                14,
+                              decoration: InputDecoration(
+                                hintText: phase == 'topic_selection'
+                                    ? isAspectSelectionStage
+                                          ? 'Type your own aspect'
+                                          : 'Type your own topic'
+                                    : phase == 'group_setup'
+                                    ? 'Type a topic or subject'
+                                    : phase == 'showing_results'
+                                    ? 'Message the room'
+                                    : 'Message',
+                                hintStyle: TextStyle(
+                                  color: mutedText,
+                                  fontSize: 16,
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.fromLTRB(
+                                  18,
+                                  14,
+                                  18,
+                                  14,
+                                ),
+                                isDense: true,
                               ),
-                              isDense: true,
+                              onSubmitted: (_) => _sendText(),
                             ),
-                            onSubmitted: (_) => _sendText(),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      _CircleIconButton(
-                        icon: CupertinoIcons.paperplane_fill,
-                        tooltip: 'Send',
-                        background: canSubmitText
-                            ? (isDark ? Colors.white : Colors.black)
-                            : mutedSurface,
-                        foreground: canSubmitText
-                            ? (isDark ? Colors.black : Colors.white)
-                            : mutedText,
-                        onTap: canSubmitText ? _sendText : () {},
-                      ),
-                      if (!floatSoloChoiceCall) ...[
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 12),
                         _CircleIconButton(
-                          icon: Icons.call_rounded,
-                          tooltip: 'Voice',
-                          background: const Color(0xFF22C55E),
-                          foreground: Colors.white,
-                          onTap: widget.onCall,
+                          icon: CupertinoIcons.paperplane_fill,
+                          tooltip: 'Send',
+                          background: canSubmitText
+                              ? (isDark ? Colors.white : Colors.black)
+                              : mutedSurface,
+                          foreground: canSubmitText
+                              ? (isDark ? Colors.black : Colors.white)
+                              : mutedText,
+                          onTap: canSubmitText ? _sendText : () {},
                         ),
+                        if (!floatSoloChoiceCall) ...[
+                          const SizedBox(width: 8),
+                          _CircleIconButton(
+                            icon: Icons.call_rounded,
+                            tooltip: 'Voice',
+                            background: const Color(0xFF22C55E),
+                            foreground: Colors.white,
+                            onTap: widget.onCall,
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               )
             else if (session != null &&
                 !isReadOnlyHistory &&
-                !floatSoloChoiceCall)
+                !floatSoloChoiceCall &&
+                (!canHostAdvanceGroupQuiz || state.isAdvancingQuestion))
               _QuizGameBottomBar(
                 onCall: widget.onCall,
                 disabled: disableQuizGameControls,
@@ -1713,6 +1841,146 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
               ),
           ],
         ),
+        if (showGroupHostAdvanceOptions && !isReadOnlyHistory)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(bottom: keyboardHeight),
+              child: SizedBox(
+                key: _groupOptionPanelKey,
+                width: double.infinity,
+                child: _GroupHostAdvanceOptionPanel(
+                  title: _groupHostAdvancePanelTitle(session),
+                  body: _groupHostAdvancePanelBody(session),
+                  actionLabel: _groupHostAdvancePanelActionLabel(session),
+                  collapsed: _groupHostAdvancePanelCollapsed,
+                  disabled:
+                      disableQuizGameControls || state.isAdvancingQuestion,
+                  onToggleCollapsed: () {
+                    setState(
+                      () => _groupHostAdvancePanelCollapsed =
+                          !_groupHostAdvancePanelCollapsed,
+                    );
+                  },
+                  onAdvance: () =>
+                      _advanceGroupHostQuiz(session, currentUserId),
+                  onCall: widget.onCall,
+                  textController: _textController,
+                  textFocusNode: _textFocusNode,
+                  textFieldKey: _groupMessageFieldKey,
+                  canSubmitText: canSubmitText,
+                  onSendText: _sendText,
+                ),
+              ),
+            ),
+          ),
+        if (showGroupSetupOptions && !isReadOnlyHistory)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(bottom: keyboardHeight),
+              child: SizedBox(
+                key: _groupOptionPanelKey,
+                width: double.infinity,
+                child: _GroupSetupOptionPanel(
+                  title: groupSetupChoice.prompt,
+                  options: groupSetupChoice.options,
+                  collapsed: _groupSetupPanelCollapsed,
+                  disabled: disableQuizGameControls,
+                  onToggleCollapsed: () {
+                    setState(
+                      () => _groupSetupPanelCollapsed =
+                          !_groupSetupPanelCollapsed,
+                    );
+                  },
+                  onSelected: _handleSoloChoice,
+                  onCall: widget.onCall,
+                  textController: _textController,
+                  textFocusNode: _textFocusNode,
+                  textFieldKey: _groupMessageFieldKey,
+                  canSubmitText:
+                      groupSetupChoice.allowTextInput && canSubmitText,
+                  hintText: groupSetupChoice.inputHint,
+                  onSendText: _sendText,
+                ),
+              ),
+            ),
+          ),
+        if (showGroupFocusedComposer && !isReadOnlyHistory)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(bottom: keyboardHeight),
+              child: SafeArea(
+                top: false,
+                minimum: const EdgeInsets.fromLTRB(10, 8, 10, 16),
+                child: _GroupFloatingTextComposer(
+                  textController: _textController,
+                  textFocusNode: _textFocusNode,
+                  textFieldKey: _groupMessageFieldKey,
+                  canSubmitText: canSubmitText,
+                  onSendText: _sendText,
+                  onCall: widget.onCall,
+                ),
+              ),
+            ),
+          ),
+        if (showGroupCompletedOptions)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(bottom: keyboardHeight),
+              child: SizedBox(
+                key: _groupOptionPanelKey,
+                width: double.infinity,
+                child: _GroupCompletedOptionPanel(
+                  collapsed: _groupCompletedPanelCollapsed,
+                  onToggleCollapsed: () {
+                    setState(
+                      () => _groupCompletedPanelCollapsed =
+                          !_groupCompletedPanelCollapsed,
+                    );
+                  },
+                  onLeaderboard: () => unawaited(
+                    showGroupQuizResultsBottomSheet(
+                      context,
+                      session: session,
+                      currentUserId: currentUserId,
+                    ),
+                  ),
+                  onReplay: () => unawaited(
+                    notifier.restart(
+                      storyId: widget.storyId,
+                      interactionMode: widget.interactionMode,
+                    ),
+                  ),
+                  onClose: () => unawaited(widget.onLeave()),
+                  onCall: widget.onCall,
+                  textController: _textController,
+                  textFocusNode: _textFocusNode,
+                  textFieldKey: _groupMessageFieldKey,
+                  canSubmitText: canSubmitText,
+                  onSendText: _sendText,
+                ),
+              ),
+            ),
+          ),
         if (floatSoloChoiceCall)
           CompositedTransformFollower(
             link: _customTopicCallLink,
@@ -2307,6 +2575,835 @@ class _QuizGameBottomBar extends StatelessWidget {
   }
 }
 
+class _GroupSetupOptionPanel extends StatelessWidget {
+  const _GroupSetupOptionPanel({
+    required this.title,
+    required this.options,
+    required this.collapsed,
+    required this.disabled,
+    required this.onToggleCollapsed,
+    required this.onSelected,
+    required this.onCall,
+    required this.textController,
+    required this.textFocusNode,
+    required this.textFieldKey,
+    required this.canSubmitText,
+    this.hintText = 'Message',
+    required this.onSendText,
+  });
+
+  final String title;
+  final List<InteractiveOption> options;
+  final bool collapsed;
+  final bool disabled;
+  final VoidCallback onToggleCollapsed;
+  final ValueChanged<String> onSelected;
+  final VoidCallback onCall;
+  final TextEditingController textController;
+  final FocusNode textFocusNode;
+  final GlobalKey textFieldKey;
+  final bool canSubmitText;
+  final String hintText;
+  final VoidCallback onSendText;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(10, 8, 10, 16),
+      child: DecoratedBox(
+        key: const ValueKey('group-setup-option-panel'),
+        decoration: BoxDecoration(
+          color: const Color(0xFF20211F),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.22),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.32),
+              blurRadius: 18,
+              offset: const Offset(0, -6),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.only(bottom: collapsed ? 8 : 0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          if (collapsed)
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 2),
+                                child: Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.2,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            const Spacer(),
+                          SizedBox.square(
+                            dimension: 28,
+                            child: IconButton(
+                              tooltip: collapsed
+                                  ? 'Show options'
+                                  : 'Hide options',
+                              padding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                              onPressed: disabled ? null : onToggleCollapsed,
+                              icon: Icon(
+                                collapsed
+                                    ? CupertinoIcons.chevron_up
+                                    : CupertinoIcons.chevron_down,
+                                size: 20,
+                                color: disabled
+                                    ? Colors.white30
+                                    : Colors.white54,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!collapsed) ...[
+                      Text(
+                        title,
+                        maxLines: title.contains('\n') ? 8 : 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          height: 1.22,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Divider(
+                        height: 1,
+                        color: Colors.white.withValues(alpha: 0.13),
+                      ),
+                      for (var index = 0; index < options.length; index++) ...[
+                        _StoryActionOptionRow(
+                          label: options[index].label.isEmpty
+                              ? options[index].id
+                              : options[index].label,
+                          disabled: disabled,
+                          icon: CupertinoIcons.chevron_right,
+                          onPressed: () => onSelected(options[index].id),
+                        ),
+                        if (index < options.length - 1)
+                          Divider(
+                            height: 1,
+                            color: Colors.white.withValues(alpha: 0.13),
+                          ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            Divider(
+              height: 1,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.09)
+                  : Colors.black.withValues(alpha: 0.08),
+            ),
+            const SizedBox(height: 4),
+            _GroupAttachedTextComposer(
+              textController: textController,
+              textFocusNode: textFocusNode,
+              textFieldKey: textFieldKey,
+              canSubmitText: canSubmitText,
+              hintText: hintText,
+              onSendText: onSendText,
+              onCall: disabled ? () {} : onCall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupHostAdvanceOptionPanel extends StatelessWidget {
+  const _GroupHostAdvanceOptionPanel({
+    required this.title,
+    required this.body,
+    required this.actionLabel,
+    required this.collapsed,
+    required this.disabled,
+    required this.onToggleCollapsed,
+    required this.onAdvance,
+    required this.onCall,
+    required this.textController,
+    required this.textFocusNode,
+    required this.textFieldKey,
+    required this.canSubmitText,
+    required this.onSendText,
+  });
+
+  final String title;
+  final String body;
+  final String actionLabel;
+  final bool collapsed;
+  final bool disabled;
+  final VoidCallback onToggleCollapsed;
+  final VoidCallback onAdvance;
+  final VoidCallback onCall;
+  final TextEditingController textController;
+  final FocusNode textFocusNode;
+  final GlobalKey textFieldKey;
+  final bool canSubmitText;
+  final VoidCallback onSendText;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(10, 8, 10, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            key: const ValueKey('group-host-advance-option-panel'),
+            decoration: BoxDecoration(
+              color: const Color(0xFF20211F),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.22),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.32),
+                  blurRadius: 18,
+                  offset: const Offset(0, -6),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _GroupHostAdvanceOptionContent(
+                  title: title,
+                  body: body,
+                  actionLabel: actionLabel,
+                  collapsed: collapsed,
+                  disabled: disabled,
+                  onToggleCollapsed: onToggleCollapsed,
+                  onAdvance: onAdvance,
+                ),
+                Divider(
+                  height: 1,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.09)
+                      : Colors.black.withValues(alpha: 0.08),
+                ),
+                const SizedBox(height: 4),
+                _GroupAttachedTextComposer(
+                  textController: textController,
+                  textFocusNode: textFocusNode,
+                  textFieldKey: textFieldKey,
+                  canSubmitText: canSubmitText,
+                  onSendText: onSendText,
+                  onCall: disabled ? () {} : onCall,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupAttachedTextComposer extends StatelessWidget {
+  const _GroupAttachedTextComposer({
+    required this.textController,
+    required this.textFocusNode,
+    required this.textFieldKey,
+    required this.canSubmitText,
+    this.hintText = 'Message',
+    required this.onSendText,
+    required this.onCall,
+  });
+
+  final TextEditingController textController;
+  final FocusNode textFocusNode;
+  final GlobalKey textFieldKey;
+  final bool canSubmitText;
+  final String hintText;
+  final VoidCallback onSendText;
+  final VoidCallback onCall;
+
+  void _requestInputFocus() => textFocusNode.requestFocus();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final mutedText = isDark ? Colors.white60 : Colors.black54;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _requestInputFocus,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 18),
+            child: Transform.translate(
+              offset: const Offset(0, -4),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.42),
+                  shape: BoxShape.circle,
+                ),
+                child: SizedBox.square(
+                  dimension: 32,
+                  child: Center(
+                    child: Icon(
+                      CupertinoIcons.pencil,
+                      color: mutedText,
+                      size: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: _requestInputFocus,
+            child: Transform.translate(
+              offset: const Offset(0, -4),
+              child: TextField(
+                key: textFieldKey,
+                controller: textController,
+                focusNode: textFocusNode,
+                maxLines: 5,
+                minLines: 1,
+                textCapitalization: TextCapitalization.sentences,
+                cursorColor: context.primaryTextColor,
+                style: TextStyle(
+                  color: context.primaryTextColor,
+                  fontSize: 16,
+                  height: 1.35,
+                ),
+                decoration: InputDecoration(
+                  hintText: hintText,
+                  hintStyle: TextStyle(color: mutedText, fontSize: 16),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.fromLTRB(12, 14, 8, 14),
+                  isDense: true,
+                ),
+                onSubmitted: (_) => onSendText(),
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(right: 6, bottom: 6),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: canSubmitText
+                  ? (isDark ? Colors.white : Colors.black)
+                  : Colors.transparent,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              onPressed: canSubmitText ? onSendText : null,
+              splashRadius: 20,
+              icon: Icon(
+                CupertinoIcons.paperplane_fill,
+                color: canSubmitText
+                    ? (isDark ? Colors.black : Colors.white)
+                    : mutedText,
+                size: 19,
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(right: 6, bottom: 6),
+          child: _CircleIconButton(
+            icon: Icons.call_rounded,
+            tooltip: 'Voice',
+            background: const Color(0xFF22C55E),
+            foreground: Colors.white,
+            onTap: onCall,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GroupFloatingTextComposer extends StatelessWidget {
+  const _GroupFloatingTextComposer({
+    required this.textController,
+    required this.textFocusNode,
+    required this.textFieldKey,
+    required this.canSubmitText,
+    required this.onSendText,
+    required this.onCall,
+  });
+
+  final TextEditingController textController;
+  final FocusNode textFocusNode;
+  final GlobalKey textFieldKey;
+  final bool canSubmitText;
+  final VoidCallback onSendText;
+  final VoidCallback onCall;
+
+  void _requestInputFocus() => textFocusNode.requestFocus();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final mutedText = isDark ? Colors.white60 : Colors.black54;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xF0131415),
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.20),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _requestInputFocus,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 14),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.42),
+                        shape: BoxShape.circle,
+                      ),
+                      child: SizedBox.square(
+                        dimension: 32,
+                        child: Center(
+                          child: Icon(
+                            CupertinoIcons.pencil,
+                            color: mutedText,
+                            size: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: _requestInputFocus,
+                    child: TextField(
+                      key: textFieldKey,
+                      controller: textController,
+                      focusNode: textFocusNode,
+                      maxLines: 5,
+                      minLines: 1,
+                      textCapitalization: TextCapitalization.sentences,
+                      cursorColor: Colors.white,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        height: 1.35,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Message',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.42),
+                          fontSize: 16,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.fromLTRB(
+                          12,
+                          14,
+                          8,
+                          14,
+                        ),
+                        isDense: true,
+                      ),
+                      onSubmitted: (_) => onSendText(),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 6, bottom: 6),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: canSubmitText
+                          ? (isDark ? Colors.white : Colors.black)
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      onPressed: canSubmitText ? onSendText : null,
+                      splashRadius: 20,
+                      icon: Icon(
+                        CupertinoIcons.paperplane_fill,
+                        color: canSubmitText
+                            ? (isDark ? Colors.black : Colors.white)
+                            : mutedText,
+                        size: 19,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        _CircleIconButton(
+          icon: Icons.call_rounded,
+          tooltip: 'Voice',
+          background: const Color(0xFF22C55E),
+          foreground: Colors.white,
+          onTap: onCall,
+        ),
+      ],
+    );
+  }
+}
+
+class _GroupCompletedOptionPanel extends StatelessWidget {
+  const _GroupCompletedOptionPanel({
+    required this.collapsed,
+    required this.onToggleCollapsed,
+    required this.onLeaderboard,
+    required this.onReplay,
+    required this.onClose,
+    required this.onCall,
+    required this.textController,
+    required this.textFocusNode,
+    required this.textFieldKey,
+    required this.canSubmitText,
+    required this.onSendText,
+  });
+
+  final bool collapsed;
+  final VoidCallback onToggleCollapsed;
+  final VoidCallback onLeaderboard;
+  final VoidCallback onReplay;
+  final VoidCallback onClose;
+  final VoidCallback onCall;
+  final TextEditingController textController;
+  final FocusNode textFocusNode;
+  final GlobalKey textFieldKey;
+  final bool canSubmitText;
+  final VoidCallback onSendText;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(10, 8, 10, 16),
+      child: DecoratedBox(
+        key: const ValueKey('group-completed-option-panel'),
+        decoration: BoxDecoration(
+          color: const Color(0xFF20211F),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.22),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.32),
+              blurRadius: 18,
+              offset: const Offset(0, -6),
+            ),
+          ],
+        ),
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.bottomCenter,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(16, 14, 16, collapsed ? 14 : 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Game finished',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        SizedBox.square(
+                          dimension: 28,
+                          child: IconButton(
+                            tooltip: collapsed
+                                ? 'Show options'
+                                : 'Hide options',
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                            onPressed: onToggleCollapsed,
+                            icon: Icon(
+                              collapsed
+                                  ? CupertinoIcons.chevron_up
+                                  : CupertinoIcons.chevron_down,
+                              size: 20,
+                              color: Colors.white54,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'View the leaderboard, replay this game, or close the room.',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.68),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        height: 1.28,
+                      ),
+                    ),
+                    if (!collapsed) ...[
+                      const SizedBox(height: 10),
+                      Divider(
+                        height: 1,
+                        color: Colors.white.withValues(alpha: 0.13),
+                      ),
+                      _StoryActionOptionRow(
+                        label: 'Leaderboard',
+                        disabled: false,
+                        icon: CupertinoIcons.list_number,
+                        onPressed: onLeaderboard,
+                      ),
+                      Divider(
+                        height: 1,
+                        color: Colors.white.withValues(alpha: 0.13),
+                      ),
+                      _StoryActionOptionRow(
+                        label: 'Replay',
+                        disabled: false,
+                        icon: CupertinoIcons.arrow_clockwise,
+                        onPressed: onReplay,
+                      ),
+                      Divider(
+                        height: 1,
+                        color: Colors.white.withValues(alpha: 0.13),
+                      ),
+                      _StoryActionOptionRow(
+                        label: 'Close game',
+                        disabled: false,
+                        icon: CupertinoIcons.xmark,
+                        onPressed: onClose,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Divider(
+                height: 1,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.09)
+                    : Colors.black.withValues(alpha: 0.08),
+              ),
+              const SizedBox(height: 4),
+              _GroupAttachedTextComposer(
+                textController: textController,
+                textFocusNode: textFocusNode,
+                textFieldKey: textFieldKey,
+                canSubmitText: canSubmitText,
+                onSendText: onSendText,
+                onCall: onCall,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupHostAdvanceOptionContent extends StatelessWidget {
+  const _GroupHostAdvanceOptionContent({
+    required this.title,
+    required this.body,
+    required this.actionLabel,
+    required this.collapsed,
+    required this.disabled,
+    required this.onToggleCollapsed,
+    required this.onAdvance,
+  });
+
+  final String title;
+  final String body;
+  final String actionLabel;
+  final bool collapsed;
+  final bool disabled;
+  final VoidCallback onToggleCollapsed;
+  final VoidCallback onAdvance;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.bottomCenter,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(bottom: collapsed ? 8 : 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (collapsed)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 2),
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            height: 1.2,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    const Spacer(),
+                  Transform.translate(
+                    offset: collapsed ? Offset.zero : const Offset(0, 4),
+                    child: SizedBox.square(
+                      dimension: 28,
+                      child: IconButton(
+                        tooltip: collapsed ? 'Show options' : 'Hide options',
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: disabled ? null : onToggleCollapsed,
+                        icon: Icon(
+                          collapsed
+                              ? CupertinoIcons.chevron_up
+                              : CupertinoIcons.chevron_down,
+                          size: 20,
+                          color: disabled ? Colors.white30 : Colors.white54,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (!collapsed) ...[
+              Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  height: 1.2,
+                ),
+              ),
+              if (body.trim().isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  body,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.68),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    height: 1.28,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 10),
+              Divider(height: 1, color: Colors.white.withValues(alpha: 0.13)),
+              _StoryActionOptionRow(
+                label: actionLabel,
+                disabled: disabled,
+                icon: CupertinoIcons.chevron_right,
+                onPressed: onAdvance,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _QuizCallButton extends StatelessWidget {
   const _QuizCallButton({super.key, required this.onTap});
 
@@ -2365,6 +3462,56 @@ InteractiveTurn? _activeInteractiveTurn(InteractiveSessionState? session) {
   return newestEvent == null
       ? null
       : InteractiveTurn.fromJson(newestEvent.payload);
+}
+
+_GroupSetupChoice? _activeGroupSetupChoice(InteractiveSessionState session) {
+  final state = session.interactiveState;
+  if (state['session_type'] != 'group' ||
+      state['template'] != 'quiz' ||
+      (state['phase'] != 'group_setup' &&
+          state['phase'] != 'group_setup_review')) {
+    return null;
+  }
+  final turn = _activeInteractiveTurn(session);
+  if (turn == null) return null;
+  for (final block in turn.blocks.whereType<InteractiveChoiceGroupBlock>()) {
+    final choiceKind = block.metadata['choice_kind']?.toString().trim();
+    if (choiceKind != 'group_quiz_setup' || block.options.isEmpty) continue;
+    final textBlocks = turn.blocks
+        .whereType<InteractiveTextBlock>()
+        .map((block) => block.text.trim())
+        .where((text) => text.isNotEmpty)
+        .toList();
+    final prompt = block.prompt.trim().isNotEmpty
+        ? block.prompt.trim()
+        : _groupSetupOptionPrompt(
+            state['group_setup_stage']?.toString().trim(),
+            textBlocks,
+          );
+    return _GroupSetupChoice(
+      prompt: prompt.isEmpty ? 'Set up this game' : prompt,
+      options: block.options,
+      allowTextInput: state['group_setup_stage'] == 'topic_subject',
+      inputHint: state['group_setup_stage'] == 'topic_subject'
+          ? 'Type a topic or subject'
+          : 'Message',
+    );
+  }
+  return null;
+}
+
+String _groupSetupOptionPrompt(String? stage, List<String> textBlocks) {
+  if (textBlocks.isEmpty) return '';
+  final text = textBlocks.join('\n\n').trim();
+  if (stage == 'question_source') {
+    final parts = text
+        .split(RegExp(r'\n\s*\n'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList();
+    return parts.isEmpty ? text : parts.last;
+  }
+  return text;
 }
 
 bool _turnHasSoloChoiceKind(InteractiveTurn? turn, String choiceKind) {
@@ -2454,6 +3601,14 @@ bool _canRetryQuizGeneration(
 ) {
   if (session == null) return false;
   if (session.interactiveState['session_type'] != 'group') return true;
+  return _canCurrentUserHostGroupQuiz(session, currentUserId);
+}
+
+bool _canCurrentUserHostGroupQuiz(
+  InteractiveSessionState session,
+  String? currentUserId,
+) {
+  if (session.interactiveState['session_type'] != 'group') return false;
 
   final activeParticipants = session.participants.where(
     (participant) => participant.status == 'active',
@@ -2478,8 +3633,72 @@ bool _canRetryQuizGeneration(
   return false;
 }
 
+bool _isGroupQuizManualAdvancePhase(InteractiveSessionState session) {
+  final state = session.interactiveState;
+  if (state['session_type'] != 'group') return false;
+  if (state['template'] != 'quiz') return false;
+  final phase = state['phase'] as String? ?? '';
+  if (phase != 'showing_results') return false;
+  if (session.isCompleted) return false;
+  final currentRound = (state['current_round'] as num?)?.toInt();
+  final totalRounds = (state['total_rounds'] as num?)?.toInt() ?? 1;
+  if (currentRound == null) return false;
+  return currentRound <= totalRounds;
+}
+
+bool _isGroupQuizCompleted(InteractiveSessionState session) {
+  if (session.interactiveState['session_type'] != 'group') return false;
+  if (session.interactiveState['template'] != 'quiz') return false;
+  final phase = session.interactiveState['phase'] as String? ?? '';
+  return phase == 'completed' || session.isCompleted;
+}
+
+class _GroupSetupChoice {
+  const _GroupSetupChoice({
+    required this.prompt,
+    required this.options,
+    required this.allowTextInput,
+    required this.inputHint,
+  });
+
+  final String prompt;
+  final List<InteractiveOption> options;
+  final bool allowTextInput;
+  final String inputHint;
+}
+
+String _groupHostAdvancePanelTitle(InteractiveSessionState session) {
+  final state = session.interactiveState;
+  final currentRound = (state['current_round'] as num?)?.toInt();
+  final totalRounds = (state['total_rounds'] as num?)?.toInt() ?? 1;
+  if (currentRound != null && currentRound >= totalRounds) {
+    return 'Ready for final results';
+  }
+  return 'Ready for next question';
+}
+
+String _groupHostAdvancePanelBody(InteractiveSessionState session) {
+  final state = session.interactiveState;
+  final currentRound = (state['current_round'] as num?)?.toInt();
+  final totalRounds = (state['total_rounds'] as num?)?.toInt() ?? 1;
+  if (currentRound != null && currentRound >= totalRounds) {
+    return 'Players can keep chatting, or you can show the final results when everyone is ready.';
+  }
+  return 'Players can keep chatting, or you can continue when everyone is ready.';
+}
+
+String _groupHostAdvancePanelActionLabel(InteractiveSessionState session) {
+  final state = session.interactiveState;
+  final currentRound = (state['current_round'] as num?)?.toInt();
+  final totalRounds = (state['total_rounds'] as num?)?.toInt() ?? 1;
+  if (currentRound != null && currentRound >= totalRounds) {
+    return 'Show final results';
+  }
+  return 'Next question';
+}
+
 class _StorySessionLoadingShell extends StatelessWidget {
-  const _StorySessionLoadingShell({this.title = 'LOADING...'});
+  const _StorySessionLoadingShell({this.title = 'Thinking...'});
 
   final String title;
 
@@ -2490,23 +3709,24 @@ class _StorySessionLoadingShell extends StatelessWidget {
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
-          child: _GameLoadingGraphic(title: title),
+          child: _SessionStatusLoadingCard(title: title),
         ),
       ),
     );
   }
 }
 
-class _GameLoadingGraphic extends StatefulWidget {
-  const _GameLoadingGraphic({required this.title});
+class _SessionStatusLoadingCard extends StatefulWidget {
+  const _SessionStatusLoadingCard({required this.title});
 
   final String title;
 
   @override
-  State<_GameLoadingGraphic> createState() => _GameLoadingGraphicState();
+  State<_SessionStatusLoadingCard> createState() =>
+      _SessionStatusLoadingCardState();
 }
 
-class _GameLoadingGraphicState extends State<_GameLoadingGraphic>
+class _SessionStatusLoadingCardState extends State<_SessionStatusLoadingCard>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
@@ -2515,7 +3735,7 @@ class _GameLoadingGraphicState extends State<_GameLoadingGraphic>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1100),
+      duration: const Duration(milliseconds: 5200),
     )..repeat();
   }
 
@@ -2525,90 +3745,96 @@ class _GameLoadingGraphicState extends State<_GameLoadingGraphic>
     super.dispose();
   }
 
+  List<String> get _labels {
+    final normalized = widget.title.toLowerCase();
+    if (normalized.contains('loading')) return const ['Thinking...'];
+    return [widget.title];
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 1.72,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          return CustomPaint(
-            painter: _GameLoadingPainter(
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xED101112),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            return _SessionStatusLabel(
+              labels: _labels,
               progress: _controller.value,
-              title: widget.title,
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
 }
 
-class _GameLoadingPainter extends CustomPainter {
-  const _GameLoadingPainter({required this.progress, required this.title});
+class _SessionStatusLabel extends StatelessWidget {
+  const _SessionStatusLabel({required this.labels, required this.progress});
 
+  final List<String> labels;
   final double progress;
-  final String title;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final black = Paint()
-      ..color = const Color(0xFF111111)
-      ..style = PaintingStyle.fill
-      ..strokeJoin = StrokeJoin.miter;
-    final border = Paint()
-      ..color = const Color(0xFF111111)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = math.max(3, size.width * 0.008);
+  Widget build(BuildContext context) {
+    final labelCount = labels.length;
+    final rawPosition = progress * labelCount;
+    final labelIndex = rawPosition.floor().clamp(0, labelCount - 1);
+    final localProgress = rawPosition - labelIndex;
+    final fadeIn = Curves.easeOutCubic.transform(
+      (localProgress / 0.18).clamp(0.0, 1.0),
+    );
+    final fadeOut = Curves.easeInCubic.transform(
+      ((1.0 - localProgress) / 0.2).clamp(0.0, 1.0),
+    );
+    final opacity = math.min(fadeIn, fadeOut).clamp(0.0, 1.0);
+    const style = TextStyle(
+      color: Colors.white,
+      fontSize: 17,
+      fontWeight: FontWeight.w800,
+      height: 1.25,
+    );
+    final textScaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    var width = 0.0;
+    for (final label in labels) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: style),
+        textDirection: direction,
+        textScaler: textScaler,
+      )..layout();
+      width = math.max(width, painter.width);
+    }
 
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: title,
-        style: TextStyle(
-          color: const Color(0xFF111111),
-          fontSize: size.width * 0.105,
-          fontWeight: FontWeight.w900,
-          height: 1,
+    return SizedBox(
+      width: width + 4,
+      height: 28,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Opacity(
+          opacity: opacity,
+          child: Text(
+            labels[labelIndex],
+            maxLines: 1,
+            softWrap: false,
+            style: style,
+          ),
         ),
       ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    )..layout(maxWidth: size.width * 0.78);
-    textPainter.paint(canvas, Offset(size.width * 0.05, size.height * 0.34));
-
-    final barRect = Rect.fromLTWH(
-      size.width * 0.055,
-      size.height * 0.49,
-      size.width * 0.89,
-      size.height * 0.18,
     );
-    canvas.drawRect(barRect, border);
-
-    final clipRect = barRect.deflate(size.width * 0.018);
-    canvas.save();
-    canvas.clipRect(clipRect);
-    final stripeWidth = size.width * 0.05;
-    final stripeGap = size.width * 0.022;
-    final stripeStep = stripeWidth + stripeGap;
-    final filledWidth = size.width * 0.58;
-    final shift = progress * stripeStep;
-    var x = clipRect.left - stripeStep + shift;
-    while (x < clipRect.left + filledWidth) {
-      final path = Path()
-        ..moveTo(x + stripeWidth * 0.45, clipRect.top)
-        ..lineTo(x + stripeWidth * 1.45, clipRect.top)
-        ..lineTo(x + stripeWidth, clipRect.bottom)
-        ..lineTo(x, clipRect.bottom)
-        ..close();
-      canvas.drawPath(path, black);
-      x += stripeStep;
-    }
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _GameLoadingPainter oldDelegate) {
-    return oldDelegate.progress != progress;
   }
 }
 
@@ -2813,6 +4039,12 @@ class _ParsedStoryOptions {
   final List<_ParsedStoryOption> options;
   final String? panelTitle;
 }
+
+const _storyPerspectiveOptions = <_ParsedStoryOption>[
+  _ParsedStoryOption(title: 'First person'),
+  _ParsedStoryOption(title: 'Third-person close'),
+  _ParsedStoryOption(title: 'Omniscient narrator'),
+];
 
 String _cleanStoryOptionTitle(String value) {
   var title = _cleanStoryBubbleText(value);
@@ -3211,10 +4443,14 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   bool _isSubmittingStoryOption = false;
   String? _textSessionError;
   List<_ParsedStoryOption>? _reopenedStoryOptions;
+  _ParsedStoryOption? _pendingPerspectiveStoryOption;
   bool _lastHadComposerOptions = false;
   bool _isComposerPanelCollapsed = false;
   String? _dismissedStoryOptionsKey;
   bool _dismissedContinuationActions = false;
+  final Map<String, String> _retryTextByMessageId = <String, String>{};
+  final Map<String, String> _retryVisibleTextByMessageId = <String, String>{};
+  final Map<String, String> _loadingLabelByMessageId = <String, String>{};
 
   @override
   void initState() {
@@ -3250,7 +4486,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     }
   }
 
-  Future<void> _startTextStorySession() async {
+  Future<bool> _startTextStorySession() async {
     setState(() {
       _isStartingTextSession = true;
       _textSessionError = null;
@@ -3265,7 +4501,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       final history = await repo.fetchStoryConversation(
         storyId: widget.storyId,
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _textSession = session;
         _messages
@@ -3280,13 +4516,15 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         widget.onSessionReady(session.id);
       }
       _scrollToBottom(jump: true, retries: 4);
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _isStartingTextSession = false;
         _textSessionError = e.toString();
       });
       showToast(context, 'Story connection error');
+      return false;
     }
   }
 
@@ -3368,8 +4606,8 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     }
 
     if (_textSession == null) {
-      await _startTextStorySession();
-      if (_textSession == null) return;
+      final connected = await _startTextStorySession();
+      if (!connected || _textSession == null) return;
     }
 
     _textController.clear();
@@ -3389,9 +4627,13 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       _isSendingText = true;
       _textSessionError = null;
       _reopenedStoryOptions = null;
+      _pendingPerspectiveStoryOption = null;
       _isComposerPanelCollapsed = false;
       _dismissedStoryOptionsKey = null;
       _dismissedContinuationActions = false;
+      _retryTextByMessageId[userMessage.id] = text;
+      _retryVisibleTextByMessageId[userMessage.id] = userMessage.message;
+      _loadingLabelByMessageId[assistantMessageId] = 'Thinking…';
       _messages.add(userMessage);
       _messages.add(
         ChatMessageModel(
@@ -3414,10 +4656,21 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                 expectedVersion: _textSession?.version,
               )) {
         if (!mounted) return;
-        if (event.isToken) {
+        if (event.isStatus) {
+          final label = _storyStreamStatusLabel(event.status);
+          if (label == null) continue;
+          setState(() {
+            _loadingLabelByMessageId[assistantMessageId] = label;
+          });
+        } else if (event.isReady) {
+          setState(() {
+            _loadingLabelByMessageId[assistantMessageId] = 'Processing…';
+          });
+        } else if (event.isToken) {
           final token = event.content ?? '';
           if (token.isEmpty) continue;
           setState(() {
+            _loadingLabelByMessageId[assistantMessageId] = 'Generating…';
             final index = _messages.indexWhere(
               (m) => m.id == assistantMessageId,
             );
@@ -3440,6 +4693,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
             if (index != -1) {
               _messages[index] = _messages[index].copyWith(streaming: false);
             }
+            _loadingLabelByMessageId.remove(assistantMessageId);
             _isSendingText = false;
           });
           final sessionId = event.session?.id ?? _textSession?.id ?? '';
@@ -3456,6 +4710,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         if (index != -1) {
           _messages[index] = _messages[index].copyWith(streaming: false);
         }
+        _loadingLabelByMessageId.remove(assistantMessageId);
         _isSendingText = false;
       });
     } catch (e) {
@@ -3481,9 +4736,45 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
             streaming: false,
           );
         }
+        _loadingLabelByMessageId.remove(assistantMessageId);
       });
       showToast(context, 'Story connection error');
     }
+  }
+
+  String? _storyStreamStatusLabel(String? status) {
+    switch (status?.trim().toLowerCase()) {
+      case 'thinking':
+      case 'accepted':
+        return 'Thinking…';
+      case 'processing':
+        return 'Processing…';
+      case 'generating':
+        return 'Generating…';
+      default:
+        return null;
+    }
+  }
+
+  Future<void> _retryFailedStoryTurn(ChatMessageModel message) async {
+    if (!message.isUser || !message.isFailed) return;
+    if (_isSendingText || _isSubmittingStoryOption || _isStartingTextSession) {
+      showToast(context, 'Aura is reconnecting...', variant: ToastVariant.info);
+      return;
+    }
+
+    final retryText = _retryTextByMessageId[message.id] ?? message.message;
+    final retryVisibleText =
+        _retryVisibleTextByMessageId[message.id] ?? message.message;
+    final reconnected = await _startTextStorySession();
+    if (!mounted || !reconnected || _textSession == null) return;
+
+    setState(() {
+      _messages.removeWhere((m) => m.id == message.id);
+      _retryTextByMessageId.remove(message.id);
+      _retryVisibleTextByMessageId.remove(message.id);
+    });
+    await _sendTextStoryTurn(retryText, visibleText: retryVisibleText);
   }
 
   Future<void> _confirmStoryOption(_ParsedStoryOption option) async {
@@ -3498,14 +4789,39 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
 
     setState(() {
       _confirmedStoryOptionTitle = option.title;
-      _isSubmittingStoryOption = true;
+      _pendingPerspectiveStoryOption = option;
       _reopenedStoryOptions = null;
       _isComposerPanelCollapsed = false;
       _dismissedStoryOptionsKey = null;
       _dismissedContinuationActions = false;
     });
+    _scrollToBottomAfterPanelAnimation();
+  }
+
+  Future<void> _confirmStoryPerspective(_ParsedStoryOption perspective) async {
+    if (_isSubmittingStoryOption) return;
+    final storyOption = _pendingPerspectiveStoryOption;
+    if (storyOption == null) return;
+
+    if (_isStartingTextSession) {
+      showToast(context, 'Connecting...', variant: ToastVariant.info);
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _isSubmittingStoryOption = true;
+      _pendingPerspectiveStoryOption = null;
+      _isComposerPanelCollapsed = false;
+      _dismissedStoryOptionsKey = null;
+      _dismissedContinuationActions = false;
+    });
     try {
-      await _sendTextStoryTurn('I choose ${option.title}.');
+      await _sendTextStoryTurn(
+        'I choose ${storyOption.title}. ${_storyPerspectiveInstruction(perspective.title)}',
+        visibleText:
+            'Narrate "${storyOption.title}" in ${_storyPerspectiveDisplayName(perspective.title)} perspective',
+      );
     } finally {
       if (mounted) {
         setState(() => _isSubmittingStoryOption = false);
@@ -3523,6 +4839,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
 
     setState(() {
       _confirmedStoryOptionTitle = null;
+      _pendingPerspectiveStoryOption = null;
       _isSubmittingStoryOption = true;
       _reopenedStoryOptions = null;
       _isComposerPanelCollapsed = false;
@@ -3564,6 +4881,14 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   }
 
   void _restorePreviousStoryOptions() {
+    if (_pendingPerspectiveStoryOption != null) {
+      setState(() {
+        _pendingPerspectiveStoryOption = null;
+        _confirmedStoryOptionTitle = null;
+      });
+      return;
+    }
+
     for (final message in _messages.reversed) {
       final parsedOptions = _parseStoryOptions(message);
       if (parsedOptions != null && parsedOptions.options.isNotEmpty) {
@@ -3587,6 +4912,32 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       _isComposerPanelCollapsed = !_isComposerPanelCollapsed;
     });
     _scrollToBottomAfterPanelAnimation();
+  }
+
+  String _storyPerspectiveInstruction(String perspectiveTitle) {
+    switch (perspectiveTitle) {
+      case 'First person':
+        return 'Tell it in first person from the main character\'s position, using I and me.';
+      case 'Third-person close':
+        return 'Tell it in third-person close, staying near the main character\'s thoughts and position.';
+      case 'Omniscient narrator':
+        return 'Tell it with an omniscient narrator who can understand every important character\'s position.';
+      default:
+        return 'Tell it from the $perspectiveTitle perspective.';
+    }
+  }
+
+  String _storyPerspectiveDisplayName(String perspectiveTitle) {
+    switch (perspectiveTitle) {
+      case 'First person':
+        return 'first person';
+      case 'Third-person close':
+        return 'third-person close';
+      case 'Omniscient narrator':
+        return 'omniscient narrator';
+      default:
+        return perspectiveTitle.toLowerCase();
+    }
   }
 
   bool _shouldShowStoryContinuationActions({
@@ -3820,12 +5171,6 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     );
   }
 
-  List<_ParsedStoryOption>? _composerStoryOptions(
-    List<ChatMessageModel> visibleMessages,
-  ) {
-    return _composerStoryOptionMenu(visibleMessages)?.options;
-  }
-
   bool _showComposerContinuationActions(
     List<ChatMessageModel> visibleMessages,
   ) {
@@ -3871,7 +5216,11 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     final canSubmitText =
         _canSend && !_isSendingText && !_isStartingTextSession;
     final composerStoryOptionMenu = _composerStoryOptionMenu(visibleMessages);
-    final composerOptions = composerStoryOptionMenu?.options;
+    final pendingPerspectiveStoryOption = _pendingPerspectiveStoryOption;
+    final showingPerspectiveOptions = pendingPerspectiveStoryOption != null;
+    final composerOptions = showingPerspectiveOptions
+        ? _storyPerspectiveOptions
+        : composerStoryOptionMenu?.options;
     final hasComposerOptions =
         composerOptions != null && composerOptions.isNotEmpty;
     final hasComposerContinuationActions = _showComposerContinuationActions(
@@ -3996,10 +5345,15 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                   children: [
                     ChatBubble(
                       message: displayMessage,
-                      onRetry: () {},
+                      onRetry: () =>
+                          unawaited(_retryFailedStoryTurn(displayMessage)),
                       maxWidth: displayMessage.isUser
                           ? userBubbleMaxWidth
                           : assistantBubbleMaxWidth,
+                      loadingLabel: displayMessage.id == 'story_text_connecting'
+                          ? 'Connecting…'
+                          : _loadingLabelByMessageId[displayMessage.id] ??
+                                'Thinking…',
                       renderMarkdownBold: !displayMessage.isUser,
                     ),
                   ],
@@ -4059,24 +5413,35 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                             children: [
                               if (hasComposerOptions) ...[
                                 _StoryOptionsInputPanel(
-                                  title:
-                                      composerStoryOptionMenu?.panelTitle ??
-                                      'What kind of story sounds good?',
+                                  title: showingPerspectiveOptions
+                                      ? 'How should "${pendingPerspectiveStoryOption.title}" be told?'
+                                      : composerStoryOptionMenu?.panelTitle ??
+                                            'What kind of story sounds good?',
                                   options: composerOptions,
-                                  selectedTitle: _confirmedStoryOptionTitle,
+                                  selectedTitle: showingPerspectiveOptions
+                                      ? null
+                                      : _confirmedStoryOptionTitle,
                                   disabled: composerOptionsDisabled,
                                   collapsed: _isComposerPanelCollapsed,
-                                  onNext: _reopenedStoryOptions == null
+                                  onNext:
+                                      showingPerspectiveOptions ||
+                                          _reopenedStoryOptions == null
                                       ? null
                                       : () => unawaited(
                                           _requestNextStoryParagraph(),
                                         ),
-                                  onRegenerate: () =>
-                                      unawaited(_regenerateStoryOptions()),
+                                  onRegenerate: showingPerspectiveOptions
+                                      ? _restorePreviousStoryOptions
+                                      : () => unawaited(
+                                          _regenerateStoryOptions(),
+                                        ),
                                   onToggleCollapsed:
                                       _toggleComposerPanelCollapsed,
-                                  onSelected: (option) =>
-                                      unawaited(_confirmStoryOption(option)),
+                                  onSelected: (option) => unawaited(
+                                    showingPerspectiveOptions
+                                        ? _confirmStoryPerspective(option)
+                                        : _confirmStoryOption(option),
+                                  ),
                                 ),
                               ] else if (hasComposerContinuationActions) ...[
                                 _StoryOptionsInputPanel(

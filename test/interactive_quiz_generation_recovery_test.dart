@@ -14,12 +14,32 @@ import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.
 import 'package:antroph_mobile/features/story/providers/interactive_story_provider.dart';
 import 'package:antroph_mobile/features/story/providers/story_providers.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('group entry shows animated loading while session starts', (
+    tester,
+  ) async {
+    final startDelay = Completer<void>();
+    final repository = _QuizStoriesRepository(
+      session: _session(phase: 'group_setup', sessionType: 'group'),
+      startDelay: startDelay.future,
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+
+    expect(repository.startCalls, 1);
+    expect(find.text('Thinking...'), findsOneWidget);
+
+    startDelay.complete();
+    await tester.pump();
+    await tester.pump();
+    await _disposeQuizPage(tester);
+  });
 
   testWidgets(
     'shows reconnect modal after fifteen seconds and syncs the question',
@@ -1319,7 +1339,12 @@ void main() {
     final repository = _QuizStoriesRepository(
       session: _session(phase: 'question_active', sessionType: 'group'),
     );
-    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+    await _pumpQuizPage(
+      tester,
+      repository: repository,
+      userId: 'host-user',
+      viewInsets: const EdgeInsets.only(bottom: 260),
+    );
 
     expect(find.byKey(const ValueKey('solo-topic-text-field')), findsNothing);
     expect(find.text('Message'), findsOneWidget);
@@ -1327,13 +1352,1014 @@ void main() {
     await _disposeQuizPage(tester);
   });
 
-  testWidgets('group results chat keeps its editable composer', (tester) async {
+  testWidgets('group setup choices submit host configuration', (tester) async {
+    final turn = InteractiveTurn.fromJson({
+      'type': 'interactive_turn.v1',
+      'session_id': 'session-1',
+      'turn_id': 'group-setup-turn',
+      'seq': 2,
+      'speaker': {'type': 'ai', 'role': 'host'},
+      'blocks': const [
+        {
+          'kind': 'text',
+          'text': 'Before we start, choose how this game should get questions.',
+        },
+        {
+          'kind': 'choice_group',
+          'prompt': '',
+          'options': [
+            {'id': 'question_bank', 'label': 'Pick from story questions'},
+            {'id': 'random', 'label': 'Generate random questions'},
+          ],
+          'metadata': {
+            'choice_kind': 'group_quiz_setup',
+            'setup_stage': 'question_source',
+          },
+        },
+      ],
+      'input_requests': const [],
+      'state_patch': const {
+        'phase': 'group_setup',
+        'group_setup_stage': 'question_source',
+      },
+    });
+    final base = _session(phase: 'group_setup', sessionType: 'group');
     final repository = _QuizStoriesRepository(
-      session: _session(phase: 'showing_results', sessionType: 'group'),
+      session: base.copyWith(
+        currentTurn: turn,
+        lastSeq: turn.seq,
+        interactiveState: {
+          ...base.interactiveState,
+          'group_setup_stage': 'question_source',
+        },
+      ),
     );
     await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
 
+    expect(find.text('Generate random questions'), findsOneWidget);
+    await tester.tap(find.text('Generate random questions'));
+    await tester.pump();
+
+    expect(repository.submittedInputs, hasLength(1));
+    expect(repository.submittedInputs.single.inputType, 'option_select');
+    expect(repository.submittedInputs.single.optionId, 'random');
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group setup option panel excludes welcome copy', (tester) async {
+    final turn = InteractiveTurn.fromJson({
+      'type': 'interactive_turn.v1',
+      'session_id': 'session-1',
+      'turn_id': 'group-setup-turn',
+      'seq': 2,
+      'speaker': {'type': 'ai', 'role': 'host'},
+      'blocks': const [
+        {
+          'kind': 'text',
+          'text':
+              'Welcome in. Step into The Hot Seat, a high-pressure group trivia room hosted by Aura.\n\nBefore we start, choose how this game should get its questions.',
+        },
+        {
+          'kind': 'choice_group',
+          'prompt': '',
+          'options': [
+            {'id': 'question_bank', 'label': 'Pick from story questions'},
+            {'id': 'random', 'label': 'Generate random questions'},
+          ],
+          'metadata': {
+            'choice_kind': 'group_quiz_setup',
+            'setup_stage': 'question_source',
+          },
+        },
+      ],
+      'input_requests': const [],
+      'state_patch': const {
+        'phase': 'group_setup',
+        'group_setup_stage': 'question_source',
+      },
+    });
+    final base = _session(phase: 'group_setup', sessionType: 'group');
+    final repository = _QuizStoriesRepository(
+      session: base.copyWith(
+        currentTurn: turn,
+        lastSeq: turn.seq,
+        interactiveState: {
+          ...base.interactiveState,
+          'group_setup_stage': 'question_source',
+        },
+      ),
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+
+    expect(
+      find.text(
+        'Before we start, choose how this game should get its questions.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(
+        'Welcome in. Step into The Hot Seat, a high-pressure group trivia room hosted by Aura.\n\nBefore we start',
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('group-setup-option-panel')),
+        matching: find.text(
+          'Before we start, choose how this game should get its questions.',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('group-setup-option-panel')),
+        matching: find.textContaining('Welcome in.'),
+      ),
+      findsNothing,
+    );
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group setup topic accepts typed subject', (tester) async {
+    final turn = InteractiveTurn.fromJson({
+      'type': 'interactive_turn.v1',
+      'session_id': 'session-1',
+      'turn_id': 'group-topic-turn',
+      'seq': 3,
+      'speaker': {'type': 'ai', 'role': 'host'},
+      'blocks': const [
+        {
+          'kind': 'text',
+          'text': 'What topic or subject should the random questions focus on?',
+        },
+        {
+          'kind': 'choice_group',
+          'prompt': '',
+          'options': [
+            {'id': 'science', 'label': 'Science'},
+            {'id': 'history', 'label': 'History'},
+            {'id': 'any_topic', 'label': 'Any topic'},
+          ],
+          'metadata': {
+            'choice_kind': 'group_quiz_setup',
+            'setup_stage': 'topic_subject',
+          },
+        },
+      ],
+      'input_requests': const [],
+      'state_patch': const {
+        'phase': 'group_setup',
+        'group_setup_stage': 'topic_subject',
+      },
+    });
+    final base = _session(phase: 'group_setup', sessionType: 'group');
+    final repository = _QuizStoriesRepository(
+      session: base.copyWith(
+        currentTurn: turn,
+        lastSeq: turn.seq,
+        interactiveState: {
+          ...base.interactiveState,
+          'group_setup_stage': 'topic_subject',
+        },
+      ),
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+
+    expect(find.text('Type a topic or subject'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'African history');
+    await tester.pump();
+    await tester.tap(find.byIcon(CupertinoIcons.paperplane_fill).last);
+    await tester.pump();
+
+    expect(repository.submittedInputs, hasLength(1));
+    expect(repository.submittedInputs.single.inputType, 'text');
+    expect(repository.submittedInputs.single.text, 'African history');
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets(
+    'group setup choice replies immediately while request is pending',
+    (tester) async {
+      final submitDelay = Completer<void>();
+      final turn = InteractiveTurn.fromJson({
+        'type': 'interactive_turn.v1',
+        'session_id': 'session-1',
+        'turn_id': 'group-topic-turn',
+        'seq': 3,
+        'speaker': {'type': 'ai', 'role': 'host'},
+        'blocks': const [
+          {
+            'kind': 'text',
+            'text':
+                'What topic or subject should the random questions focus on?',
+          },
+          {
+            'kind': 'choice_group',
+            'prompt': '',
+            'options': [
+              {'id': 'science', 'label': 'Science'},
+              {'id': 'history', 'label': 'History'},
+              {'id': 'pop_culture', 'label': 'Pop culture'},
+              {'id': 'any_topic', 'label': 'Any topic'},
+            ],
+            'metadata': {
+              'choice_kind': 'group_quiz_setup',
+              'setup_stage': 'topic_subject',
+            },
+          },
+        ],
+        'input_requests': const [],
+        'state_patch': const {
+          'phase': 'group_setup',
+          'group_setup_stage': 'topic_subject',
+        },
+      });
+      final base = _session(phase: 'group_setup', sessionType: 'group');
+      final repository = _QuizStoriesRepository(
+        session: base.copyWith(
+          currentTurn: turn,
+          lastSeq: turn.seq,
+          interactiveState: {
+            ...base.interactiveState,
+            'group_setup_stage': 'topic_subject',
+          },
+        ),
+        submitDelay: submitDelay.future,
+      );
+      await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+
+      expect(find.text('Any topic'), findsOneWidget);
+      await tester.tap(find.text('Any topic'));
+      await tester.pump();
+
+      expect(repository.submittedInputs, hasLength(1));
+      expect(repository.submittedInputs.single.optionId, 'any_topic');
+      expect(find.text('Any topic'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('group-setup-option-panel')),
+        findsNothing,
+      );
+
+      submitDelay.complete();
+      await tester.pump();
+      await tester.pump();
+      await _disposeQuizPage(tester);
+    },
+  );
+
+  testWidgets('group participant sees only host setup room status', (
+    tester,
+  ) async {
+    final turn = InteractiveTurn.fromJson({
+      'type': 'interactive_turn.v1',
+      'session_id': 'session-1',
+      'turn_id': 'group-setup-turn',
+      'seq': 4,
+      'speaker': {'type': 'ai', 'role': 'host'},
+      'blocks': const [
+        {'kind': 'text', 'text': 'Do you want timed rounds?'},
+        {
+          'kind': 'choice_group',
+          'prompt': '',
+          'options': [
+            {'id': 'timed', 'label': 'Timed rounds'},
+            {'id': 'untimed', 'label': 'Untimed rounds'},
+          ],
+          'metadata': {
+            'choice_kind': 'group_quiz_setup',
+            'setup_stage': 'round_timer',
+          },
+        },
+      ],
+      'input_requests': const [],
+      'state_patch': const {
+        'phase': 'group_setup',
+        'group_setup_stage': 'round_timer',
+      },
+    });
+    final base = _session(phase: 'group_setup', sessionType: 'group');
+    final repository = _QuizStoriesRepository(
+      session: base.copyWith(
+        currentTurn: turn,
+        lastSeq: turn.seq,
+        events: const [
+          StorySessionEvent(
+            id: 'setup-turn-1',
+            sessionId: 'session-1',
+            seq: 1,
+            actorType: 'ai',
+            eventType: 'interactive_turn',
+            payload: {
+              'type': 'interactive_turn.v1',
+              'session_id': 'session-1',
+              'turn_id': 'group-source-turn',
+              'seq': 1,
+              'speaker': {'type': 'ai', 'role': 'host'},
+              'blocks': [
+                {
+                  'kind': 'text',
+                  'text':
+                      'Before we start, choose how this game should get its questions.',
+                },
+                {
+                  'kind': 'choice_group',
+                  'prompt': '',
+                  'options': [
+                    {
+                      'id': 'question_bank',
+                      'label': 'Pick from story questions',
+                    },
+                    {'id': 'random', 'label': 'Generate random questions'},
+                  ],
+                  'metadata': {'choice_kind': 'group_quiz_setup'},
+                },
+              ],
+              'input_requests': [],
+              'state_patch': {'phase': 'group_setup'},
+            },
+          ),
+          StorySessionEvent(
+            id: 'setup-choice-1',
+            sessionId: 'session-1',
+            seq: 2,
+            actorType: 'user',
+            eventType: 'setup_choice_selected',
+            payload: {
+              'stage': 'question_count',
+              'option_id': '4',
+              'text': '4 questions',
+              'participant_text': 'This game will have 4 questions.',
+            },
+          ),
+          StorySessionEvent(
+            id: 'setup-choice-2',
+            sessionId: 'session-1',
+            seq: 3,
+            actorType: 'user',
+            eventType: 'setup_choice_selected',
+            payload: {
+              'stage': 'round_timer',
+              'option_id': 'timed',
+              'text': 'Timed rounds',
+              'participant_text': 'This game will have timed rounds.',
+            },
+          ),
+        ],
+        interactiveState: {
+          ...base.interactiveState,
+          'group_setup_stage': 'round_timer',
+        },
+      ),
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'player-user');
+
+    expect(find.text('Host is setting up the room.'), findsOneWidget);
+    expect(find.text('This game will have 4 questions.'), findsNothing);
+    expect(find.text('This game will have timed rounds.'), findsNothing);
+    expect(find.textContaining('Join code:'), findsNothing);
+    expect(find.text('Do you want timed rounds?'), findsNothing);
+    expect(
+      find.text(
+        'Before we start, choose how this game should get its questions.',
+      ),
+      findsNothing,
+    );
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group host sees setup selections as replies', (tester) async {
+    final base = _session(phase: 'group_setup', sessionType: 'group');
+    final repository = _QuizStoriesRepository(
+      session: base.copyWith(
+        lastSeq: 2,
+        events: const [
+          StorySessionEvent(
+            id: 'setup-choice-1',
+            sessionId: 'session-1',
+            seq: 1,
+            actorType: 'user',
+            actorUserId: 'host-user',
+            eventType: 'setup_choice_selected',
+            payload: {
+              'stage': 'question_count',
+              'option_id': '4',
+              'text': '4 questions',
+              'participant_text': 'This game will have 4 questions.',
+            },
+          ),
+          StorySessionEvent(
+            id: 'setup-choice-2',
+            sessionId: 'session-1',
+            seq: 2,
+            actorType: 'user',
+            actorUserId: 'host-user',
+            eventType: 'setup_choice_selected',
+            payload: {
+              'stage': 'round_timer',
+              'option_id': 'timed',
+              'text': 'Timed rounds',
+              'participant_text': 'This game will have timed rounds.',
+            },
+          ),
+        ],
+      ),
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+
+    expect(find.text('4 questions'), findsOneWidget);
+    expect(find.text('Timed rounds'), findsOneWidget);
+    expect(find.text('This game will have 4 questions.'), findsNothing);
+    expect(find.textContaining('Join code:'), findsNothing);
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group host reviews setup before starting quiz', (tester) async {
+    final reviewTurn = InteractiveTurn.fromJson({
+      'type': 'interactive_turn.v1',
+      'session_id': 'session-1',
+      'turn_id': 'group-review-turn',
+      'seq': 3,
+      'speaker': {'type': 'ai', 'role': 'host'},
+      'blocks': const [
+        {
+          'kind': 'text',
+          'text':
+              'Review this quiz setup before starting.\n\nGame: Quiz story\nSource: Random questions\nTopic: Science\nQuestions: 4 questions\nRounds: Timed rounds',
+        },
+        {
+          'kind': 'choice_group',
+          'prompt': '',
+          'options': [
+            {'id': 'start_quiz', 'label': 'Start quiz'},
+            {'id': 'edit_quiz', 'label': 'Edit quiz'},
+          ],
+          'metadata': {
+            'choice_kind': 'group_quiz_setup',
+            'setup_stage': 'review',
+          },
+        },
+      ],
+      'input_requests': const [],
+      'state_patch': const {
+        'phase': 'group_setup_review',
+        'group_setup_stage': 'review',
+      },
+    });
+    final base = _session(phase: 'group_setup_review', sessionType: 'group');
+    final repository = _QuizStoriesRepository(
+      session: base.copyWith(
+        currentTurn: reviewTurn,
+        lastSeq: reviewTurn.seq,
+        interactiveState: {
+          ...base.interactiveState,
+          'phase': 'group_setup_review',
+          'group_setup_stage': 'review',
+          'question_source_mode': 'random',
+          'selected_topic': 'Science',
+          'total_rounds': 4,
+          'quiz_timer_enabled': true,
+        },
+      ),
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+
+    expect(
+      find.byKey(const ValueKey('group-setup-option-panel')),
+      findsOneWidget,
+    );
+    expect(find.text('Start quiz'), findsOneWidget);
+    expect(find.text('Edit quiz'), findsOneWidget);
+    expect(find.textContaining('Topic: Science'), findsWidgets);
+    expect(find.textContaining('Questions: 4 questions'), findsWidgets);
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group host continues from the bottom option panel', (
+    tester,
+  ) async {
+    final advanceDelay = Completer<void>();
+    final repository = _QuizStoriesRepository(
+      session: _session(phase: 'showing_results', sessionType: 'group'),
+      advanceDelay: advanceDelay.future,
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+
+    expect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+      findsOneWidget,
+    );
+    expect(find.text('Ready for next question'), findsOneWidget);
+    expect(
+      find.text(
+        'Players can keep chatting, or you can continue when everyone is ready.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Next question'), findsOneWidget);
+    expect(find.text('Continue'), findsNothing);
+    expect(find.text('Message'), findsOneWidget);
+
+    await tester.tap(find.text('Next question'));
+    await tester.pump();
+
+    expect(repository.advanceCalls, 1);
+    expect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+      findsNothing,
+    );
+    expect(find.text('Next question'), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byIcon(Icons.call_rounded), findsOneWidget);
+    expect(find.text('Getting questions...'), findsOneWidget);
+    expect(repository.session.interactiveState['phase'], 'showing_results');
+
+    advanceDelay.complete();
+    await tester.pump();
+    await tester.pump();
+
+    expect(repository.advanceCalls, 1);
+    expect(repository.session.interactiveState['phase'], 'generating_question');
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group host option popup keeps message input editable', (
+    tester,
+  ) async {
+    final repository = _QuizStoriesRepository(
+      session: _session(phase: 'showing_results', sessionType: 'group'),
+    );
+    await _pumpQuizPage(
+      tester,
+      repository: repository,
+      userId: 'host-user',
+      viewInsets: const EdgeInsets.only(bottom: 260),
+    );
+
+    expect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+      findsOneWidget,
+    );
+    expect(find.byType(TextField), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Ready when you are');
+    await tester.pump();
+    await tester.tap(find.byIcon(CupertinoIcons.paperplane_fill).last);
+    await tester.pump();
+    await tester.pump();
+
+    expect(repository.submittedInputs, hasLength(1));
+    expect(repository.submittedInputs.single.inputType, 'player_chat');
+    expect(repository.submittedInputs.single.text, 'Ready when you are');
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group host input temporarily hides and restores option tab', (
+    tester,
+  ) async {
+    final repository = _QuizStoriesRepository(
+      session: _session(phase: 'showing_results', sessionType: 'group'),
+    );
+    await _pumpQuizPage(
+      tester,
+      repository: repository,
+      userId: 'host-user',
+      viewInsets: const EdgeInsets.only(bottom: 260),
+    );
+
+    expect(find.text('Next question'), findsOneWidget);
+    await tester.tap(find.byTooltip('Hide options'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+      findsOneWidget,
+    );
+    expect(find.text('Next question'), findsNothing);
+
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+      findsNothing,
+    );
+    expect(find.byType(TextField), findsOneWidget);
+
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+    expect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+      findsOneWidget,
+    );
+    expect(find.text('Next question'), findsNothing);
+    expect(find.text('Ready for next question'), findsOneWidget);
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group host option popup lifts above the keyboard', (
+    tester,
+  ) async {
+    final repository = _QuizStoriesRepository(
+      session: _session(phase: 'showing_results', sessionType: 'group'),
+    );
+    await _pumpQuizPage(
+      tester,
+      repository: repository,
+      userId: 'host-user',
+      viewInsets: const EdgeInsets.only(bottom: 260),
+    );
+
+    final panelRect = tester.getRect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+    );
+    final screenHeight =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    expect(panelRect.bottom, lessThan(screenHeight - 200));
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group host option popup pushes transcript above it', (
+    tester,
+  ) async {
+    final base = _session(phase: 'showing_results', sessionType: 'group');
+    final repository = _QuizStoriesRepository(
+      session: base.copyWith(
+        interactiveState: {
+          ...base.interactiveState,
+          'result': const {
+            'question_id': 'question-1',
+            'correct_option_id': 'a',
+            'explanation': 'The host can continue when the room is ready.',
+          },
+        },
+      ),
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+
+    expect(find.text('Ready for next question'), findsOneWidget);
+    await tester.tap(find.byTooltip('Hide options'));
+    await tester.pumpAndSettle();
+
+    final panelTop = tester
+        .getTopLeft(
+          find.byKey(const ValueKey('group-host-advance-option-panel')),
+        )
+        .dy;
+    final resultBottom = tester
+        .getBottomLeft(find.textContaining('Correct Answer').last)
+        .dy;
+    expect(resultBottom, lessThan(panelTop));
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group host pencil tap opens the input', (tester) async {
+    final repository = _QuizStoriesRepository(
+      session: _session(phase: 'showing_results', sessionType: 'group'),
+    );
+    await _pumpQuizPage(
+      tester,
+      repository: repository,
+      userId: 'host-user',
+      viewInsets: const EdgeInsets.only(bottom: 260),
+    );
+
+    expect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byIcon(CupertinoIcons.pencil).first);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+      findsNothing,
+    );
+    expect(find.byType(TextField), findsOneWidget);
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group host focused input lifts without dark backdrop', (
+    tester,
+  ) async {
+    final repository = _QuizStoriesRepository(
+      session: _session(phase: 'showing_results', sessionType: 'group'),
+    );
+    await _pumpQuizPage(
+      tester,
+      repository: repository,
+      userId: 'host-user',
+      viewInsets: const EdgeInsets.only(bottom: 260),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+
+    final inputRect = tester.getRect(find.byType(TextField));
+    final screenHeight =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    expect(inputRect.bottom, lessThan(screenHeight - 200));
+    expect(
+      find.byKey(const ValueKey('group-keyboard-composer-backdrop')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+      findsNothing,
+    );
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group host input reattaches when keyboard closes', (
+    tester,
+  ) async {
+    final repository = _QuizStoriesRepository(
+      session: _session(phase: 'showing_results', sessionType: 'group'),
+    );
+    await _pumpQuizPage(
+      tester,
+      repository: repository,
+      userId: 'host-user',
+      viewInsets: const EdgeInsets.only(bottom: 260),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+      findsNothing,
+    );
+
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+    expect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+      findsOneWidget,
+    );
+    expect(find.text('Next question'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group host final popup opens the leaderboard', (tester) async {
+    final base = _session(phase: 'showing_results', sessionType: 'group');
+    final repository = _QuizStoriesRepository(
+      session: base.copyWith(
+        interactiveState: {
+          ...base.interactiveState,
+          'current_round': 3,
+          'total_rounds': 3,
+          'result': {
+            'question_id': 'question-3',
+            'correct_option_id': 'a',
+            'standings': const [
+              {
+                'rank': 1,
+                'participant_id': 'host-participant',
+                'user_id': 'host-user',
+                'display_name': 'Host',
+                'score': 4,
+              },
+              {
+                'rank': 2,
+                'participant_id': 'player-participant',
+                'user_id': 'player-user',
+                'display_name': 'Player',
+                'score': 2,
+              },
+            ],
+          },
+        },
+      ),
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+
+    expect(find.text('Show final results'), findsOneWidget);
+    await tester.tap(find.text('Show final results'));
+    await tester.pumpAndSettle();
+
+    expect(repository.advanceCalls, 1);
+    expect(
+      find.byKey(const ValueKey('group-quiz-results-sheet')),
+      findsOneWidget,
+    );
+    expect(find.text('Player scores'), findsOneWidget);
+    expect(find.text('4 pts'), findsAtLeastNWidgets(1));
+    expect(find.text('2 pts'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('group-quiz-results-done')));
+    await tester.pumpAndSettle();
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group final results do not show next-question loading', (
+    tester,
+  ) async {
+    final advanceDelay = Completer<void>();
+    final base = _session(phase: 'showing_results', sessionType: 'group');
+    final repository = _QuizStoriesRepository(
+      session: base.copyWith(
+        interactiveState: {
+          ...base.interactiveState,
+          'current_round': 3,
+          'total_rounds': 3,
+          'result': {
+            'question_id': 'question-3',
+            'correct_option_id': 'a',
+            'standings': const [
+              {
+                'rank': 1,
+                'participant_id': 'host-participant',
+                'user_id': 'host-user',
+                'display_name': 'Host',
+                'score': 4,
+              },
+            ],
+          },
+        },
+      ),
+      advanceDelay: advanceDelay.future,
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+
+    await tester.tap(find.text('Show final results'));
+    await tester.pump();
+
+    expect(repository.advanceCalls, 1);
+    expect(
+      find.byKey(const ValueKey('group-quiz-results-sheet')),
+      findsOneWidget,
+    );
+    expect(find.text('Loading next question'), findsNothing);
+    expect(find.text('Getting questions...'), findsNothing);
+    expect(find.text('Aura is getting the next question ready'), findsNothing);
+
+    advanceDelay.complete();
+    await tester.pumpAndSettle();
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group participant keeps waiting without host advance panel', (
+    tester,
+  ) async {
+    final repository = _QuizStoriesRepository(
+      session: _session(phase: 'showing_results', sessionType: 'group'),
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'player-user');
+
+    expect(
+      find.byKey(const ValueKey('group-host-advance-option-panel')),
+      findsNothing,
+    );
+    expect(find.text('Waiting for host'), findsOneWidget);
+    expect(find.text('Next question'), findsNothing);
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('group participant results chat keeps its editable composer', (
+    tester,
+  ) async {
+    final repository = _QuizStoriesRepository(
+      session: _session(phase: 'showing_results', sessionType: 'group'),
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'player-user');
+
     expect(find.byKey(const ValueKey('solo-topic-text-field')), findsOneWidget);
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('completed group game shows replay and close in option popup', (
+    tester,
+  ) async {
+    final base = _session(phase: 'showing_results', sessionType: 'group');
+    final repository = _QuizStoriesRepository(
+      session: base.copyWith(
+        interactiveState: {
+          ...base.interactiveState,
+          'phase': 'completed',
+          'current_round': 3,
+          'total_rounds': 3,
+          'winner_participant_ids': ['host-participant'],
+          'final_standings': const [
+            {
+              'rank': 1,
+              'participant_id': 'host-participant',
+              'user_id': 'host-user',
+              'display_name': 'Host',
+              'score': 4,
+            },
+            {
+              'rank': 2,
+              'participant_id': 'player-participant',
+              'user_id': 'player-user',
+              'display_name': 'Player',
+              'score': 2,
+            },
+          ],
+        },
+        isCompleted: true,
+      ),
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+
+    expect(find.text('Winner: Host'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('group-completed-option-panel')),
+      findsOneWidget,
+    );
+    expect(find.text('Game finished'), findsOneWidget);
+    expect(
+      find.text('View the leaderboard, replay this game, or close the room.'),
+      findsOneWidget,
+    );
+    final panelTop = tester
+        .getTopLeft(find.byKey(const ValueKey('group-completed-option-panel')))
+        .dy;
+    final winnerBottom = tester.getBottomLeft(find.text('Winner: Host')).dy;
+    expect(winnerBottom, lessThan(panelTop));
+    expect(find.text('Leaderboard'), findsNothing);
+    expect(find.text('Replay'), findsNothing);
+    expect(find.text('Close game'), findsNothing);
+    expect(find.text('Leave'), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Good game everyone');
+    await tester.pump();
+    await tester.tap(find.byIcon(CupertinoIcons.paperplane_fill).last);
+    await tester.pump();
+    await tester.pump();
+
+    expect(repository.submittedInputs, hasLength(1));
+    expect(repository.submittedInputs.single.inputType, 'player_chat');
+    expect(repository.submittedInputs.single.text, 'Good game everyone');
+
+    final pageContext = tester.element(find.byType(StoryChatFlowPage));
+    final container = ProviderScope.containerOf(pageContext);
+    await container.read(interactiveStoryProvider.notifier).advanceQuestion();
+    expect(repository.advanceCalls, 0);
+
+    await tester.tap(find.byTooltip('Show options'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Leaderboard'), findsOneWidget);
+    expect(find.text('Replay'), findsOneWidget);
+    expect(find.text('Close game'), findsOneWidget);
+
+    await _disposeQuizPage(tester);
+  });
+
+  testWidgets('completed group participant can view leaderboard position', (
+    tester,
+  ) async {
+    final base = _session(phase: 'showing_results', sessionType: 'group');
+    final repository = _QuizStoriesRepository(
+      session: base.copyWith(
+        interactiveState: {
+          ...base.interactiveState,
+          'phase': 'completed',
+          'current_round': 3,
+          'total_rounds': 3,
+          'winner_participant_ids': ['host-participant'],
+          'final_standings': const [
+            {
+              'rank': 1,
+              'participant_id': 'host-participant',
+              'user_id': 'host-user',
+              'display_name': 'Host',
+              'score': 4,
+            },
+            {
+              'rank': 2,
+              'participant_id': 'player-participant',
+              'user_id': 'player-user',
+              'display_name': 'Player',
+              'score': 2,
+            },
+          ],
+        },
+        isCompleted: true,
+      ),
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'player-user');
+
+    expect(find.text('Leaderboard'), findsNothing);
+    await tester.tap(find.byTooltip('Show options'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Leaderboard'), findsOneWidget);
+    await tester.tap(find.text('Leaderboard'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('group-quiz-results-sheet')),
+      findsOneWidget,
+    );
+    expect(find.text('You'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('group-score-row-player-participant')),
+      findsOneWidget,
+    );
+    expect(find.text('#2'), findsAtLeastNWidgets(1));
+
+    await tester.tap(find.byKey(const ValueKey('group-quiz-results-done')));
+    await tester.pumpAndSettle();
     await _disposeQuizPage(tester);
   });
 
@@ -2098,6 +3124,9 @@ class _QuizStoriesRepository extends StoriesRepository {
     this.conflictSession,
     this.restartSession,
     this.history = const <SoloInteractiveSessionSummary>[],
+    this.advanceDelay,
+    this.submitDelay,
+    this.startDelay,
   }) : super(dio: Dio());
 
   InteractiveSessionState session;
@@ -2106,12 +3135,16 @@ class _QuizStoriesRepository extends StoriesRepository {
   final InteractiveSessionState? conflictSession;
   final InteractiveSessionState? restartSession;
   final List<SoloInteractiveSessionSummary> history;
+  final Future<void>? advanceDelay;
+  final Future<void>? submitDelay;
+  final Future<void>? startDelay;
   int fetchCalls = 0;
   int retryCalls = 0;
   int startCalls = 0;
   int resumeCalls = 0;
   int leaveCalls = 0;
   int soloHistoryCalls = 0;
+  int advanceCalls = 0;
   final List<InteractiveInput> submittedInputs = [];
 
   @override
@@ -2126,6 +3159,7 @@ class _QuizStoriesRepository extends StoriesRepository {
     bool startFresh = false,
   }) async {
     startCalls += 1;
+    if (startDelay != null) await startDelay;
     if (startCalls > 1 && restartSession != null) {
       session = restartSession!;
     }
@@ -2176,12 +3210,56 @@ class _QuizStoriesRepository extends StoriesRepository {
   }
 
   @override
+  Future<InteractiveSessionState> advanceInteractiveSession(
+    String sessionId,
+  ) async {
+    advanceCalls += 1;
+    if (advanceDelay != null) await advanceDelay;
+    final currentRound =
+        (session.interactiveState['current_round'] as num?)?.toInt() ?? 1;
+    final totalRounds =
+        (session.interactiveState['total_rounds'] as num?)?.toInt() ?? 1;
+    final nextState = <String, dynamic>{
+      ...session.interactiveState,
+      'phase': currentRound >= totalRounds
+          ? 'completed'
+          : 'generating_question',
+      if (currentRound < totalRounds) 'current_round': currentRound + 1,
+    };
+    session = session.copyWith(
+      interactiveState: nextState,
+      isCompleted: currentRound >= totalRounds,
+    );
+    return session;
+  }
+
+  @override
   Future<InteractiveInputResponse> submitInteractiveInput({
     required String sessionId,
     required InteractiveInput input,
   }) async {
     submittedInputs.add(input);
+    if (submitDelay != null) await submitDelay;
     final currentPhase = session.interactiveState['phase'];
+    if (input.inputType == 'player_chat') {
+      final event = StorySessionEvent(
+        id: 'player-chat-event-${session.lastSeq + 1}',
+        sessionId: sessionId,
+        seq: session.lastSeq + 1,
+        actorType: 'user',
+        eventType: 'player_chat',
+        payload: {'text': input.text, 'phase': currentPhase},
+      );
+      session = session.copyWith(
+        events: [...session.events, event],
+        lastSeq: event.seq,
+      );
+      return InteractiveInputResponse(
+        status: 'accepted',
+        event: event,
+        state: session.interactiveState,
+      );
+    }
     if (currentPhase == 'topic_selection') {
       final stage = session.interactiveState['topic_selection_stage'];
       final seq = session.lastSeq + 1;

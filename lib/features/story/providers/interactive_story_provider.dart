@@ -81,6 +81,16 @@ class InteractiveStoryState {
 
 const _unset = Object();
 
+bool _isCompletedGroupChatRoom(InteractiveSessionState? session) {
+  if (session == null || !session.isCompleted) return false;
+  final state = session.interactiveState;
+  return state['session_type'] == 'group' && state['template'] == 'quiz';
+}
+
+bool _isReadOnlyInteractiveSession(InteractiveSessionState session) {
+  return session.isCompleted && !_isCompletedGroupChatRoom(session);
+}
+
 class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
   static const generationSlowThreshold = Duration(seconds: 15);
   static const _recoveryRequestTimeout = Duration(seconds: 7);
@@ -145,7 +155,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       );
       if (_isDisposed) return false;
       final normalizedSession = _normalizeSessionSnapshot(session);
-      final isReadOnly = normalizedSession.isCompleted;
+      final isReadOnly = _isReadOnlyInteractiveSession(normalizedSession);
       state = InteractiveStoryState(
         session: normalizedSession,
         isReadOnly: isReadOnly,
@@ -226,7 +236,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
           .resumeInteractiveSession(normalizedId);
       if (_isDisposed) return false;
       final normalizedSession = _normalizeSessionSnapshot(session);
-      final isReadOnly = normalizedSession.isCompleted;
+      final isReadOnly = _isReadOnlyInteractiveSession(normalizedSession);
       state = InteractiveStoryState(
         session: normalizedSession,
         isReadOnly: isReadOnly,
@@ -293,7 +303,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
           .resumeInteractiveSession(normalizedId);
       if (_isDisposed) return false;
       final normalizedSession = _normalizeSessionSnapshot(session);
-      final isReadOnly = normalizedSession.isCompleted;
+      final isReadOnly = _isReadOnlyInteractiveSession(normalizedSession);
       state = InteractiveStoryState(
         session: normalizedSession,
         isReadOnly: isReadOnly,
@@ -408,7 +418,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         return;
       }
       final normalizedSession = _normalizeSessionSnapshot(session);
-      final isReadOnly = normalizedSession.isCompleted;
+      final isReadOnly = _isReadOnlyInteractiveSession(normalizedSession);
       state = state.copyWith(
         session: normalizedSession,
         isLoading: false,
@@ -528,7 +538,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     }
   }
 
-  Future<void> advanceQuestion() async {
+  Future<void> advanceQuestion({bool showLoading = true}) async {
     final sessionId = state.session?.sessionId;
     if (sessionId == null ||
         sessionId.isEmpty ||
@@ -537,22 +547,31 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         !_canMutateCurrentSession) {
       return;
     }
-    state = state.copyWith(isAdvancingQuestion: true, error: null);
+    state = state.copyWith(
+      isAdvancingQuestion: showLoading ? true : state.isAdvancingQuestion,
+      error: null,
+    );
     try {
       final repo = ref.read(storiesRepositoryProvider);
       final session = await repo.advanceInteractiveSession(sessionId);
       if (_isDisposed) return;
       state = state.copyWith(
         session: _normalizeSessionSnapshot(session),
-        isAdvancingQuestion: false,
+        isAdvancingQuestion: showLoading ? false : state.isAdvancingQuestion,
       );
       _scheduleWaitingRefresh();
     } on ApiError catch (e) {
       if (_isDisposed) return;
-      state = state.copyWith(isAdvancingQuestion: false, error: e.message);
+      state = state.copyWith(
+        isAdvancingQuestion: showLoading ? false : state.isAdvancingQuestion,
+        error: e.message,
+      );
     } catch (e) {
       if (_isDisposed) return;
-      state = state.copyWith(isAdvancingQuestion: false, error: '$e');
+      state = state.copyWith(
+        isAdvancingQuestion: showLoading ? false : state.isAdvancingQuestion,
+        error: '$e',
+      );
     }
   }
 
@@ -598,7 +617,23 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         '${questionId ?? state.session?.currentTurn?.turnId ?? state.session?.lastSeq}-$inputType-$optionId';
     if (state.pendingInputKeys.contains(key)) return;
 
+    final optimisticSetupEvent = _optimisticGroupSetupEvent(
+      state.session,
+      optionId,
+      key,
+    );
+    final optimisticSession =
+        optimisticSetupEvent == null || state.session == null
+        ? state.session
+        : state.session!.copyWith(
+            events: [...state.session!.events, optimisticSetupEvent],
+            lastSeq: optimisticSetupEvent.seq > state.session!.lastSeq
+                ? optimisticSetupEvent.seq
+                : state.session!.lastSeq,
+          );
+
     state = state.copyWith(
+      session: optimisticSession,
       pendingInputKeys: {...state.pendingInputKeys, key},
       localQuizSelections: inputType == 'quiz_answer' && questionId != null
           ? {...state.localQuizSelections, questionId: optionId}
@@ -651,6 +686,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         state = state.copyWith(
           pendingInputKeys: {...state.pendingInputKeys}..remove(key),
           pendingTextMessages: _pendingTextMessagesExcluding(key),
+          session: _sessionWithoutOptimisticEvent(state.session, key),
           localQuizSelections: nextSelections,
           streamingAssistantText: null,
           error: null,
@@ -661,6 +697,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       state = state.copyWith(
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
         pendingTextMessages: _pendingTextMessagesExcluding(key),
+        session: _sessionWithoutOptimisticEvent(state.session, key),
         streamingAssistantText: null,
         error: e.message,
       );
@@ -669,6 +706,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       state = state.copyWith(
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
         pendingTextMessages: _pendingTextMessagesExcluding(key),
+        session: _sessionWithoutOptimisticEvent(state.session, key),
         streamingAssistantText: null,
         error: '$e',
       );
@@ -759,7 +797,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     if (sessionId == null ||
         sessionId.isEmpty ||
         trimmed.isEmpty ||
-        !_canMutateCurrentSession) {
+        !_canSubmitPlayerChat) {
       return;
     }
     final key =
@@ -824,6 +862,12 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     return session != null && !state.isReadOnly && !session.isCompleted;
   }
 
+  bool get _canSubmitPlayerChat {
+    final session = state.session;
+    if (session == null || state.isReadOnly) return false;
+    return !session.isCompleted || _isCompletedGroupChatRoom(session);
+  }
+
   Future<void> _connectRoomSocket(String sessionId) async {
     if (_isDisposed) return;
     if (sessionId.isEmpty) return;
@@ -831,7 +875,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     if (state.isReadOnly ||
         session == null ||
         session.sessionId != sessionId ||
-        session.isCompleted) {
+        (session.isCompleted && !_isCompletedGroupChatRoom(session))) {
       return;
     }
     final token =
@@ -917,7 +961,11 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
 
   void _handleRoomSocketMessage(dynamic data) {
     if (_isDisposed) return;
-    if (state.isReadOnly || state.session?.isCompleted == true) return;
+    if (state.isReadOnly ||
+        (state.session?.isCompleted == true &&
+            !_isCompletedGroupChatRoom(state.session))) {
+      return;
+    }
     if (data is! String) return;
     final decoded = jsonDecode(data);
     if (decoded is! Map) return;
@@ -943,7 +991,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
   void _applyRoomSnapshot(InteractiveSessionState session) {
     if (_isDisposed || _isOlderSessionSnapshot(session)) return;
     final normalizedSession = _normalizeSessionSnapshot(session);
-    final isReadOnly = normalizedSession.isCompleted;
+    final isReadOnly = _isReadOnlyInteractiveSession(normalizedSession);
     state = state.copyWith(
       session: normalizedSession,
       isReadOnly: isReadOnly,
@@ -1185,9 +1233,10 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         isPaused: didComplete ? false : null,
       ),
     );
+    final isReadOnly = _isReadOnlyInteractiveSession(nextSession);
     state = state.copyWith(
       session: nextSession,
-      isReadOnly: didComplete ? true : state.isReadOnly,
+      isReadOnly: didComplete ? isReadOnly : state.isReadOnly,
       isRetryingGeneration:
           !didComplete &&
           state.isRetryingGeneration &&
@@ -1203,7 +1252,9 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     );
     if (didComplete) {
       _resetGenerationWatchdog(clearSlowState: true);
-      unawaited(_disconnectRoomSocket());
+      if (isReadOnly) {
+        unawaited(_disconnectRoomSocket());
+      }
       return;
     }
     _scheduleWaitingRefresh();
@@ -1267,7 +1318,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       if (state.session?.sessionId != sessionId) return;
       if (_isOlderSessionSnapshot(session)) return;
       final normalizedSession = _normalizeSessionSnapshot(session);
-      final isReadOnly = normalizedSession.isCompleted;
+      final isReadOnly = _isReadOnlyInteractiveSession(normalizedSession);
       state = state.copyWith(
         session: normalizedSession,
         isReadOnly: isReadOnly,
@@ -1417,6 +1468,105 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
         lastSeq: responseSeq > current.lastSeq ? responseSeq : current.lastSeq,
       ),
     );
+  }
+
+  StorySessionEvent? _optimisticGroupSetupEvent(
+    InteractiveSessionState? session,
+    String optionId,
+    String clientId,
+  ) {
+    if (session == null) return null;
+    final interactiveState = session.interactiveState;
+    if (interactiveState['session_type'] != 'group' ||
+        interactiveState['template'] != 'quiz' ||
+        (interactiveState['phase'] != 'group_setup' &&
+            interactiveState['phase'] != 'group_setup_review')) {
+      return null;
+    }
+    final stage =
+        interactiveState['group_setup_stage']?.toString().trim() ??
+        'question_source';
+    final displayText = _setupOptionDisplayText(session.currentTurn, optionId);
+    final nextSeq = session.lastSeq + 1;
+    return StorySessionEvent(
+      id: 'local-$clientId',
+      sessionId: session.sessionId,
+      seq: nextSeq,
+      actorType: 'user',
+      eventType: 'setup_choice_selected',
+      payload: {
+        'stage': stage,
+        'option_id': optionId,
+        'text': displayText,
+        'participant_text': _setupParticipantText(
+          stage: stage,
+          optionId: optionId,
+          displayText: displayText,
+        ),
+        'client_id': clientId,
+      },
+    );
+  }
+
+  String _setupOptionDisplayText(InteractiveTurn? turn, String optionId) {
+    for (final block in turn?.blocks ?? const <InteractiveBlock>[]) {
+      if (block is! InteractiveChoiceGroupBlock) continue;
+      if (block.metadata['choice_kind'] != 'group_quiz_setup') continue;
+      for (final option in block.options) {
+        if (option.id == optionId) {
+          return option.label.isEmpty ? option.id : option.label;
+        }
+      }
+    }
+    return optionId.replaceAll('_', ' ');
+  }
+
+  String _setupParticipantText({
+    required String stage,
+    required String optionId,
+    required String displayText,
+  }) {
+    if (stage == 'question_source') {
+      return optionId == 'question_bank'
+          ? 'Host is setting up questions from the story.'
+          : 'Host is setting up random questions.';
+    }
+    if (stage == 'topic_subject') {
+      return optionId == 'any_topic'
+          ? 'Host is setting up questions on any topic.'
+          : 'Host picked $displayText as the topic.';
+    }
+    if (stage == 'question_count') {
+      final count = int.tryParse(optionId);
+      if (count == 1) return 'This game will have 1 question.';
+      if (count != null) return 'This game will have $count questions.';
+    }
+    if (stage == 'round_timer') {
+      return optionId == 'timed'
+          ? 'This game will have timed rounds.'
+          : 'This game will have untimed rounds.';
+    }
+    if (stage == 'review') {
+      return 'Host is reviewing the quiz setup.';
+    }
+    return 'Host selected $displayText.';
+  }
+
+  InteractiveSessionState? _sessionWithoutOptimisticEvent(
+    InteractiveSessionState? session,
+    String clientId,
+  ) {
+    if (session == null) return null;
+    final nextEvents = session.events
+        .where((event) => event.payload['client_id'] != clientId)
+        .toList(growable: false);
+    if (nextEvents.length == session.events.length) return session;
+    final currentTurnSeq = session.currentTurn?.seq ?? 0;
+    final lastSeq = nextEvents.fold<int>(
+      currentTurnSeq,
+      (maxSeq, event) => event.seq > maxSeq ? event.seq : maxSeq,
+    );
+    return session.copyWith(events: nextEvents, lastSeq: lastSeq);
   }
 
   bool _isOlderSessionSnapshot(InteractiveSessionState incoming) {

@@ -240,6 +240,7 @@ class StoriesRepository {
       );
       final body = res.data;
       if (body == null) return;
+      yield const StoryTextStreamEvent(type: 'status', status: 'processing');
 
       var buffer = '';
       await for (final chunk in utf8.decoder.bind(body.stream)) {
@@ -547,16 +548,20 @@ class StoryTextStreamEvent {
   const StoryTextStreamEvent({
     required this.type,
     this.content,
+    this.status,
     this.session,
     this.error,
   });
 
   final String type;
   final String? content;
+  final String? status;
   final StorySession? session;
   final String? error;
 
   bool get isToken => type == 'token';
+  bool get isReady => type == 'ready';
+  bool get isStatus => type == 'status';
   bool get isDone => type == 'done';
   bool get isError => type == 'error';
 
@@ -579,6 +584,7 @@ class StoryTextStreamEvent {
     return StoryTextStreamEvent(
       type: type,
       content: decoded['content'] as String?,
+      status: decoded['status'] as String?,
       error: decoded['error'] as String?,
       session: sessionJson is Map
           ? StorySession.fromJson(sessionJson.cast<String, dynamic>())

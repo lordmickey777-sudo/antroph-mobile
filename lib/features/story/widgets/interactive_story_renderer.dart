@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -39,6 +40,10 @@ class InteractiveStoryRenderer extends StatelessWidget {
     this.showSoloModeSwitch = false,
     this.showQuizTopicDecision = false,
     this.alignSoloOptionsRight = true,
+    this.showAdvanceQuestionStatusAction = true,
+    this.showAdvanceQuestionStatus = true,
+    this.showFinalStandingsActions = true,
+    this.bottomOverlayPadding = 0,
     this.readOnly = false,
   });
 
@@ -64,6 +69,10 @@ class InteractiveStoryRenderer extends StatelessWidget {
   final bool showSoloModeSwitch;
   final bool showQuizTopicDecision;
   final bool alignSoloOptionsRight;
+  final bool showAdvanceQuestionStatusAction;
+  final bool showAdvanceQuestionStatus;
+  final bool showFinalStandingsActions;
+  final double bottomOverlayPadding;
   final bool readOnly;
 
   @override
@@ -86,6 +95,10 @@ class InteractiveStoryRenderer extends StatelessWidget {
         showSoloModeSwitch: showSoloModeSwitch,
         showQuizTopicDecision: showQuizTopicDecision,
         alignSoloOptionsRight: alignSoloOptionsRight,
+        showAdvanceQuestionStatusAction: showAdvanceQuestionStatusAction,
+        showAdvanceQuestionStatus: showAdvanceQuestionStatus,
+        showFinalStandingsActions: showFinalStandingsActions,
+        bottomOverlayPadding: bottomOverlayPadding,
         readOnly: readOnly,
         onChoice: onChoice,
         onTopicSuggestion: onTopicSuggestion,
@@ -222,6 +235,10 @@ class _QuizTranscriptView extends StatefulWidget {
     required this.showSoloModeSwitch,
     required this.showQuizTopicDecision,
     required this.alignSoloOptionsRight,
+    required this.showAdvanceQuestionStatusAction,
+    required this.showAdvanceQuestionStatus,
+    required this.showFinalStandingsActions,
+    required this.bottomOverlayPadding,
     required this.onChoice,
     this.onTopicSuggestion,
     this.onCustomTopicRequested,
@@ -247,6 +264,10 @@ class _QuizTranscriptView extends StatefulWidget {
   final bool showSoloModeSwitch;
   final bool showQuizTopicDecision;
   final bool alignSoloOptionsRight;
+  final bool showAdvanceQuestionStatusAction;
+  final bool showAdvanceQuestionStatus;
+  final bool showFinalStandingsActions;
+  final double bottomOverlayPadding;
   final ValueChanged<String> onChoice;
   final ValueChanged<String>? onTopicSuggestion;
   final VoidCallback? onCustomTopicRequested;
@@ -342,6 +363,8 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
       isAdvancingQuestion: widget.isAdvancingQuestion,
       showSoloModeSwitch: !widget.readOnly && widget.showSoloModeSwitch,
       showQuizTopicDecision: !widget.readOnly && widget.showQuizTopicDecision,
+      showAdvanceQuestionStatusAction: widget.showAdvanceQuestionStatusAction,
+      showAdvanceQuestionStatus: widget.showAdvanceQuestionStatus,
       soloViewMode: widget.soloViewMode,
     );
     _QuizTranscriptItem? standardBottomSuggestion;
@@ -427,6 +450,7 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
               widget.soloViewMode != 'chat' &&
               !widget.showQuizTopicDecision,
           readOnly: widget.readOnly,
+          showFinalStandingsActions: widget.showFinalStandingsActions,
           onQuizAnswer: widget.onQuizAnswer,
           onRetryGeneration: widget.onRetryGeneration,
           onAdvanceQuestion: widget.onAdvanceQuestion,
@@ -445,7 +469,9 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
             2,
             14,
             2,
-            bottomSuggestionItems.isEmpty ? 28 : 0,
+            bottomSuggestionItems.isEmpty
+                ? math.max(28, widget.bottomOverlayPadding)
+                : 0,
           ),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
@@ -497,8 +523,8 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
                         height:
                             widget.hideCustomTopicSuggestion ||
                                 chatComposerFollowsPersistentFooter
-                            ? 0
-                            : bottomSafeInset,
+                            ? widget.bottomOverlayPadding
+                            : bottomSafeInset + widget.bottomOverlayPadding,
                       ),
                     ],
                   ),
@@ -524,6 +550,7 @@ enum _QuizTranscriptItemKind {
   timerSuggestions,
   persistentModeSuggestions,
   quizTopicDecisionSuggestions,
+  setupUpdate,
   pendingAssistant,
   streamingAssistant,
   question,
@@ -613,6 +640,8 @@ class _QuizTranscriptItem {
     bool isAdvancingQuestion = false,
     bool showSoloModeSwitch = false,
     bool showQuizTopicDecision = false,
+    bool showAdvanceQuestionStatusAction = true,
+    bool showAdvanceQuestionStatus = true,
     String? soloViewMode,
   }) {
     final events = _dedupeEvents(session.events)
@@ -669,6 +698,10 @@ class _QuizTranscriptItem {
         ?.toInt();
     final totalRounds =
         (session.interactiveState['total_rounds'] as num?)?.toInt() ?? 1;
+    final isCurrentUserGroupHost = _isCurrentUserGroupHost(
+      session,
+      currentUserId,
+    );
 
     for (final event in events) {
       switch (event.eventType) {
@@ -750,12 +783,60 @@ class _QuizTranscriptItem {
             ),
           );
           break;
+        case 'setup_choice_selected':
+          if (!isCurrentUserGroupHost) {
+            if (!items.any(
+              (item) =>
+                  item.kind == _QuizTranscriptItemKind.setupUpdate &&
+                  item.statusTitle == 'Host is setting up the room.',
+            )) {
+              items.add(
+                _QuizTranscriptItem(
+                  kind: _QuizTranscriptItemKind.setupUpdate,
+                  seq: event.seq,
+                  event: event,
+                  statusTitle: 'Host is setting up the room.',
+                ),
+              );
+            }
+            break;
+          }
+          final text = _setupChoiceHostText(event);
+          if (text == null) break;
+          items.add(
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.userMessage,
+              seq: event.seq,
+              event: event,
+              userText: text,
+            ),
+          );
+          break;
         case 'interactive_turn':
           final turn = InteractiveTurn.fromJson(event.payload);
           if (currentTurn != null && event.seq == currentTurn.seq) {
             // A snapshot can race an input and pair an older event payload
             // with the newer canonical current turn at the same watermark.
             // Render the canonical turn below so its live choices win.
+            break;
+          }
+          if (sessionType == 'group' &&
+              !isCurrentUserGroupHost &&
+              _turnHasChoiceKind(turn, 'group_quiz_setup')) {
+            if (!items.any(
+              (item) =>
+                  item.kind == _QuizTranscriptItemKind.setupUpdate &&
+                  item.statusTitle == 'Host is setting up the room.',
+            )) {
+              items.add(
+                _QuizTranscriptItem(
+                  kind: _QuizTranscriptItemKind.setupUpdate,
+                  seq: event.seq,
+                  event: event,
+                  statusTitle: 'Host is setting up the room.',
+                ),
+              );
+            }
             break;
           }
           final texts = _turnTexts(turn);
@@ -949,21 +1030,36 @@ class _QuizTranscriptItem {
     }
 
     if (currentTurn != null) {
+      final hideCurrentSetupTurn =
+          sessionType == 'group' &&
+          !isCurrentUserGroupHost &&
+          _turnHasChoiceKind(currentTurn, 'group_quiz_setup');
       final currentTurnItems = <_QuizTranscriptItem>[
-        for (final text in _turnTexts(currentTurn))
-          _QuizTranscriptItem(
-            kind: _QuizTranscriptItemKind.aiMessage,
-            seq: currentTurn.seq,
-            statusTitle: text,
+        if (!hideCurrentSetupTurn) ...[
+          for (final text in _turnTexts(currentTurn))
+            _QuizTranscriptItem(
+              kind: _QuizTranscriptItemKind.aiMessage,
+              seq: currentTurn.seq,
+              statusTitle: text,
+            ),
+          ..._turnChoiceItems(
+            currentTurn,
+            currentTurn.seq,
+            phase: phase,
+            topicSelectionStage: topicSelectionStage,
+            interactiveState: session.interactiveState,
+            allowGuidedChoices: !topicAspectIsLoading,
           ),
-        ..._turnChoiceItems(
-          currentTurn,
-          currentTurn.seq,
-          phase: phase,
-          topicSelectionStage: topicSelectionStage,
-          interactiveState: session.interactiveState,
-          allowGuidedChoices: !topicAspectIsLoading,
-        ),
+        ] else if (!items.any(
+          (item) =>
+              item.kind == _QuizTranscriptItemKind.setupUpdate &&
+              item.statusTitle == 'Host is setting up the room.',
+        ))
+          _QuizTranscriptItem(
+            kind: _QuizTranscriptItemKind.setupUpdate,
+            seq: currentTurn.seq,
+            statusTitle: 'Host is setting up the room.',
+          ),
       ];
 
       // The canonical turn replaces any equal-sequence event payload, but it
@@ -1216,49 +1312,54 @@ class _QuizTranscriptItem {
           (session.interactiveState['session_type'] as String?) == 'group';
       final manualAdvance =
           isGroupSession && (waitingAfterResult || waitingForFinalResults);
-      items.add(
-        _QuizTranscriptItem(
-          kind: _QuizTranscriptItemKind.status,
-          seq: session.lastSeq + 4,
-          statusTitle: manualAdvance
-              ? canAdvanceQuestion
-                    ? (isAdvancingQuestion
-                          ? 'Loading next question'
-                          : waitingForFinalResults
-                          ? 'Ready for final results'
-                          : 'Ready for next question')
-                    : 'Waiting for host'
-              : waitingForPlayers
-              ? 'Waiting for players'
-              : waitingForFinalResults
-              ? 'Calculating results...'
-              : checkingAnswers
-              ? 'Checking answers'
-              : 'Aura is getting the next question ready',
-          statusBody: manualAdvance
-              ? (canAdvanceQuestion
-                    ? 'Players can keep chatting, or you can continue when everyone is ready.'
-                    : 'Players can keep chatting while the host decides when to continue.')
-              : (checkingAnswers || waitingForPlayers)
-              ? _lobbyText(session)
-              : '',
-          statusIcon: manualAdvance
-              ? null
-              : waitingForPlayers
-              ? CupertinoIcons.person_3_fill
-              : CupertinoIcons.sparkles,
-          statusActionLabel:
-              manualAdvance && canAdvanceQuestion && !isAdvancingQuestion
-              ? (waitingForFinalResults ? 'Show final results' : 'Continue')
-              : null,
-          showLoading:
-              waitingForQuestion ||
-              (!isGroupSession &&
-                  (waitingAfterResult || waitingForFinalResults)) ||
-              (waitingAfterResult && isAdvancingQuestion) ||
-              (waitingForFinalResults && isAdvancingQuestion),
-        ),
-      );
+      if (!manualAdvance || showAdvanceQuestionStatus) {
+        items.add(
+          _QuizTranscriptItem(
+            kind: _QuizTranscriptItemKind.status,
+            seq: session.lastSeq + 4,
+            statusTitle: manualAdvance
+                ? canAdvanceQuestion
+                      ? (isAdvancingQuestion
+                            ? 'Loading next question'
+                            : waitingForFinalResults
+                            ? 'Ready for final results'
+                            : 'Ready for next question')
+                      : 'Waiting for host'
+                : waitingForPlayers
+                ? 'Waiting for players'
+                : waitingForFinalResults
+                ? 'Calculating results...'
+                : checkingAnswers
+                ? 'Checking answers'
+                : 'Aura is getting the next question ready',
+            statusBody: manualAdvance
+                ? (canAdvanceQuestion
+                      ? 'Players can keep chatting, or you can continue when everyone is ready.'
+                      : 'Players can keep chatting while the host decides when to continue.')
+                : (checkingAnswers || waitingForPlayers)
+                ? _lobbyText(session)
+                : '',
+            statusIcon: manualAdvance
+                ? null
+                : waitingForPlayers
+                ? CupertinoIcons.person_3_fill
+                : CupertinoIcons.sparkles,
+            statusActionLabel:
+                manualAdvance &&
+                    canAdvanceQuestion &&
+                    !isAdvancingQuestion &&
+                    showAdvanceQuestionStatusAction
+                ? (waitingForFinalResults ? 'Show final results' : 'Continue')
+                : null,
+            showLoading:
+                waitingForQuestion ||
+                (!isGroupSession &&
+                    (waitingAfterResult || waitingForFinalResults)) ||
+                (waitingAfterResult && isAdvancingQuestion) ||
+                (waitingForFinalResults && isAdvancingQuestion),
+          ),
+        );
+      }
     }
 
     if (phase == 'completed' &&
@@ -1412,6 +1513,10 @@ class _QuizTranscriptItem {
   }
 
   static List<String> _turnTexts(InteractiveTurn turn) {
+    final groupSetupStage = _groupSetupStage(turn);
+    if (groupSetupStage != null) {
+      return _groupSetupTranscriptTexts(turn, groupSetupStage);
+    }
     final hasExpandedRootTopicActions = turn.blocks
         .whereType<InteractiveChoiceGroupBlock>()
         .any((block) {
@@ -1443,6 +1548,39 @@ class _QuizTranscriptItem {
     return texts;
   }
 
+  static String? _groupSetupStage(InteractiveTurn turn) {
+    for (final block in turn.blocks.whereType<InteractiveChoiceGroupBlock>()) {
+      final choiceKind = block.metadata['choice_kind']
+          ?.toString()
+          .trim()
+          .toLowerCase();
+      if (choiceKind != 'group_quiz_setup') continue;
+      return block.metadata['setup_stage']?.toString().trim().toLowerCase() ??
+          'question_source';
+    }
+    return null;
+  }
+
+  static List<String> _groupSetupTranscriptTexts(
+    InteractiveTurn turn,
+    String stage,
+  ) {
+    if (stage != 'question_source') return const <String>[];
+    final texts = <String>[];
+    for (final block in turn.blocks.whereType<InteractiveTextBlock>()) {
+      final text = block.text.trim();
+      if (text.isEmpty) continue;
+      final parts = text
+          .split(RegExp(r'\n\s*\n'))
+          .map((part) => part.trim())
+          .where((part) => part.isNotEmpty)
+          .toList();
+      if (parts.length <= 1) continue;
+      texts.add(parts.take(parts.length - 1).join('\n\n'));
+    }
+    return texts;
+  }
+
   static String _normalizeRootTopicActionPrompt(
     String value, {
     required bool enabled,
@@ -1459,6 +1597,36 @@ class _QuizTranscriptItem {
         .substring(prefix.length, text.length - retiredSuffix.length)
         .trim();
     return topic.isEmpty ? text : '$prefix$topic or chat with Aura?';
+  }
+
+  static bool _isCurrentUserGroupHost(
+    InteractiveSessionState session,
+    String? currentUserId,
+  ) {
+    if (session.interactiveState['session_type'] != 'group') return false;
+    final normalizedUserId = currentUserId?.trim();
+    if (normalizedUserId == null || normalizedUserId.isEmpty) {
+      return false;
+    }
+    return session.participants.any(
+      (participant) =>
+          participant.userId == normalizedUserId &&
+          participant.role == 'host' &&
+          participant.status == 'active',
+    );
+  }
+
+  static bool _turnHasChoiceKind(InteractiveTurn turn, String choiceKind) {
+    return turn.blocks.whereType<InteractiveChoiceGroupBlock>().any(
+      (block) =>
+          block.metadata['choice_kind']?.toString().trim().toLowerCase() ==
+          choiceKind,
+    );
+  }
+
+  static String? _setupChoiceHostText(StorySessionEvent event) {
+    final text = event.payload['text']?.toString().trim();
+    return text?.isNotEmpty == true ? text : null;
   }
 
   static String _effectiveTranscriptPhase({
@@ -1504,6 +1672,9 @@ class _QuizTranscriptItem {
         final choiceKind = (b.metadata['choice_kind'] as String?)
             ?.trim()
             .toLowerCase();
+        if (choiceKind == 'group_quiz_setup') {
+          continue;
+        }
         final isTopicAspectStage =
             phase == 'topic_selection' && topicSelectionStage == 'aspect';
         if (choiceKind == 'solo_quiz_mode' && phase != 'mode_selection') {
@@ -1929,6 +2100,7 @@ class _QuizTranscriptRow extends StatelessWidget {
     required this.alignSoloOptionsRight,
     required this.quizInteractionEnabled,
     required this.readOnly,
+    required this.showFinalStandingsActions,
     required this.onQuizAnswer,
     required this.onRetryGeneration,
     this.onAdvanceQuestion,
@@ -1953,6 +2125,7 @@ class _QuizTranscriptRow extends StatelessWidget {
   final bool alignSoloOptionsRight;
   final bool quizInteractionEnabled;
   final bool readOnly;
+  final bool showFinalStandingsActions;
   final QuizAnswerCallback onQuizAnswer;
   final VoidCallback onRetryGeneration;
   final VoidCallback? onAdvanceQuestion;
@@ -2045,6 +2218,17 @@ class _QuizTranscriptRow extends StatelessWidget {
           callLink: customTopicCallLink,
           alignOptionsRight: alignSoloOptionsRight,
         ),
+      _QuizTranscriptItemKind.setupUpdate => _ChatMessageBubble(
+        child: Text(
+          item.statusTitle ?? 'Host is setting up the room.',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            height: 1.32,
+          ),
+        ),
+      ),
       _QuizTranscriptItemKind.pendingAssistant => _ChatMessageBubble(
         child: _QuizLoadingContent(title: item.statusTitle),
       ),
@@ -2084,8 +2268,8 @@ class _QuizTranscriptRow extends StatelessWidget {
       _QuizTranscriptItemKind.finalStandings => _ChatMessageBubble(
         child: _FinalStandingsContent(
           session: session,
-          onReplay: readOnly ? null : onReplay,
-          onLeave: readOnly ? null : onLeave,
+          onReplay: readOnly || !showFinalStandingsActions ? null : onReplay,
+          onLeave: readOnly || !showFinalStandingsActions ? null : onLeave,
         ),
       ),
       _QuizTranscriptItemKind.status => _ChatMessageBubble(
@@ -3342,7 +3526,7 @@ class _QuizLoadingContentState extends State<_QuizLoadingContent>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 5200),
     )..repeat();
   }
 
@@ -3354,57 +3538,97 @@ class _QuizLoadingContentState extends State<_QuizLoadingContent>
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.title?.trim() ?? '';
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (title.isNotEmpty &&
-            title != 'Aura is getting the next question ready') ...[
-          Flexible(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-        ],
-        SizedBox(
-          width: 34,
-          height: 14,
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (var i = 0; i < 3; i++) ...[
-                    Opacity(
-                      opacity: ((_controller.value * 3 - i).abs() < 0.55)
-                          ? 1
-                          : 0.34,
-                      child: Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                    if (i != 2) const SizedBox(width: 5),
-                  ],
-                ],
-              );
-            },
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        return _QuizLoadingStatusLabel(
+          labels: _loadingLabelsForTitle(widget.title),
+          progress: _controller.value,
+        );
+      },
+    );
+  }
+}
+
+List<String> _loadingLabelsForTitle(String? title) {
+  final normalized = (title ?? '').trim().toLowerCase();
+  if (normalized.contains('loading next') ||
+      normalized.contains('next question') ||
+      normalized.contains('getting the next question')) {
+    return const ['Getting questions...', 'Thinking...', 'Processing...'];
+  }
+  if (normalized.contains('checking')) {
+    return const ['Checking answers...', 'Processing...'];
+  }
+  if (normalized.contains('finding topic')) {
+    return const ['Thinking...', 'Processing...'];
+  }
+  return const [
+    'Setting up...',
+    'Connecting...',
+    'Getting questions...',
+    'Thinking...',
+    'Processing...',
+  ];
+}
+
+class _QuizLoadingStatusLabel extends StatelessWidget {
+  const _QuizLoadingStatusLabel({required this.labels, required this.progress});
+
+  final List<String> labels;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final labelCount = labels.length;
+    final rawPosition = progress * labelCount;
+    final labelIndex = rawPosition.floor().clamp(0, labelCount - 1);
+    final localProgress = rawPosition - labelIndex;
+    final fadeIn = Curves.easeOutCubic.transform(
+      (localProgress / 0.18).clamp(0.0, 1.0),
+    );
+    final fadeOut = Curves.easeInCubic.transform(
+      ((1.0 - localProgress) / 0.2).clamp(0.0, 1.0),
+    );
+    final opacity = math.min(fadeIn, fadeOut).clamp(0.0, 1.0);
+    final textScaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    const style = TextStyle(
+      color: Colors.white,
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+      height: 1.25,
+    );
+    var width = 0.0;
+    for (final label in labels) {
+      final painter =
+          TextPainter(
+              text: const TextSpan(style: style),
+              textDirection: direction,
+              textScaler: textScaler,
+            )
+            ..text = TextSpan(text: label, style: style)
+            ..layout();
+      width = math.max(width, painter.width);
+    }
+    final displayLabel = labels[labelIndex];
+
+    return SizedBox(
+      width: width + 4,
+      height: 22,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Opacity(
+          opacity: opacity,
+          child: Text(
+            displayLabel,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.visible,
+            style: style,
           ),
         ),
-      ],
+      ),
     );
   }
 }
