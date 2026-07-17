@@ -225,6 +225,44 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     });
   }
 
+  Future<bool> refreshTokensIfPossible() async {
+    final refreshToken = _tokens?.refreshToken;
+    if (refreshToken == null || refreshToken.isEmpty) return false;
+
+    try {
+      final map = await _repo.refreshToken(refreshToken: refreshToken);
+      final newTokens = AuthTokens(
+        accessToken: map['access_token'] ?? '',
+        refreshToken: map['refresh_token'] ?? refreshToken,
+        tokenType: map['token_type'] ?? 'bearer',
+      );
+      if (newTokens.accessToken.isEmpty) return false;
+      _tokens = newTokens;
+      ApiClient.I.setAuthTokens(
+        accessToken: newTokens.accessToken,
+        refreshToken: newTokens.refreshToken,
+        tokenType: newTokens.tokenType,
+      );
+      await _persistTokens(newTokens);
+      return true;
+    } catch (e) {
+      final isAuthFailure =
+          e is DioException &&
+          e.response != null &&
+          (e.response!.statusCode == 401 ||
+              e.response!.statusCode == 403 ||
+              e.response!.statusCode == 422);
+      if (isAuthFailure) {
+        _tokens = null;
+        ApiClient.I.clearAuthTokens();
+        await _clearTokens();
+        state = const AsyncValue.data(null);
+        _resetTrackedUser(source: 'manual_token_refresh_rejected');
+      }
+      return false;
+    }
+  }
+
   Future<void> register({
     required String email,
     required String password,

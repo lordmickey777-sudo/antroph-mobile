@@ -59,6 +59,7 @@ class StoryChatFlowPage extends ConsumerStatefulWidget {
     this.joinCode,
     this.soloStartFreshOnLaunch = false,
     this.soloOpenHistoryOnLaunch = false,
+    this.interactiveSessionPreloaded = false,
   });
 
   final String storyId;
@@ -74,6 +75,7 @@ class StoryChatFlowPage extends ConsumerStatefulWidget {
   final String? joinCode;
   final bool soloStartFreshOnLaunch;
   final bool soloOpenHistoryOnLaunch;
+  final bool interactiveSessionPreloaded;
 
   @override
   ConsumerState<StoryChatFlowPage> createState() => _StoryChatFlowPageState();
@@ -231,6 +233,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
     _isExitingStory = true;
     await voiceController.endStorySession();
     await voiceController.stopPlayback();
+    voiceController.clearNarrationCache();
     if (mounted) {
       navigator.pop();
     }
@@ -401,6 +404,7 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
           resizeToAvoidBottomInset: false,
           backgroundColor: Colors.transparent,
           appBar: AppBar(
+            toolbarHeight: 48,
             backgroundColor: Colors.transparent,
             surfaceTintColor: Colors.transparent,
             scrolledUnderElevation: 0,
@@ -480,6 +484,8 @@ class _StoryChatFlowPageState extends ConsumerState<StoryChatFlowPage>
                   joinCode: widget.joinCode,
                   soloStartFreshOnLaunch: widget.soloStartFreshOnLaunch,
                   soloOpenHistoryOnLaunch: widget.soloOpenHistoryOnLaunch,
+                  sessionPreloaded: widget.interactiveSessionPreloaded,
+                  isLeavingGame: _isLeavingGame,
                   onCall: _openVoicePage,
                   onLeave: _leaveGame,
                 );
@@ -512,6 +518,8 @@ class _InteractiveStoryTab extends ConsumerStatefulWidget {
     this.joinCode,
     this.soloStartFreshOnLaunch = false,
     this.soloOpenHistoryOnLaunch = false,
+    this.sessionPreloaded = false,
+    this.isLeavingGame = false,
     required this.onCall,
     required this.onLeave,
   });
@@ -523,6 +531,8 @@ class _InteractiveStoryTab extends ConsumerStatefulWidget {
   final String? joinCode;
   final bool soloStartFreshOnLaunch;
   final bool soloOpenHistoryOnLaunch;
+  final bool sessionPreloaded;
+  final bool isLeavingGame;
   final VoidCallback onCall;
   final Future<void> Function() onLeave;
 
@@ -611,6 +621,11 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   void _start() {
     if (_started) return;
     _started = true;
+    if (widget.sessionPreloaded &&
+        ref.read(interactiveStoryProvider).session != null) {
+      setState(() => _soloEntryView = _SoloEntryView.session);
+      return;
+    }
     final code = widget.joinCode?.trim() ?? '';
     if (widget.launchMode == InteractiveStoryLaunchMode.joinPublic) {
       setState(() => _soloEntryView = _SoloEntryView.session);
@@ -1124,6 +1139,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     }
     final normalized = optionId.trim().toLowerCase();
     final phase = session.interactiveState['phase']?.toString() ?? '';
+    final displayText = _soloOptionDisplayText(session, optionId);
 
     if (phase == 'topic_selection' &&
         _customTopicEntryEnabled &&
@@ -1150,12 +1166,17 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
             notifier.submitOption(
               optionId: 'continue_topic',
               inputType: 'option_select',
+              displayText: displayText,
             ),
           );
         } else if (phase == 'discussion' ||
             !_hasCompletedSoloQuizSetup(session)) {
           unawaited(
-            notifier.submitOption(optionId: 'quiz', inputType: 'option_select'),
+            notifier.submitOption(
+              optionId: 'quiz',
+              inputType: 'option_select',
+              displayText: _soloOptionDisplayText(session, 'quiz'),
+            ),
           );
         }
         return;
@@ -1195,6 +1216,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
               notifier.submitOption(
                 optionId: 'quiz',
                 inputType: 'option_select',
+                displayText: _soloOptionDisplayText(session, 'quiz'),
               ),
             );
           }
@@ -1203,6 +1225,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
             notifier.submitOption(
               optionId: 'continue_topic',
               inputType: 'option_select',
+              displayText: displayText,
             ),
           );
         }
@@ -1211,8 +1234,33 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     }
 
     unawaited(
-      notifier.submitOption(optionId: optionId, inputType: 'option_select'),
+      notifier.submitOption(
+        optionId: optionId,
+        inputType: 'option_select',
+        displayText: displayText,
+      ),
     );
+  }
+
+  String? _soloOptionDisplayText(
+    InteractiveSessionState session,
+    String optionId,
+  ) {
+    final choice = _activeSoloOptionChoice(
+      session: session,
+      hasPendingBottomChoice: false,
+      hasPendingBottomText: false,
+      showQuizTopicDecision: _isShowingQuizTopicDecision(session),
+      showSoloModeSwitch: _shouldShowSoloModeSwitch(session),
+      soloViewMode: _effectiveSoloViewMode(session),
+    );
+    final normalized = optionId.trim().toLowerCase();
+    for (final option in choice?.options ?? const <InteractiveOption>[]) {
+      if (option.id.trim().toLowerCase() == normalized) {
+        return option.label.trim().isNotEmpty ? option.label.trim() : option.id;
+      }
+    }
+    return null;
   }
 
   Future<void> _restartForNewQuizTopic() async {
@@ -1447,6 +1495,9 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final currentUserId = ref.watch(authControllerProvider).value?.id;
     final notifier = ref.read(interactiveStoryProvider.notifier);
     final session = state.session;
+    if (widget.isLeavingGame) {
+      return const SizedBox.expand();
+    }
     if (_soloEntryView == _SoloEntryView.checking) {
       return const _StorySessionLoadingShell(title: 'CHECKING SESSIONS...');
     }
@@ -1616,6 +1667,16 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final groupSetupChoice = session != null && isGroupQuizSession
         ? _activeGroupSetupChoice(session)
         : null;
+    final soloOptionChoice = session != null && isSoloQuizSession
+        ? _activeSoloOptionChoice(
+            session: session,
+            hasPendingBottomChoice: hasPendingBottomChoice,
+            hasPendingBottomText: hasPendingBottomText,
+            showQuizTopicDecision: showQuizTopicDecision,
+            showSoloModeSwitch: showSoloModeSwitch,
+            soloViewMode: soloViewMode,
+          )
+        : null;
     final canHostSetupGroupQuiz =
         session != null &&
         isGroupQuizSession &&
@@ -1637,21 +1698,26 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         keyboardHeight > 0;
     final showGroupCompletedOptions =
         session != null && isGroupQuizSession && _isGroupQuizCompleted(session);
+    final showSoloOptionPanel =
+        soloOptionChoice != null && !hasPendingBottomChoice;
     final showGroupOptionPanel =
         showGroupCompletedOptions ||
         showGroupHostAdvanceOptions ||
         showGroupSetupOptions;
+    final showAnyOptionPanel = showGroupOptionPanel || showSoloOptionPanel;
     final fallbackGroupOptionPanelPadding = showGroupCompletedOptions
         ? (_groupCompletedPanelCollapsed ? 118.0 : 250.0)
         : showGroupSetupOptions
         ? (_groupSetupPanelCollapsed ? 150.0 : 340.0)
         : showGroupHostAdvanceOptions
         ? (_groupHostAdvancePanelCollapsed ? 150.0 : 300.0)
+        : showSoloOptionPanel
+        ? (_groupSetupPanelCollapsed ? 150.0 : 340.0)
         : 0.0;
     final measuredGroupOptionPanelPadding = _groupOptionPanelHeight > 0
         ? _groupOptionPanelHeight + 18
         : 0.0;
-    final groupOptionPanelPadding = showGroupOptionPanel
+    final groupOptionPanelPadding = showAnyOptionPanel
         ? math.max(
             fallbackGroupOptionPanelPadding,
             measuredGroupOptionPanelPadding,
@@ -1669,9 +1735,10 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         : const Color(0xFFF3F3F3);
     final mutedText = isDark ? Colors.white60 : Colors.black54;
 
-    _syncGroupOptionPanelHeight(showGroupOptionPanel);
+    _syncGroupOptionPanelHeight(showAnyOptionPanel);
 
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         Column(
           children: [
@@ -1700,6 +1767,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                         soloViewMode: soloViewMode,
                         showSoloModeSwitch: showSoloModeSwitch,
                         showQuizTopicDecision: showQuizTopicDecision,
+                        hideSoloOptionSuggestions: isSoloQuizSession,
                         alignSoloOptionsRight: !showTextComposer,
                         showAdvanceQuestionStatusAction:
                             !showGroupHostAdvanceOptions,
@@ -1744,7 +1812,8 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                 !showGroupHostAdvanceOptions &&
                 !showGroupFocusedComposer &&
                 !showGroupSetupOptions &&
-                !showGroupCompletedOptions)
+                !showGroupCompletedOptions &&
+                !showSoloOptionPanel)
               AnimatedPadding(
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeOut,
@@ -1833,11 +1902,13 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
             else if (session != null &&
                 !isReadOnlyHistory &&
                 !floatSoloChoiceCall &&
-                (!canHostAdvanceGroupQuiz || state.isAdvancingQuestion))
+                (!canHostAdvanceGroupQuiz || state.isAdvancingQuestion) &&
+                !showSoloOptionPanel)
               _QuizGameBottomBar(
                 onCall: widget.onCall,
                 disabled: disableQuizGameControls,
-                showMessagePlaceholder: !isSoloQuizSession,
+                showMessagePlaceholder:
+                    !isSoloQuizSession || hasPendingBottomChoice,
               ),
           ],
         ),
@@ -1914,6 +1985,56 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
               ),
             ),
           ),
+        if (showSoloOptionPanel && !isReadOnlyHistory)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.only(bottom: keyboardHeight),
+              child: SizedBox(
+                key: _groupOptionPanelKey,
+                width: double.infinity,
+                child: _GroupSetupOptionPanel(
+                  title: soloOptionChoice.prompt,
+                  options: hasPendingBottomChoice
+                      ? const <InteractiveOption>[]
+                      : soloOptionChoice.options,
+                  collapsed: _groupSetupPanelCollapsed,
+                  disabled: disableQuizGameControls,
+                  onToggleCollapsed: () {
+                    setState(
+                      () => _groupSetupPanelCollapsed =
+                          !_groupSetupPanelCollapsed,
+                    );
+                  },
+                  onSelected: _handleSoloChoice,
+                  onCall: widget.onCall,
+                  textController: _textController,
+                  textFocusNode: _textFocusNode,
+                  textFieldKey: _groupMessageFieldKey,
+                  canSubmitText:
+                      !hasPendingBottomChoice &&
+                      soloOptionChoice.allowTextInput &&
+                      _canSend,
+                  hintText: soloOptionChoice.inputHint,
+                  optionKeyPrefix: hasPendingBottomChoice
+                      ? null
+                      : soloOptionChoice.optionKeyPrefix,
+                  inputKey: soloOptionChoice.inputKey,
+                  onSendText: _sendText,
+                  onInputRequested:
+                      !hasPendingBottomChoice &&
+                          phase == 'topic_selection' &&
+                          soloOptionChoice.allowTextInput
+                      ? _enableCustomTopicEntry
+                      : null,
+                ),
+              ),
+            ),
+          ),
         if (showGroupFocusedComposer && !isReadOnlyHistory)
           Positioned(
             left: 0,
@@ -1981,7 +2102,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
               ),
             ),
           ),
-        if (floatSoloChoiceCall)
+        if (floatSoloChoiceCall && !showSoloOptionPanel)
           CompositedTransformFollower(
             link: _customTopicCallLink,
             showWhenUnlinked: false,
@@ -2590,6 +2711,9 @@ class _GroupSetupOptionPanel extends StatelessWidget {
     required this.canSubmitText,
     this.hintText = 'Message',
     required this.onSendText,
+    this.onInputRequested,
+    this.optionKeyPrefix,
+    this.inputKey,
   });
 
   final String title;
@@ -2605,10 +2729,14 @@ class _GroupSetupOptionPanel extends StatelessWidget {
   final bool canSubmitText;
   final String hintText;
   final VoidCallback onSendText;
+  final VoidCallback? onInputRequested;
+  final String? optionKeyPrefix;
+  final Key? inputKey;
 
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
+    final hasTitle = title.trim().isNotEmpty;
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(10, 8, 10, 16),
@@ -2648,22 +2776,25 @@ class _GroupSetupOptionPanel extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           if (collapsed)
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 2),
-                                child: Text(
-                                  title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.2,
+                            if (hasTitle)
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 2),
+                                  child: Text(
+                                    title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.2,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            )
+                              )
+                            else
+                              const Spacer()
                           else
                             const Spacer(),
                           SizedBox.square(
@@ -2690,24 +2821,31 @@ class _GroupSetupOptionPanel extends StatelessWidget {
                       ),
                     ),
                     if (!collapsed) ...[
-                      Text(
-                        title,
-                        maxLines: title.contains('\n') ? 8 : 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          height: 1.22,
+                      if (hasTitle) ...[
+                        Text(
+                          title,
+                          maxLines: title.contains('\n') ? 8 : 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            height: 1.22,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Divider(
-                        height: 1,
-                        color: Colors.white.withValues(alpha: 0.13),
-                      ),
+                        const SizedBox(height: 10),
+                        Divider(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.13),
+                        ),
+                      ],
                       for (var index = 0; index < options.length; index++) ...[
                         _StoryActionOptionRow(
+                          key: optionKeyPrefix == null
+                              ? null
+                              : ValueKey(
+                                  '$optionKeyPrefix-${options[index].id}',
+                                ),
                           label: options[index].label.isEmpty
                               ? options[index].id
                               : options[index].label,
@@ -2741,6 +2879,8 @@ class _GroupSetupOptionPanel extends StatelessWidget {
               hintText: hintText,
               onSendText: onSendText,
               onCall: disabled ? () {} : onCall,
+              onInputRequested: onInputRequested,
+              inputKey: inputKey,
             ),
           ],
         ),
@@ -2851,6 +2991,8 @@ class _GroupAttachedTextComposer extends StatelessWidget {
     this.hintText = 'Message',
     required this.onSendText,
     required this.onCall,
+    this.onInputRequested,
+    this.inputKey,
   });
 
   final TextEditingController textController;
@@ -2860,8 +3002,13 @@ class _GroupAttachedTextComposer extends StatelessWidget {
   final String hintText;
   final VoidCallback onSendText;
   final VoidCallback onCall;
+  final VoidCallback? onInputRequested;
+  final Key? inputKey;
 
-  void _requestInputFocus() => textFocusNode.requestFocus();
+  void _requestInputFocus() {
+    onInputRequested?.call();
+    textFocusNode.requestFocus();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2899,6 +3046,7 @@ class _GroupAttachedTextComposer extends StatelessWidget {
         ),
         Expanded(
           child: GestureDetector(
+            key: inputKey,
             behavior: HitTestBehavior.translucent,
             onTap: _requestInputFocus,
             child: Transform.translate(
@@ -2923,6 +3071,7 @@ class _GroupAttachedTextComposer extends StatelessWidget {
                   contentPadding: const EdgeInsets.fromLTRB(12, 14, 8, 14),
                   isDense: true,
                 ),
+                onTap: _requestInputFocus,
                 onSubmitted: (_) => onSendText(),
               ),
             ),
@@ -2942,6 +3091,7 @@ class _GroupAttachedTextComposer extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             child: IconButton(
+              tooltip: 'Send',
               onPressed: canSubmitText ? onSendText : null,
               splashRadius: 20,
               icon: Icon(
@@ -3502,6 +3652,7 @@ _GroupSetupChoice? _activeGroupSetupChoice(InteractiveSessionState session) {
 
 String _groupSetupOptionPrompt(String? stage, List<String> textBlocks) {
   if (textBlocks.isEmpty) return '';
+  if (stage == 'review') return '';
   final text = textBlocks.join('\n\n').trim();
   if (stage == 'question_source') {
     final parts = text
@@ -3512,6 +3663,311 @@ String _groupSetupOptionPrompt(String? stage, List<String> textBlocks) {
     return parts.isEmpty ? text : parts.last;
   }
   return text;
+}
+
+_GroupSetupChoice? _activeSoloOptionChoice({
+  required InteractiveSessionState session,
+  required bool hasPendingBottomChoice,
+  required bool hasPendingBottomText,
+  required bool showQuizTopicDecision,
+  required bool showSoloModeSwitch,
+  required String soloViewMode,
+}) {
+  final state = session.interactiveState;
+  if (state['session_type'] != 'solo' || state['template'] != 'quiz') {
+    return null;
+  }
+  if (hasPendingBottomText) {
+    return null;
+  }
+
+  if (showQuizTopicDecision) {
+    return const _GroupSetupChoice(
+      prompt: '',
+      options: [
+        InteractiveOption(id: 'continue_topic', label: 'Continue last topic'),
+        InteractiveOption(id: 'new_topic', label: 'Choose a new topic'),
+      ],
+      allowTextInput: false,
+      inputHint: 'Message',
+      optionKeyPrefix: 'topic-decision',
+    );
+  }
+
+  if (showSoloModeSwitch) {
+    final phase = state['phase']?.toString().trim().toLowerCase() ?? '';
+    final normalizedMode = soloViewMode.trim().toLowerCase();
+    final options = [
+      if (normalizedMode != 'quiz' || phase == 'post_question_prompt')
+        InteractiveOption(
+          id: 'quiz',
+          label: normalizedMode == 'quiz' ? 'Next question' : 'Take me to quiz',
+        ),
+      if (normalizedMode != 'chat')
+        const InteractiveOption(id: 'chat', label: 'Chat with Aura'),
+    ];
+    if (options.isNotEmpty) {
+      return _GroupSetupChoice(
+        prompt: '',
+        options: options,
+        allowTextInput: normalizedMode == 'chat',
+        inputHint: 'Message',
+        optionKeyPrefix: 'persistent-mode',
+      );
+    }
+  }
+
+  if (state['phase'] == 'topic_selection' &&
+      state['topic_selection_stage'] != 'aspect') {
+    final options = _soloTopicPanelOptions(
+      state['pending_topic_options'],
+      state['topic_suggestions'],
+    );
+    if (options.isNotEmpty) {
+      return _GroupSetupChoice(
+        prompt: '',
+        options: options,
+        allowTextInput: true,
+        inputHint: 'Type your own topic',
+      );
+    }
+  }
+
+  final turn = _activeInteractiveTurn(session);
+  if (state['phase'] == 'topic_selection' &&
+      state['topic_selection_stage'] == 'aspect') {
+    if (turn != null) {
+      for (final block
+          in turn.blocks.whereType<InteractiveChoiceGroupBlock>()) {
+        final choiceKind = block.metadata['choice_kind']
+            ?.toString()
+            .trim()
+            .toLowerCase();
+        if (choiceKind == 'solo_topic_aspect') {
+          final options = _soloAspectPanelOptions(block.options, state);
+          final allowTextInput = _soloAspectAllowsCustomInput(state);
+          if (options.isNotEmpty || allowTextInput) {
+            return _GroupSetupChoice(
+              prompt: '',
+              options: options,
+              allowTextInput: allowTextInput,
+              inputHint: 'Type your own aspect',
+              optionKeyPrefix: 'topic-aspect',
+              inputKey: const ValueKey('topic-aspect-custom_aspect'),
+            );
+          }
+        }
+        if (choiceKind == 'solo_topic_path_actions') {
+          final options = _orderedSoloTopicPathActions(block.options);
+          if (options.isNotEmpty) {
+            final allowTextInput =
+                state['topic_aspect_status']?.toString().trim().toLowerCase() ==
+                    'failed' &&
+                _soloAspectAllowsCustomInput(state);
+            return _GroupSetupChoice(
+              prompt: '',
+              options: options,
+              allowTextInput: allowTextInput,
+              inputHint: allowTextInput ? 'Type your own aspect' : 'Message',
+              optionKeyPrefix: 'topic-path-action',
+              inputKey: allowTextInput
+                  ? const ValueKey('topic-aspect-custom_aspect')
+                  : null,
+            );
+          }
+        }
+      }
+    }
+
+    final status = state['topic_aspect_status']
+        ?.toString()
+        .trim()
+        .toLowerCase();
+    if (status == 'failed') {
+      return _GroupSetupChoice(
+        prompt: '',
+        options: _orderedSoloTopicPathActions(const [
+          InteractiveOption(
+            id: 'retry_aspects',
+            label: 'Try suggestions again',
+          ),
+        ]),
+        allowTextInput: _soloAspectAllowsCustomInput(state),
+        inputHint: 'Type your own aspect',
+        optionKeyPrefix: 'topic-path-action',
+        inputKey: const ValueKey('topic-aspect-custom_aspect'),
+      );
+    }
+    final options = _soloAspectPanelOptions(
+      _interactiveOptionsFromRaw(state['pending_topic_aspects']),
+      state,
+    );
+    final allowTextInput = _soloAspectAllowsCustomInput(state);
+    if (options.isNotEmpty || allowTextInput) {
+      return _GroupSetupChoice(
+        prompt: '',
+        options: options,
+        allowTextInput: allowTextInput,
+        inputHint: 'Type your own aspect',
+        optionKeyPrefix: 'topic-aspect',
+        inputKey: const ValueKey('topic-aspect-custom_aspect'),
+      );
+    }
+  }
+
+  if (turn != null) {
+    final phase = state['phase']?.toString().trim().toLowerCase() ?? '';
+    for (final block in turn.blocks.whereType<InteractiveChoiceGroupBlock>()) {
+      final choiceKind = block.metadata['choice_kind']
+          ?.toString()
+          .trim()
+          .toLowerCase();
+      if (choiceKind == null || block.options.isEmpty) continue;
+      if (choiceKind == 'solo_quiz_mode' && phase != 'mode_selection') {
+        continue;
+      }
+      if (choiceKind == 'solo_quiz_timer' && phase != 'timer_selection') {
+        continue;
+      }
+      if (!_isSoloFloatingChoiceKind(choiceKind)) continue;
+
+      return _GroupSetupChoice(
+        prompt: '',
+        options: _soloPanelOptions(block.options, choiceKind),
+        allowTextInput: false,
+        inputHint: 'Message',
+        optionKeyPrefix: _soloPanelOptionKeyPrefix(choiceKind),
+      );
+    }
+  }
+
+  if (state['phase'] == 'timer_selection') {
+    return const _GroupSetupChoice(
+      prompt: '',
+      options: [
+        InteractiveOption(id: 'timed', label: 'Timed'),
+        InteractiveOption(id: 'untimed', label: 'Untimed'),
+      ],
+      allowTextInput: false,
+      inputHint: 'Message',
+      optionKeyPrefix: 'timer-suggestion',
+    );
+  }
+
+  return null;
+}
+
+bool _isSoloFloatingChoiceKind(String choiceKind) {
+  return const {'solo_quiz_mode', 'solo_quiz_timer'}.contains(choiceKind);
+}
+
+String? _soloPanelOptionKeyPrefix(String choiceKind) {
+  return switch (choiceKind) {
+    'solo_quiz_mode' => 'mode-suggestion',
+    'solo_quiz_timer' => 'timer-suggestion',
+    _ => null,
+  };
+}
+
+List<InteractiveOption> _soloTopicPanelOptions(
+  dynamic pendingOptions,
+  dynamic topicSuggestions,
+) {
+  final pending = _interactiveOptionsFromRaw(pendingOptions);
+  final options = pending.isNotEmpty
+      ? pending
+      : _interactiveOptionsFromRaw(topicSuggestions);
+  return options
+      .where((option) => option.id.trim().toLowerCase() != 'custom_topic')
+      .toList(growable: false);
+}
+
+List<InteractiveOption> _interactiveOptionsFromRaw(dynamic raw) {
+  return ((raw as List?) ?? const <dynamic>[])
+      .whereType<Map>()
+      .map((item) => InteractiveOption.fromJson(item.cast<String, dynamic>()))
+      .where((option) => option.id.isNotEmpty || option.label.isNotEmpty)
+      .toList(growable: false);
+}
+
+List<InteractiveOption> _soloAspectPanelOptions(
+  List<InteractiveOption> options,
+  Map<String, dynamic> state,
+) {
+  final filtered = options
+      .where((option) => option.id.trim().toLowerCase() != 'custom_aspect')
+      .toList(growable: false);
+  final status = state['topic_aspect_status']?.toString().trim().toLowerCase();
+  final shouldAddContinue =
+      filtered.isNotEmpty &&
+      status == 'ready' &&
+      !filtered.any(
+        (option) => option.id.trim().toLowerCase() == 'continue_with_topic',
+      );
+  return _orderedSoloTopicAspects([
+    ...filtered,
+    if (shouldAddContinue)
+      const InteractiveOption(id: 'continue_with_topic', label: 'Continue'),
+  ]);
+}
+
+bool _soloAspectAllowsCustomInput(Map<String, dynamic> state) {
+  final allowCustomAspect = state['allow_custom_aspect'];
+  final status = state['topic_aspect_status']?.toString().trim().toLowerCase();
+  if (status == 'max_depth') return allowCustomAspect == true;
+  return allowCustomAspect != false;
+}
+
+List<InteractiveOption> _orderedSoloTopicAspects(
+  List<InteractiveOption> options,
+) {
+  final continueOptions = <InteractiveOption>[];
+  final regularOptions = <InteractiveOption>[];
+  for (final option in options) {
+    if (option.id.trim().toLowerCase() == 'continue_with_topic') {
+      continueOptions.add(option);
+    } else {
+      regularOptions.add(option);
+    }
+  }
+  return [...regularOptions, ...continueOptions];
+}
+
+List<InteractiveOption> _orderedSoloTopicPathActions(
+  List<InteractiveOption> options,
+) {
+  return _orderedOptions(options, const [
+    'quiz',
+    'chat',
+    'change_aspect',
+    'retry_aspects',
+  ]);
+}
+
+List<InteractiveOption> _soloPanelOptions(
+  List<InteractiveOption> options,
+  String choiceKind,
+) {
+  if (choiceKind == 'solo_quiz_mode') {
+    return _orderedOptions(options, const ['quiz', 'chat']);
+  }
+  if (choiceKind == 'solo_quiz_timer') {
+    return _orderedOptions(options, const ['timed', 'untimed']);
+  }
+  return options;
+}
+
+List<InteractiveOption> _orderedOptions(
+  List<InteractiveOption> options,
+  List<String> order,
+) {
+  final byId = {for (final option in options) option.id: option};
+  return [
+    for (final id in order)
+      if (byId[id] != null) byId[id]!,
+    for (final option in options)
+      if (!order.contains(option.id)) option,
+  ];
 }
 
 bool _turnHasSoloChoiceKind(InteractiveTurn? turn, String choiceKind) {
@@ -3659,12 +4115,16 @@ class _GroupSetupChoice {
     required this.options,
     required this.allowTextInput,
     required this.inputHint,
+    this.optionKeyPrefix,
+    this.inputKey,
   });
 
   final String prompt;
   final List<InteractiveOption> options;
   final bool allowTextInput;
   final String inputHint;
+  final String? optionKeyPrefix;
+  final Key? inputKey;
 }
 
 String _groupHostAdvancePanelTitle(InteractiveSessionState session) {
@@ -3698,7 +4158,7 @@ String _groupHostAdvancePanelActionLabel(InteractiveSessionState session) {
 }
 
 class _StorySessionLoadingShell extends StatelessWidget {
-  const _StorySessionLoadingShell({this.title = 'Thinking...'});
+  const _StorySessionLoadingShell({this.title = 'Preparing room...'});
 
   final String title;
 
@@ -3735,8 +4195,8 @@ class _SessionStatusLoadingCardState extends State<_SessionStatusLoadingCard>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 5200),
-    )..repeat();
+      duration: const Duration(seconds: 18),
+    )..forward();
   }
 
   @override
@@ -3747,31 +4207,38 @@ class _SessionStatusLoadingCardState extends State<_SessionStatusLoadingCard>
 
   List<String> get _labels {
     final normalized = widget.title.toLowerCase();
-    if (normalized.contains('loading')) return const ['Thinking...'];
+    if (normalized.contains('checking')) {
+      return const ['Checking sessions...', 'Preparing room...'];
+    }
+    if (normalized.contains('loading')) {
+      return const ['Preparing room...', 'Connecting...'];
+    }
     return [widget.title];
   }
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xED101112),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.22),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+    final shortestSide = MediaQuery.sizeOf(context).shortestSide;
+    final cardSize = shortestSide.clamp(168.0, 230.0);
+    return SizedBox.square(
+      dimension: cardSize,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xED101112),
+          borderRadius: BorderRadius.circular(cardSize * 0.18),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.24),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, _) {
-            return _SessionStatusLabel(
+            return _SessionStatusProgress(
               labels: _labels,
               progress: _controller.value,
             );
@@ -3779,6 +4246,121 @@ class _SessionStatusLoadingCardState extends State<_SessionStatusLoadingCard>
         ),
       ),
     );
+  }
+}
+
+class _SessionStatusProgress extends StatelessWidget {
+  const _SessionStatusProgress({required this.labels, required this.progress});
+
+  final List<String> labels;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayProgress = _displayProgress(progress);
+    final percentage = (displayProgress * 100).round().clamp(0, 99);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = math.min(constraints.maxWidth, constraints.maxHeight);
+        final ringSize = size * 0.74;
+        final stroke = (ringSize * 0.07).clamp(8.0, 14.0);
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox.square(
+              dimension: ringSize,
+              child: CustomPaint(
+                key: const ValueKey('room-preparation-progress-ring'),
+                painter: _RoomPreparationRingPainter(
+                  progress: displayProgress,
+                  strokeWidth: stroke,
+                ),
+              ),
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RichText(
+                  key: const ValueKey('room-preparation-progress-percent'),
+                  textScaler: MediaQuery.textScalerOf(context),
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: percentage.toString(),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: (size * 0.15).clamp(28.0, 42.0),
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                        ),
+                      ),
+                      TextSpan(
+                        text: '%',
+                        style: TextStyle(
+                          color: const Color(0xFF22C55E),
+                          fontSize: (size * 0.13).clamp(24.0, 38.0),
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _SessionStatusLabel(labels: labels, progress: progress),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  double _displayProgress(double raw) {
+    final eased = Curves.easeInOutCubic.transform(raw);
+    return (0.08 + (eased * 0.84)).clamp(0.0, 0.96);
+  }
+}
+
+class _RoomPreparationRingPainter extends CustomPainter {
+  const _RoomPreparationRingPainter({
+    required this.progress,
+    required this.strokeWidth,
+  });
+
+  final double progress;
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final inset = strokeWidth / 2;
+    final arcRect = rect.deflate(inset);
+    final trackPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.08)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+    final progressPaint = Paint()
+      ..color = const Color(0xFF22C55E)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+    canvas.drawArc(arcRect, -math.pi * 0.92, math.pi * 1.84, false, trackPaint);
+    canvas.drawArc(
+      arcRect,
+      -math.pi * 0.92,
+      math.pi * 1.84 * progress,
+      false,
+      progressPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _RoomPreparationRingPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.strokeWidth != strokeWidth;
   }
 }
 
@@ -3794,44 +4376,34 @@ class _SessionStatusLabel extends StatelessWidget {
     final rawPosition = progress * labelCount;
     final labelIndex = rawPosition.floor().clamp(0, labelCount - 1);
     final localProgress = rawPosition - labelIndex;
-    final fadeIn = Curves.easeOutCubic.transform(
-      (localProgress / 0.18).clamp(0.0, 1.0),
-    );
-    final fadeOut = Curves.easeInCubic.transform(
-      ((1.0 - localProgress) / 0.2).clamp(0.0, 1.0),
-    );
-    final opacity = math.min(fadeIn, fadeOut).clamp(0.0, 1.0);
+    final opacity = progress >= 0.995
+        ? 1.0
+        : math
+              .min(
+                Curves.easeOutCubic.transform(
+                  (localProgress / 0.18).clamp(0.0, 1.0),
+                ),
+                Curves.easeInCubic.transform(
+                  ((1.0 - localProgress) / 0.2).clamp(0.0, 1.0),
+                ),
+              )
+              .clamp(0.0, 1.0);
     const style = TextStyle(
-      color: Colors.white,
-      fontSize: 17,
-      fontWeight: FontWeight.w800,
-      height: 1.25,
+      color: Colors.white70,
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+      height: 1.2,
     );
-    final textScaler = MediaQuery.textScalerOf(context);
-    final direction = Directionality.of(context);
-    var width = 0.0;
-    for (final label in labels) {
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: style),
-        textDirection: direction,
-        textScaler: textScaler,
-      )..layout();
-      width = math.max(width, painter.width);
-    }
-
     return SizedBox(
-      width: width + 4,
-      height: 28,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Opacity(
-          opacity: opacity,
-          child: Text(
-            labels[labelIndex],
-            maxLines: 1,
-            softWrap: false,
-            style: style,
-          ),
+      height: 18,
+      child: Opacity(
+        opacity: opacity,
+        child: Text(
+          labels[labelIndex],
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          softWrap: false,
+          style: style,
         ),
       ),
     );
@@ -4136,6 +4708,13 @@ bool _isRegenerateStoryOptionsPrompt(String value) {
       normalized.contains('use numbered options');
 }
 
+bool _isNarrationPrompt(String value) {
+  final normalized = value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  return normalized.startsWith('read the following story chapter aloud') &&
+      normalized.contains('do not add commentary') &&
+      normalized.contains('extra words');
+}
+
 String _friendlyStoryUserBubbleText(String value) {
   if (_isRegenerateStoryOptionsPrompt(value)) {
     return 'Try different stories';
@@ -4363,6 +4942,7 @@ class _StoryOptionSheetRow extends StatelessWidget {
 
 class _StoryActionOptionRow extends StatelessWidget {
   const _StoryActionOptionRow({
+    super.key,
     required this.label,
     required this.disabled,
     required this.icon,
@@ -4441,6 +5021,13 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   bool _isStartingTextSession = true;
   bool _isSendingText = false;
   bool _isSubmittingStoryOption = false;
+  bool _isNarrationStarting = false;
+  bool _isNarrationPaused = false;
+  String? _narratingMessageId;
+  ChatMessageModel? _narrationMessage;
+  OverlayEntry? _narrationOverlayEntry;
+  VoiceChatController? _voiceController;
+  bool _narrationOverlayNeedsReinsert = true;
   String? _textSessionError;
   List<_ParsedStoryOption>? _reopenedStoryOptions;
   _ParsedStoryOption? _pendingPerspectiveStoryOption;
@@ -4455,6 +5042,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   @override
   void initState() {
     super.initState();
+    _voiceController = ref.read(voiceChatControllerProvider.notifier);
     _textController.addListener(_onTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -4472,8 +5060,17 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   }
 
   @override
+  void reassemble() {
+    super.reassemble();
+    _narrationOverlayNeedsReinsert = true;
+    _narrationOverlayEntry?.markNeedsBuild();
+  }
+
+  @override
   void dispose() {
     _panelScrollTimer?.cancel();
+    _removeNarrationOverlay();
+    _voiceController?.clearNarrationCache();
     _textController.dispose();
     _listScrollController.dispose();
     super.dispose();
@@ -4558,6 +5155,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       final entry = history[i];
       final speaker = (entry['speaker'] as String?)?.trim() ?? '';
       final rawText = (entry['message'] as String?)?.trim() ?? '';
+      if (speaker == 'user' && _isNarrationPrompt(rawText)) continue;
       final text = speaker == 'user'
           ? _friendlyStoryUserBubbleText(rawText)
           : rawText;
@@ -5074,7 +5672,9 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   }
 
   List<ChatMessageModel> _buildMessages() {
-    return List<ChatMessageModel>.of(_messages);
+    return _messages
+        .where((message) => !_isNarrationPrompt(message.message))
+        .toList(growable: false);
   }
 
   _ParsedStoryOptions? _parseStoryOptions(ChatMessageModel message) {
@@ -5186,6 +5786,184 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     );
   }
 
+  bool _shouldShowGeneratedChapterPlayIcon(ChatMessageModel message) {
+    if (message.isUser || message.isStreaming || message.isPending) {
+      return false;
+    }
+    if (message.isFailed || message.id == 'story_text_connecting') {
+      return false;
+    }
+    return message.message.trim().isNotEmpty;
+  }
+
+  Future<void> _playGeneratedChapterNarration(
+    ChatMessageModel message,
+    ChatBubblePlayState playState,
+  ) async {
+    if (playState == ChatBubblePlayState.pause) {
+      await _stopGeneratedChapterNarration();
+      return;
+    }
+    if (playState == ChatBubblePlayState.loading) return;
+
+    final text = message.message;
+    final chapterText = _cleanStoryBubbleText(text);
+    if (chapterText.isEmpty) return;
+
+    final voiceController = ref.read(voiceChatControllerProvider.notifier);
+    try {
+      setState(() {
+        _narratingMessageId = message.id;
+        _narrationMessage = message;
+        _isNarrationStarting = true;
+        _isNarrationPaused = false;
+      });
+      await voiceController.stopPlayback();
+      await voiceController.playTextNarration(
+        _narrationPrompt(chapterText),
+        storySessionId: _textSession?.id,
+      );
+      if (!mounted) return;
+      setState(() => _isNarrationStarting = false);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _narratingMessageId = null;
+        _narrationMessage = null;
+        _isNarrationStarting = false;
+        _isNarrationPaused = false;
+      });
+      showToast(
+        context,
+        'Unable to play narration right now.',
+        variant: ToastVariant.error,
+      );
+    }
+  }
+
+  Future<void> _stopGeneratedChapterNarration({bool keepPaused = false}) async {
+    await ref.read(voiceChatControllerProvider.notifier).stopPlayback();
+    if (!mounted) return;
+    setState(() {
+      if (!keepPaused) {
+        _narratingMessageId = null;
+        _narrationMessage = null;
+      }
+      _isNarrationStarting = false;
+      _isNarrationPaused = keepPaused;
+    });
+  }
+
+  Future<void> _toggleGeneratedChapterNarration() async {
+    if (_isNarrationStarting) return;
+    final message = _narrationMessage;
+    if (message == null) return;
+
+    final voiceState = ref.read(voiceChatControllerProvider);
+    final isPlaying =
+        voiceState.isPlaying || voiceState.phase == RealtimeVoicePhase.playing;
+    if (isPlaying) {
+      await _stopGeneratedChapterNarration(keepPaused: true);
+      return;
+    }
+
+    await _playGeneratedChapterNarration(message, ChatBubblePlayState.play);
+  }
+
+  void _syncNarrationOverlay(bool active) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!active) {
+        _removeNarrationOverlay();
+        return;
+      }
+
+      if (_narrationOverlayEntry != null && _narrationOverlayNeedsReinsert) {
+        _removeNarrationOverlay();
+      }
+
+      if (_narrationOverlayEntry == null) {
+        final overlay = Overlay.maybeOf(context, rootOverlay: true);
+        if (overlay == null) return;
+        _narrationOverlayNeedsReinsert = false;
+        _narrationOverlayEntry = OverlayEntry(builder: _buildNarrationOverlay);
+        overlay.insert(_narrationOverlayEntry!);
+      } else {
+        _narrationOverlayEntry?.markNeedsBuild();
+      }
+    });
+  }
+
+  Widget _buildNarrationOverlay(BuildContext overlayContext) {
+    return Consumer(
+      builder: (context, ref, _) {
+        if (!mounted || _narratingMessageId == null) {
+          return const SizedBox.shrink();
+        }
+        final voiceState = ref.watch(voiceChatControllerProvider);
+        final aiAudioLevelStream = ref
+            .read(voiceChatControllerProvider.notifier)
+            .aiAudioLevelStream;
+        final top = MediaQuery.of(context).padding.top + 22;
+        return Positioned(
+          top: top,
+          left: 18,
+          right: 18,
+          child: Material(
+            color: Colors.transparent,
+            child: _StoryNarrationVoiceBar(
+              levelStream: aiAudioLevelStream,
+              isLoading:
+                  _isNarrationStarting ||
+                  voiceState.isConnecting ||
+                  voiceState.isProcessing,
+              isPaused: _isNarrationPaused,
+              isPlaying:
+                  voiceState.isPlaying ||
+                  voiceState.phase == RealtimeVoicePhase.playing,
+              onTogglePlayback: () =>
+                  unawaited(_toggleGeneratedChapterNarration()),
+              onStop: () => unawaited(_stopGeneratedChapterNarration()),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _removeNarrationOverlay() {
+    _narrationOverlayEntry?.remove();
+    _narrationOverlayEntry = null;
+  }
+
+  String _narrationPrompt(String chapterText) {
+    return '''
+Read the following story chapter aloud exactly as written. Do not add commentary, introductions, labels, sound effects, or extra words.
+
+$chapterText
+''';
+  }
+
+  ChatBubblePlayState _chapterPlayState(
+    ChatMessageModel message,
+    VoiceChatState voiceState,
+  ) {
+    if (_narratingMessageId != message.id) return ChatBubblePlayState.play;
+    if (voiceState.isPlaying ||
+        voiceState.phase == RealtimeVoicePhase.playing) {
+      return ChatBubblePlayState.pause;
+    }
+    if (_isNarrationStarting ||
+        voiceState.isConnecting ||
+        voiceState.isProcessing ||
+        voiceState.phase == RealtimeVoicePhase.connecting ||
+        voiceState.phase == RealtimeVoicePhase.waitingForReady ||
+        voiceState.phase == RealtimeVoicePhase.processing) {
+      return ChatBubblePlayState.loading;
+    }
+    return ChatBubblePlayState.play;
+  }
+
   String _storyOptionsKey(List<_ParsedStoryOption> options) {
     return options.map((option) => option.displayText).join('|');
   }
@@ -5193,6 +5971,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   @override
   Widget build(BuildContext context) {
     final messages = _buildMessages();
+    final voiceState = ref.watch(voiceChatControllerProvider);
     final visibleMessages = messages.isEmpty && _isStartingTextSession
         ? <ChatMessageModel>[
             ChatMessageModel(
@@ -5266,8 +6045,10 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
             maxBottomPadding,
           )
         : fallbackBottomPadding;
+    final narrationActive = _narratingMessageId != null;
 
     _syncComposerHeight();
+    _syncNarrationOverlay(narrationActive);
 
     if (visibleMessages.length != _lastMessageCount) {
       _lastMessageCount = visibleMessages.length;
@@ -5336,6 +6117,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                   )
                   ? _messageWithoutTrailingQuestion(message)
                   : message;
+              final playState = _chapterPlayState(displayMessage, voiceState);
               return _AnimatedBubble(
                 key: ValueKey(message.id),
                 child: Column(
@@ -5355,6 +6137,16 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                           : _loadingLabelByMessageId[displayMessage.id] ??
                                 'Thinking…',
                       renderMarkdownBold: !displayMessage.isUser,
+                      showPlayIcon: _shouldShowGeneratedChapterPlayIcon(
+                        displayMessage,
+                      ),
+                      onPlayIcon: () => unawaited(
+                        _playGeneratedChapterNarration(
+                          displayMessage,
+                          playState,
+                        ),
+                      ),
+                      playState: playState,
                     ),
                   ],
                 ),
@@ -5615,6 +6407,277 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _StoryNarrationVoiceBar extends StatefulWidget {
+  const _StoryNarrationVoiceBar({
+    required this.levelStream,
+    required this.isLoading,
+    required this.isPaused,
+    required this.isPlaying,
+    required this.onTogglePlayback,
+    required this.onStop,
+  });
+
+  final Stream<double> levelStream;
+  final bool isLoading;
+  final bool isPaused;
+  final bool isPlaying;
+  final VoidCallback onTogglePlayback;
+  final VoidCallback onStop;
+
+  @override
+  State<_StoryNarrationVoiceBar> createState() =>
+      _StoryNarrationVoiceBarState();
+}
+
+class _StoryNarrationVoiceBarState extends State<_StoryNarrationVoiceBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final foreground = isDark ? Colors.white : Colors.black;
+    final surface = isDark
+        ? const Color(0xEB181818)
+        : Colors.white.withValues(alpha: 0.94);
+    final border = isDark
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.black.withValues(alpha: 0.08);
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(CupertinoIcons.waveform, color: foreground, size: 19),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 166,
+                  height: 30,
+                  child: widget.isLoading
+                      ? AnimatedBuilder(
+                          animation: _pulseController,
+                          builder: (context, _) {
+                            final opacity =
+                                0.58 + (_pulseController.value * 0.34);
+                            return Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Processing voice',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: foreground.withValues(alpha: opacity),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.1,
+                                ),
+                              ),
+                            );
+                          },
+                        )
+                      : widget.isPaused
+                      ? Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Paused',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: foreground.withValues(alpha: 0.72),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              height: 1.1,
+                            ),
+                          ),
+                        )
+                      : StreamBuilder<double>(
+                          stream: widget.levelStream,
+                          initialData: 0,
+                          builder: (context, snapshot) {
+                            final level = (snapshot.data ?? 0).clamp(0.0, 1.0);
+                            return _StoryNarrationWaveform(
+                              level: level,
+                              loadingPulse: 0,
+                              color: foreground,
+                            );
+                          },
+                        ),
+                ),
+                const SizedBox(width: 4),
+                _StoryNarrationIconButton(
+                  tooltip: widget.isPlaying ? 'Pause' : 'Play',
+                  onTap: widget.isLoading ? null : widget.onTogglePlayback,
+                  icon: widget.isPlaying
+                      ? CupertinoIcons.pause_fill
+                      : CupertinoIcons.play_fill,
+                  color: foreground,
+                ),
+                _StoryNarrationIconButton(
+                  tooltip: 'Close',
+                  onTap: widget.onStop,
+                  icon: CupertinoIcons.xmark,
+                  color: foreground,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StoryNarrationIconButton extends StatelessWidget {
+  const _StoryNarrationIconButton({
+    required this.tooltip,
+    required this.onTap,
+    required this.icon,
+    required this.color,
+  });
+
+  final String tooltip;
+  final VoidCallback? onTap;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 20,
+          child: SizedBox.square(
+            dimension: 34,
+            child: Center(
+              child: Icon(
+                icon,
+                color: color.withValues(alpha: enabled ? 0.9 : 0.35),
+                size: icon == CupertinoIcons.xmark ? 20 : 18,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StoryNarrationWaveform extends StatelessWidget {
+  const _StoryNarrationWaveform({
+    required this.level,
+    required this.loadingPulse,
+    required this.color,
+  });
+
+  final double level;
+  final double loadingPulse;
+  final Color color;
+
+  static const _weights = <double>[
+    0.18,
+    0.42,
+    0.72,
+    0.36,
+    0.58,
+    0.95,
+    0.46,
+    0.78,
+    0.52,
+    0.88,
+    0.34,
+    0.66,
+    0.24,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedLevel = (level * 5.5).clamp(0.0, 1.0);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (var i = 0; i < _weights.length; i++)
+          _StoryNarrationWaveBar(
+            heightFactor: _heightFactorFor(i, normalizedLevel),
+            color: color,
+          ),
+      ],
+    );
+  }
+
+  double _heightFactorFor(int index, double normalizedLevel) {
+    if (normalizedLevel <= 0.02) {
+      final phase = (loadingPulse + index / _weights.length) % 1.0;
+      final crest = math.sin(phase * math.pi);
+      return 0.16 + (crest * 0.22);
+    }
+
+    final weight = _weights[index];
+    final stagger = 0.72 + (math.sin(index * 1.7) * 0.18);
+    return (0.16 + normalizedLevel * weight * stagger).clamp(0.16, 1.0);
+  }
+}
+
+class _StoryNarrationWaveBar extends StatelessWidget {
+  const _StoryNarrationWaveBar({
+    required this.heightFactor,
+    required this.color,
+  });
+
+  final double heightFactor;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 95),
+      curve: Curves.easeOut,
+      width: 6,
+      height: 30 * heightFactor,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(999),
+      ),
     );
   }
 }

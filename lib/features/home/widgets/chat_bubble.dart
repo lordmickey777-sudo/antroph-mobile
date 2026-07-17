@@ -8,6 +8,8 @@ const _assistantBubbleDark = Color(0xFF1A1A1A);
 const _userBubbleLight = Color(0xFF111111);
 const _assistantBubbleLight = Color(0xFFF3F3F3);
 
+enum ChatBubblePlayState { play, loading, pause }
+
 class ChatBubble extends StatelessWidget {
   const ChatBubble({
     super.key,
@@ -16,6 +18,9 @@ class ChatBubble extends StatelessWidget {
     required this.maxWidth,
     this.renderMarkdownBold = false,
     this.loadingLabel = 'Thinking…',
+    this.showPlayIcon = false,
+    this.onPlayIcon,
+    this.playState = ChatBubblePlayState.play,
   });
 
   final ChatMessageModel message;
@@ -23,6 +28,9 @@ class ChatBubble extends StatelessWidget {
   final double maxWidth;
   final bool renderMarkdownBold;
   final String loadingLabel;
+  final bool showPlayIcon;
+  final VoidCallback? onPlayIcon;
+  final ChatBubblePlayState playState;
 
   @override
   Widget build(BuildContext context) {
@@ -57,41 +65,134 @@ class ChatBubble extends StatelessWidget {
           );
     final showsStatusOnly = isStreaming && message.message.trim().isEmpty;
 
+    final showEdgePlayIcon =
+        showPlayIcon &&
+        onPlayIcon != null &&
+        !message.isUser &&
+        !isStreaming &&
+        !showsStatusOnly;
+    final contentPadding = EdgeInsets.fromLTRB(
+      16,
+      13,
+      showEdgePlayIcon ? 42 : 16,
+      showEdgePlayIcon ? 24 : 13,
+    );
+    final bubble = Container(
+      decoration: BoxDecoration(color: bgColor, borderRadius: borderRadius),
+      padding: contentPadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!showsStatusOnly)
+            _BubbleText(
+              text: message.message,
+              renderMarkdownBold: renderMarkdownBold,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 15,
+                height: 1.45,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          if (showsStatusOnly)
+            _StreamingStatusLabel(loadingLabel, color: statusColor)
+          else if (isStreaming) ...[
+            const SizedBox(height: 8),
+            _StreamingStatusLabel(loadingLabel, color: statusColor),
+          ] else if (message.isPending || message.isFailed) ...[
+            const SizedBox(height: 8),
+            ChatStatusRow(message: message, onRetry: onRetry),
+          ],
+        ],
+      ),
+    );
+
     return Align(
       alignment: alignment,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
-        child: Container(
-          decoration: BoxDecoration(color: bgColor, borderRadius: borderRadius),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: Padding(
+          padding: showEdgePlayIcon
+              ? const EdgeInsets.only(right: 8, bottom: 10)
+              : EdgeInsets.zero,
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              if (!showsStatusOnly)
-                _BubbleText(
-                  text: message.message,
-                  renderMarkdownBold: renderMarkdownBold,
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 15,
-                    height: 1.45,
-                    fontWeight: FontWeight.w400,
-                  ),
+              bubble,
+              if (showEdgePlayIcon)
+                Positioned(
+                  right: -8,
+                  bottom: -10,
+                  child: _BubblePlayIcon(state: playState, onTap: onPlayIcon!),
                 ),
-              if (showsStatusOnly)
-                _StreamingStatusLabel(loadingLabel, color: statusColor)
-              else if (isStreaming) ...[
-                const SizedBox(height: 8),
-                _StreamingStatusLabel(loadingLabel, color: statusColor),
-              ] else if (message.isPending || message.isFailed) ...[
-                const SizedBox(height: 8),
-                ChatStatusRow(message: message, onRetry: onRetry),
-              ],
             ],
           ),
         ),
       ),
     );
+  }
+}
+
+class _BubblePlayIcon extends StatelessWidget {
+  const _BubblePlayIcon({required this.state, required this.onTap});
+
+  final ChatBubblePlayState state;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Play story narration',
+      child: Tooltip(
+        message: state == ChatBubblePlayState.pause
+            ? 'Pause narration'
+            : 'Play narration',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.24),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: SizedBox.square(
+              dimension: 38,
+              child: Center(child: _BubblePlayIconGlyph(state: state)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BubblePlayIconGlyph extends StatelessWidget {
+  const _BubblePlayIconGlyph({required this.state});
+
+  final ChatBubblePlayState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (state) {
+      ChatBubblePlayState.loading => const SizedBox.square(
+        dimension: 17,
+        child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.black),
+      ),
+      ChatBubblePlayState.pause => const Icon(
+        Icons.pause_rounded,
+        color: Colors.black,
+        size: 24,
+      ),
+      _ => const Icon(Icons.play_arrow_rounded, color: Colors.black, size: 25),
+    };
   }
 }
 
