@@ -1036,7 +1036,10 @@ class _QuizTranscriptItem {
           _turnHasChoiceKind(currentTurn, 'group_quiz_setup');
       final currentTurnItems = <_QuizTranscriptItem>[
         if (!hideCurrentSetupTurn) ...[
-          for (final text in _turnTexts(currentTurn))
+          for (final text in _turnTexts(
+            currentTurn,
+            includeGroupSetupPrompts: false,
+          ))
             _QuizTranscriptItem(
               kind: _QuizTranscriptItemKind.aiMessage,
               seq: currentTurn.seq,
@@ -1512,10 +1515,17 @@ class _QuizTranscriptItem {
     );
   }
 
-  static List<String> _turnTexts(InteractiveTurn turn) {
+  static List<String> _turnTexts(
+    InteractiveTurn turn, {
+    bool includeGroupSetupPrompts = true,
+  }) {
     final groupSetupStage = _groupSetupStage(turn);
     if (groupSetupStage != null) {
-      return _groupSetupTranscriptTexts(turn, groupSetupStage);
+      return _groupSetupTranscriptTexts(
+        turn,
+        groupSetupStage,
+        includePrompt: includeGroupSetupPrompts,
+      );
     }
     final hasExpandedRootTopicActions = turn.blocks
         .whereType<InteractiveChoiceGroupBlock>()
@@ -1563,20 +1573,28 @@ class _QuizTranscriptItem {
 
   static List<String> _groupSetupTranscriptTexts(
     InteractiveTurn turn,
-    String stage,
-  ) {
-    if (stage != 'question_source') return const <String>[];
+    String stage, {
+    required bool includePrompt,
+  }) {
     final texts = <String>[];
     for (final block in turn.blocks.whereType<InteractiveTextBlock>()) {
       final text = block.text.trim();
       if (text.isEmpty) continue;
+      if (stage != 'question_source') {
+        if (includePrompt) texts.add(text);
+        continue;
+      }
       final parts = text
           .split(RegExp(r'\n\s*\n'))
           .map((part) => part.trim())
           .where((part) => part.isNotEmpty)
           .toList();
-      if (parts.length <= 1) continue;
+      if (parts.length <= 1) {
+        if (includePrompt) texts.add(text);
+        continue;
+      }
       texts.add(parts.take(parts.length - 1).join('\n\n'));
+      if (includePrompt) texts.add(parts.last);
     }
     return texts;
   }

@@ -1482,6 +1482,196 @@ void main() {
     await _disposeQuizPage(tester);
   });
 
+  testWidgets('group setup trail keeps answered questions visible', (
+    tester,
+  ) async {
+    final sourceTurn = InteractiveTurn.fromJson({
+      'type': 'interactive_turn.v1',
+      'session_id': 'session-1',
+      'turn_id': 'group-source-turn',
+      'seq': 1,
+      'speaker': {'type': 'ai', 'role': 'host'},
+      'blocks': const [
+        {
+          'kind': 'text',
+          'text':
+              'Welcome in. Step into The Hot Seat.\n\nBefore we start, choose how this game should get its questions.',
+        },
+        {
+          'kind': 'choice_group',
+          'prompt': '',
+          'options': [
+            {'id': 'question_bank', 'label': 'Pick from story questions'},
+            {'id': 'random', 'label': 'Generate random questions'},
+          ],
+          'metadata': {
+            'choice_kind': 'group_quiz_setup',
+            'setup_stage': 'question_source',
+          },
+        },
+      ],
+      'input_requests': const [],
+      'state_patch': const {
+        'phase': 'group_setup',
+        'group_setup_stage': 'question_source',
+      },
+    });
+    final topicTurn = InteractiveTurn.fromJson({
+      'type': 'interactive_turn.v1',
+      'session_id': 'session-1',
+      'turn_id': 'group-topic-turn',
+      'seq': 3,
+      'speaker': {'type': 'ai', 'role': 'host'},
+      'blocks': const [
+        {
+          'kind': 'text',
+          'text': 'What topic or subject should the random questions focus on?',
+        },
+        {
+          'kind': 'choice_group',
+          'prompt': '',
+          'options': [
+            {'id': 'science', 'label': 'Science'},
+            {'id': 'any_topic', 'label': 'Any topic'},
+          ],
+          'metadata': {
+            'choice_kind': 'group_quiz_setup',
+            'setup_stage': 'topic_subject',
+          },
+        },
+      ],
+      'input_requests': const [],
+      'state_patch': const {
+        'phase': 'group_setup',
+        'group_setup_stage': 'topic_subject',
+      },
+    });
+    final countTurn = InteractiveTurn.fromJson({
+      'type': 'interactive_turn.v1',
+      'session_id': 'session-1',
+      'turn_id': 'group-count-turn',
+      'seq': 5,
+      'speaker': {'type': 'ai', 'role': 'host'},
+      'blocks': const [
+        {'kind': 'text', 'text': 'How many questions should this game have?'},
+        {
+          'kind': 'choice_group',
+          'prompt': '',
+          'options': [
+            {'id': '3', 'label': '3 questions'},
+            {'id': '4', 'label': '4 questions'},
+          ],
+          'metadata': {
+            'choice_kind': 'group_quiz_setup',
+            'setup_stage': 'question_count',
+          },
+        },
+      ],
+      'input_requests': const [],
+      'state_patch': const {
+        'phase': 'group_setup',
+        'group_setup_stage': 'question_count',
+      },
+    });
+    final base = _session(phase: 'generating_question', sessionType: 'group');
+    final repository = _QuizStoriesRepository(
+      session: base.copyWith(
+        currentTurn: null,
+        lastSeq: 6,
+        events: [
+          StorySessionEvent(
+            id: 'setup-turn-source',
+            sessionId: 'session-1',
+            seq: 1,
+            actorType: 'ai',
+            eventType: 'interactive_turn',
+            payload: sourceTurn.toJson(),
+          ),
+          const StorySessionEvent(
+            id: 'setup-choice-source',
+            sessionId: 'session-1',
+            seq: 2,
+            actorType: 'user',
+            actorUserId: 'host-user',
+            eventType: 'setup_choice_selected',
+            payload: {
+              'stage': 'question_source',
+              'option_id': 'question_bank',
+              'text': 'Pick from story questions',
+            },
+          ),
+          StorySessionEvent(
+            id: 'setup-turn-topic',
+            sessionId: 'session-1',
+            seq: 3,
+            actorType: 'ai',
+            eventType: 'interactive_turn',
+            payload: topicTurn.toJson(),
+          ),
+          const StorySessionEvent(
+            id: 'setup-choice-topic',
+            sessionId: 'session-1',
+            seq: 4,
+            actorType: 'user',
+            actorUserId: 'host-user',
+            eventType: 'setup_choice_selected',
+            payload: {
+              'stage': 'topic_subject',
+              'option_id': 'science',
+              'text': 'Science',
+            },
+          ),
+          StorySessionEvent(
+            id: 'setup-turn-count',
+            sessionId: 'session-1',
+            seq: 5,
+            actorType: 'ai',
+            eventType: 'interactive_turn',
+            payload: countTurn.toJson(),
+          ),
+          const StorySessionEvent(
+            id: 'setup-choice-count',
+            sessionId: 'session-1',
+            seq: 6,
+            actorType: 'user',
+            actorUserId: 'host-user',
+            eventType: 'setup_choice_selected',
+            payload: {
+              'stage': 'question_count',
+              'option_id': '3',
+              'text': '3 questions',
+            },
+          ),
+        ],
+        interactiveState: {
+          ...base.interactiveState,
+          'phase': 'generating_question',
+          'group_setup_stage': 'complete',
+        },
+      ),
+    );
+    await _pumpQuizPage(tester, repository: repository, userId: 'host-user');
+
+    expect(
+      find.text(
+        'Before we start, choose how this game should get its questions.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('What topic or subject should the random questions focus on?'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('How many questions should this game have?'),
+      findsOneWidget,
+    );
+    expect(find.text('Pick from story questions'), findsOneWidget);
+    expect(find.text('Science'), findsOneWidget);
+    expect(find.text('3 questions'), findsOneWidget);
+    await _disposeQuizPage(tester);
+  });
+
   testWidgets('group setup topic accepts typed subject', (tester) async {
     final turn = InteractiveTurn.fromJson({
       'type': 'interactive_turn.v1',
