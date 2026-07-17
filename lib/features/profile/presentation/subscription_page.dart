@@ -12,13 +12,13 @@ class SubscriptionPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final subscription = ref.watch(backendSubscriptionProvider);
-    final hasPro = subscription.maybeWhen(
+    final hasPaidAccess = subscription.maybeWhen(
       data: (value) => value.isActive,
       orElse: () => false,
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Aura Pro')),
+      appBar: AppBar(title: const Text('Aura Subscription')),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(backendSubscriptionProvider);
@@ -36,13 +36,13 @@ class SubscriptionPage extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              hasPro
+              hasPaidAccess
                   ? 'Your premium access is enabled on this account.'
                   : 'View available plans and pricing in the secure checkout.',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
             const SizedBox(height: 28),
-            if (!hasPro)
+            if (!hasPaidAccess)
               FilledButton(
                 onPressed: () => presentAuraProPaywall(context, ref),
                 child: const Padding(
@@ -50,7 +50,7 @@ class SubscriptionPage extends ConsumerWidget {
                   child: Text('View Plans'),
                 ),
               ),
-            if (hasPro)
+            if (hasPaidAccess)
               FilledButton(
                 onPressed: () => presentAuraCustomerCenter(context, ref),
                 child: const Padding(
@@ -66,7 +66,7 @@ class SubscriptionPage extends ConsumerWidget {
                 child: Text('Restore Purchases'),
               ),
             ),
-            if (!hasPro) ...[
+            if (!hasPaidAccess) ...[
               const SizedBox(height: 12),
               TextButton(
                 onPressed: () => presentAuraCustomerCenter(context, ref),
@@ -88,8 +88,9 @@ class _StatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final value = subscription.value;
-    final hasPro = value?.isActive ?? false;
+    final hasPaidAccess = value?.isActive ?? false;
     final expiration = value?.expiresAt;
+    final currentPlan = SubscriptionTier.displayName(value?.tier);
 
     return Card(
       child: Padding(
@@ -98,16 +99,17 @@ class _StatusCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              hasPro ? 'Pro active' : 'Free plan',
+              'Current Plan: $currentPlan',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 6),
             if (subscription.isLoading) const LinearProgressIndicator(),
             if (subscription.hasError)
               const Text('Could not refresh your subscription status.'),
-            if (hasPro && expiration != null)
+            if (hasPaidAccess && expiration != null)
               Text('Access through ${_displayDate(expiration)}'),
-            if (hasPro && expiration == null) const Text('Premium access'),
+            if (hasPaidAccess && expiration == null)
+              const Text('Premium access'),
             if (value?.isCancelledButActive == true)
               Text(
                 'Cancelled. Access remains until ${_displayDate(expiration)}.',

@@ -9,9 +9,14 @@ class SubscriptionRepository {
 
   final Dio _dio;
 
-  Future<SubscriptionStatus> getCurrentSubscription() async {
+  Future<SubscriptionStatus> getCurrentSubscription({
+    bool refresh = false,
+  }) async {
     try {
-      final response = await _dio.get('/subscriptions/me');
+      final response = await _dio.get(
+        '/subscriptions/me',
+        queryParameters: refresh ? const {'refresh': true} : null,
+      );
       return SubscriptionStatus.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (error) {
       throw ErrorFormatter.fromDio(error);

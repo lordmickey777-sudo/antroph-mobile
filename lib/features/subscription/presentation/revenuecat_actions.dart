@@ -4,7 +4,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
 import '../../../widgets/toast.dart';
+import '../models/subscription_models.dart';
 import '../providers/subscription_provider.dart';
+
+Future<bool> ensureAuraSubscriptionTier(
+  BuildContext context,
+  WidgetRef ref, {
+  String requiredTier = SubscriptionTier.starter,
+}) async {
+  final current = ref.read(backendSubscriptionProvider).asData?.value;
+  if (current != null && current.tierAtLeast(requiredTier)) {
+    return true;
+  }
+
+  final status = await _readBackendSubscription(ref);
+  if (status.tierAtLeast(requiredTier)) return true;
+  if (!context.mounted) return false;
+
+  final opened = await presentAuraProPaywall(context, ref);
+  if (!opened) return false;
+
+  final refreshed = await _readBackendSubscription(ref);
+  return refreshed.tierAtLeast(requiredTier);
+}
 
 Future<bool> presentAuraProPaywall(BuildContext context, WidgetRef ref) async {
   final service = ref.read(subscriptionServiceProvider);
@@ -19,12 +41,13 @@ Future<bool> presentAuraProPaywall(BuildContext context, WidgetRef ref) async {
     if (!context.mounted) return false;
     final result = await RevenueCatUI.presentPaywall(displayCloseButton: true);
     await ref.read(customerInfoProvider.notifier).refresh();
-    final hasAccess = await _refreshBackendSubscription(ref);
+    final status = await _refreshBackendSubscription(ref, force: true);
+    final hasAccess = status.isActive;
     if (!context.mounted) return hasAccess;
     if (result == PaywallResult.purchased ||
         result == PaywallResult.restored ||
         (result == PaywallResult.notPresented && hasAccess)) {
-      showToast(context, 'Aura by Antroph Pro is active.', success: true);
+      showToast(context, '${_tierName(status)} is active.', success: true);
     } else if (result == PaywallResult.error) {
       showToast(context, 'The purchase could not be completed.');
     }
@@ -73,12 +96,13 @@ Future<void> restoreAuraPurchases(BuildContext context, WidgetRef ref) async {
   try {
     final customerInfo = await service.restorePurchases();
     ref.read(customerInfoProvider.notifier).apply(customerInfo);
-    final hasAccess = await _refreshBackendSubscription(ref);
+    final status = await _refreshBackendSubscription(ref, force: true);
+    final hasAccess = status.isActive;
     if (!context.mounted) return;
     if (hasAccess) {
-      showToast(context, 'Aura by Antroph Pro restored.', success: true);
+      showToast(context, '${_tierName(status)} restored.', success: true);
     } else {
-      showToast(context, 'No active Aura Pro purchase was found.');
+      showToast(context, 'No active Aura subscription was found.');
     }
   } on PlatformException catch (error) {
     if (context.mounted) {
@@ -91,17 +115,33 @@ Future<void> restoreAuraPurchases(BuildContext context, WidgetRef ref) async {
   }
 }
 
-Future<bool> _refreshBackendSubscription(WidgetRef ref) async {
-  ref.invalidate(backendSubscriptionProvider);
+Future<SubscriptionStatus> _refreshBackendSubscription(
+  WidgetRef ref, {
+  bool force = false,
+}) async {
   try {
-    var status = await ref.read(backendSubscriptionProvider.future);
-    if (status.isActive) return true;
+    var status = await refreshBackendSubscription(
+      ref,
+      forceRevenueCatSync: force,
+    );
+    if (status.isActive) return status;
 
     await Future<void>.delayed(const Duration(seconds: 2));
-    ref.invalidate(backendSubscriptionProvider);
-    status = await ref.read(backendSubscriptionProvider.future);
-    return status.isActive;
+    status = await refreshBackendSubscription(ref, forceRevenueCatSync: force);
+    return status;
   } catch (_) {
-    return false;
+    return SubscriptionStatus.free();
   }
+}
+
+Future<SubscriptionStatus> _readBackendSubscription(WidgetRef ref) async {
+  try {
+    return await ref.read(backendSubscriptionProvider.future);
+  } catch (_) {
+    return SubscriptionStatus.free();
+  }
+}
+
+String _tierName(SubscriptionStatus status) {
+  return 'Aura ${SubscriptionTier.displayName(status.tier)}';
 }

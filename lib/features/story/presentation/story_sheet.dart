@@ -22,6 +22,7 @@ import 'package:antroph_mobile/features/story/data/stories_cache.dart';
 import 'package:antroph_mobile/features/story/models/mascot_model.dart';
 import 'package:antroph_mobile/features/story/presentation/solo_interactive_history_view.dart';
 import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
+import 'package:antroph_mobile/features/subscription/models/subscription_models.dart';
 import 'package:antroph_mobile/features/subscription/providers/subscription_provider.dart';
 import 'package:antroph_mobile/features/subscription/presentation/revenuecat_actions.dart';
 
@@ -288,7 +289,11 @@ class _StorySheetContentState extends ConsumerState<StorySheetContent> {
       return;
     }
 
-    final openStory = await presentAuraProPaywall(context, ref);
+    final openStory = await ensureAuraSubscriptionTier(
+      context,
+      ref,
+      requiredTier: SubscriptionTier.starter,
+    );
     if (openStory && mounted) await _navigateToChat();
   }
 

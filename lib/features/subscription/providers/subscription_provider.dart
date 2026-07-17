@@ -32,6 +32,47 @@ final backendSubscriptionProvider = FutureProvider<SubscriptionStatus>((
   return ref.read(subscriptionRepositoryProvider).getCurrentSubscription();
 });
 
+Future<SubscriptionStatus> refreshBackendSubscription(
+  dynamic ref, {
+  bool forceRevenueCatSync = false,
+}) async {
+  final status = await ref
+      .read(subscriptionRepositoryProvider)
+      .getCurrentSubscription(refresh: forceRevenueCatSync);
+  ref.invalidate(backendSubscriptionProvider);
+  return status;
+}
+
+final subscriptionTierProvider = Provider<AsyncValue<String>>((ref) {
+  return ref
+      .watch(backendSubscriptionProvider)
+      .whenData((status) => status.normalizedTier);
+});
+
+final subscriptionCapabilitiesProvider =
+    Provider<AsyncValue<SubscriptionCapabilities>>((ref) {
+      return ref
+          .watch(backendSubscriptionProvider)
+          .whenData((status) => status.capabilities);
+    });
+
+bool subscriptionStatusMeetsTier(
+  SubscriptionStatus status,
+  String requiredTier,
+) {
+  return status.tierAtLeast(requiredTier);
+}
+
+bool subscriptionValueMeetsTier(
+  AsyncValue<SubscriptionStatus> value,
+  String requiredTier,
+) {
+  return value.maybeWhen(
+    data: (status) => status.tierAtLeast(requiredTier),
+    orElse: () => false,
+  );
+}
+
 class CustomerInfoNotifier extends AsyncNotifier<CustomerInfo> {
   late final SubscriptionService _service;
   late final CustomerInfoUpdateListener _listener;
@@ -153,14 +194,15 @@ class PurchaseNotifier extends AsyncNotifier<void> {
   }
 
   Future<bool> _refreshBackendSubscriptionAfterStoreUpdate() async {
-    ref.invalidate(backendSubscriptionProvider);
     try {
-      var status = await ref.read(backendSubscriptionProvider.future);
+      var status = await refreshBackendSubscription(
+        ref,
+        forceRevenueCatSync: true,
+      );
       if (status.isActive) return true;
 
       await Future<void>.delayed(const Duration(seconds: 2));
-      ref.invalidate(backendSubscriptionProvider);
-      status = await ref.read(backendSubscriptionProvider.future);
+      status = await refreshBackendSubscription(ref, forceRevenueCatSync: true);
       return status.isActive;
     } catch (_) {
       return false;
