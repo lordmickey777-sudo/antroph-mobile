@@ -565,6 +565,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   bool _groupSetupPanelCollapsed = false;
   double _groupOptionPanelHeight = 0;
   bool _transcriptRevealInProgress = true;
+  Timer? _transcriptRevealGateTimer;
   bool _started = false;
   String? _lastGenerationFailureKey;
   String? _stickyGenerationError;
@@ -613,12 +614,26 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   }
 
   void _handleTranscriptRevealInProgressChanged(bool inProgress) {
-    if (_transcriptRevealInProgress == inProgress) return;
-    setState(() => _transcriptRevealInProgress = inProgress);
+    _transcriptRevealGateTimer?.cancel();
+    _transcriptRevealGateTimer = null;
+    if (inProgress) {
+      if (!_transcriptRevealInProgress) {
+        setState(() => _transcriptRevealInProgress = true);
+      }
+      _transcriptRevealGateTimer = Timer(const Duration(milliseconds: 300), () {
+        if (!mounted || !_transcriptRevealInProgress) return;
+        setState(() => _transcriptRevealInProgress = false);
+      });
+      return;
+    }
+    if (_transcriptRevealInProgress) {
+      setState(() => _transcriptRevealInProgress = false);
+    }
   }
 
   @override
   void dispose() {
+    _transcriptRevealGateTimer?.cancel();
     _textController.dispose();
     _textFocusNode.dispose();
     super.dispose();
@@ -4162,14 +4177,20 @@ bool _isGroupQuizManualAdvancePhase(InteractiveSessionState session) {
   final currentRound = (state['current_round'] as num?)?.toInt();
   final totalRounds = (state['total_rounds'] as num?)?.toInt() ?? 1;
   if (currentRound == null) return false;
-  return currentRound <= totalRounds;
+  return currentRound < totalRounds;
 }
 
 bool _isGroupQuizCompleted(InteractiveSessionState session) {
   if (session.interactiveState['session_type'] != 'group') return false;
   if (session.interactiveState['template'] != 'quiz') return false;
   final phase = session.interactiveState['phase'] as String? ?? '';
-  return phase == 'completed' || session.isCompleted;
+  if (phase == 'completed' || session.isCompleted) return true;
+  if (phase != 'showing_results') return false;
+  final currentRound = (session.interactiveState['current_round'] as num?)
+      ?.toInt();
+  final totalRounds =
+      (session.interactiveState['total_rounds'] as num?)?.toInt() ?? 1;
+  return currentRound != null && currentRound >= totalRounds;
 }
 
 class _GroupSetupChoice {

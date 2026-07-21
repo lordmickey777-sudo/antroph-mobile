@@ -1374,12 +1374,18 @@ class _QuizTranscriptItem {
         (session.interactiveState['session_type'] as String?) == 'group';
     final currentQuestionIdForReveal =
         stateQuestion?.questionId ?? liveQuiz?.questionId;
+    final hasRevealResult = currentQuestionIdForReveal == null
+        ? stateResult != null || resultQuestionIds.isNotEmpty
+        : resultQuestionIds.contains(currentQuestionIdForReveal);
     final waitingForGroupAnswerReveal =
         sessionType == 'group' &&
-        currentQuestionIdForReveal != null &&
-        !resultQuestionIds.contains(currentQuestionIdForReveal) &&
-        (_isAnsweredProgressComplete(items, currentQuestionIdForReveal) ||
-            phase == 'finalizing_question');
+        !hasRevealResult &&
+        (phase == 'finalizing_question' ||
+            (currentQuestionIdForReveal != null &&
+                _isAnsweredProgressComplete(
+                  items,
+                  currentQuestionIdForReveal,
+                )));
 
     if ((fetchingAnswer || waitingForGroupAnswerReveal) &&
         (items.isEmpty ||
@@ -1398,7 +1404,7 @@ class _QuizTranscriptItem {
             waitingAfterResult ||
             waitingForFinalResults ||
             waitingForPlayers ||
-            checkingAnswers) &&
+            (checkingAnswers && !waitingForGroupAnswerReveal)) &&
         (items.isEmpty || items.last.kind != _QuizTranscriptItemKind.status)) {
       final isGroupSession =
           (session.interactiveState['session_type'] as String?) == 'group';
