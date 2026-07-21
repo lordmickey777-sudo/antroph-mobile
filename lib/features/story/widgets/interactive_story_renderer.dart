@@ -40,6 +40,8 @@ class InteractiveStoryRenderer extends StatelessWidget {
     this.showSoloModeSwitch = false,
     this.showQuizTopicDecision = false,
     this.hideSoloOptionSuggestions = false,
+    this.suppressInternalOptionFooter = false,
+    this.onTranscriptRevealInProgressChanged,
     this.alignSoloOptionsRight = true,
     this.showAdvanceQuestionStatusAction = true,
     this.showAdvanceQuestionStatus = true,
@@ -70,6 +72,8 @@ class InteractiveStoryRenderer extends StatelessWidget {
   final bool showSoloModeSwitch;
   final bool showQuizTopicDecision;
   final bool hideSoloOptionSuggestions;
+  final bool suppressInternalOptionFooter;
+  final ValueChanged<bool>? onTranscriptRevealInProgressChanged;
   final bool alignSoloOptionsRight;
   final bool showAdvanceQuestionStatusAction;
   final bool showAdvanceQuestionStatus;
@@ -97,6 +101,9 @@ class InteractiveStoryRenderer extends StatelessWidget {
         showSoloModeSwitch: showSoloModeSwitch,
         showQuizTopicDecision: showQuizTopicDecision,
         hideSoloOptionSuggestions: hideSoloOptionSuggestions,
+        suppressInternalOptionFooter: suppressInternalOptionFooter,
+        onTranscriptRevealInProgressChanged:
+            onTranscriptRevealInProgressChanged,
         alignSoloOptionsRight: alignSoloOptionsRight,
         showAdvanceQuestionStatusAction: showAdvanceQuestionStatusAction,
         showAdvanceQuestionStatus: showAdvanceQuestionStatus,
@@ -238,6 +245,8 @@ class _QuizTranscriptView extends StatefulWidget {
     required this.showSoloModeSwitch,
     required this.showQuizTopicDecision,
     required this.hideSoloOptionSuggestions,
+    required this.suppressInternalOptionFooter,
+    this.onTranscriptRevealInProgressChanged,
     required this.alignSoloOptionsRight,
     required this.showAdvanceQuestionStatusAction,
     required this.showAdvanceQuestionStatus,
@@ -268,6 +277,8 @@ class _QuizTranscriptView extends StatefulWidget {
   final bool showSoloModeSwitch;
   final bool showQuizTopicDecision;
   final bool hideSoloOptionSuggestions;
+  final bool suppressInternalOptionFooter;
+  final ValueChanged<bool>? onTranscriptRevealInProgressChanged;
   final bool alignSoloOptionsRight;
   final bool showAdvanceQuestionStatusAction;
   final bool showAdvanceQuestionStatus;
@@ -297,6 +308,8 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
   int _lastPendingCount = 0;
   int _lastPendingKeyCount = 0;
   String _lastStreamingAssistantText = '';
+  bool _lastRevealInProgress = false;
+  bool _hasSyncedRevealState = false;
 
   @override
   void initState() {
@@ -350,7 +363,51 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
   }
 
   void _markTranscriptAnimationComplete(String id) {
-    _completedTranscriptAnimationIds.add(id);
+    if (!mounted) return;
+    setState(() => _completedTranscriptAnimationIds.add(id));
+  }
+
+  void _syncTranscriptRevealState(List<_QuizTranscriptItem> items) {
+    final revealInProgress = items.any(_shouldRevealBeforeOptions);
+    if (_hasSyncedRevealState && revealInProgress == _lastRevealInProgress) {
+      return;
+    }
+    _hasSyncedRevealState = true;
+    _lastRevealInProgress = revealInProgress;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onTranscriptRevealInProgressChanged?.call(revealInProgress);
+    });
+  }
+
+  bool _shouldRevealBeforeOptions(_QuizTranscriptItem item) {
+    if (widget.readOnly) return false;
+    if (item.kind != _QuizTranscriptItemKind.aiMessage) return false;
+    final animationId = _transcriptAnimationId(item);
+    if (_completedTranscriptAnimationIds.contains(animationId)) return false;
+    if (!_shouldAnimateTranscriptItem(item)) return false;
+    if (_sameTranscriptText(
+      item.statusTitle,
+      widget.recentStreamedAssistantText,
+    )) {
+      return false;
+    }
+    return true;
+  }
+
+  String _transcriptAnimationId(_QuizTranscriptItem item) {
+    final eventId = item.event?.id ?? '';
+    return '${item.kind.name}-${item.seq}-$eventId-${item.statusTitle ?? ''}';
+  }
+
+  bool _shouldAnimateTranscriptItem(_QuizTranscriptItem item) {
+    if (item.kind != _QuizTranscriptItemKind.aiMessage &&
+        item.kind != _QuizTranscriptItemKind.status) {
+      return false;
+    }
+    final eventSeq = item.event?.seq;
+    if (eventSeq != null) return eventSeq == widget.session.lastSeq;
+    return item.seq == widget.session.lastSeq;
   }
 
   @override
@@ -390,7 +447,7 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
           item.kind == _QuizTranscriptItemKind.timerSuggestions ||
           item.kind == _QuizTranscriptItemKind.persistentModeSuggestions ||
           item.kind == _QuizTranscriptItemKind.quizTopicDecisionSuggestions) {
-        if (widget.readOnly) continue;
+        if (widget.readOnly || widget.suppressInternalOptionFooter) continue;
         final isOptionSuggestion =
             item.kind == _QuizTranscriptItemKind.topicAspectSuggestions ||
             item.kind == _QuizTranscriptItemKind.topicPathActionSuggestions ||
@@ -436,6 +493,7 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
         bottomSuggestionItems.single.kind ==
             _QuizTranscriptItemKind.persistentModeSuggestions &&
         widget.soloViewMode?.trim().toLowerCase() == 'chat';
+    _syncTranscriptRevealState(transcriptItems);
     Widget buildRow(_QuizTranscriptItem item, {bool attachCallLink = true}) =>
         _QuizTranscriptRow(
           item: item,
@@ -1045,10 +1103,7 @@ class _QuizTranscriptItem {
           _turnHasChoiceKind(currentTurn, 'group_quiz_setup');
       final currentTurnItems = <_QuizTranscriptItem>[
         if (!hideCurrentSetupTurn) ...[
-          for (final text in _turnTexts(
-            currentTurn,
-            includeGroupSetupPrompts: false,
-          ))
+          for (final text in _turnTexts(currentTurn))
             _QuizTranscriptItem(
               kind: _QuizTranscriptItemKind.aiMessage,
               seq: currentTurn.seq,
@@ -1313,6 +1368,31 @@ class _QuizTranscriptItem {
         !session.isCompleted;
     final waitingForPlayers = phase == 'waiting_for_players';
     final checkingAnswers = phase == 'finalizing_question';
+    final fetchingAnswer =
+        phase == 'question_active' &&
+        isAdvancingQuestion &&
+        (session.interactiveState['session_type'] as String?) == 'group';
+    final currentQuestionIdForReveal =
+        stateQuestion?.questionId ?? liveQuiz?.questionId;
+    final waitingForGroupAnswerReveal =
+        sessionType == 'group' &&
+        currentQuestionIdForReveal != null &&
+        !resultQuestionIds.contains(currentQuestionIdForReveal) &&
+        (_isAnsweredProgressComplete(items, currentQuestionIdForReveal) ||
+            phase == 'finalizing_question');
+
+    if ((fetchingAnswer || waitingForGroupAnswerReveal) &&
+        (items.isEmpty ||
+            items.last.kind != _QuizTranscriptItemKind.pendingAssistant)) {
+      items.add(
+        _QuizTranscriptItem(
+          kind: _QuizTranscriptItemKind.pendingAssistant,
+          seq: session.lastSeq + 3,
+          statusTitle: 'Revealing answer...',
+          showLoading: true,
+        ),
+      );
+    }
 
     if ((waitingForQuestion ||
             waitingAfterResult ||
@@ -1402,7 +1482,9 @@ class _QuizTranscriptItem {
     final waitingForAssistant =
         pendingTextMessages.isNotEmpty ||
         pendingKeys.any(
-          (key) => key.contains('-text-') || key.contains('-option_select-'),
+          (key) =>
+              !_hasOptimisticAssistantTurnForKey(session, key) &&
+              (key.contains('-text-') || key.contains('-option_select-')),
         );
     if (liveAssistantText.isNotEmpty) {
       items.add(
@@ -1423,6 +1505,37 @@ class _QuizTranscriptItem {
     }
 
     return items;
+  }
+
+  static bool _isAnsweredProgressComplete(
+    List<_QuizTranscriptItem> items,
+    String questionId,
+  ) {
+    for (final item in items) {
+      if (item.kind != _QuizTranscriptItemKind.progress) continue;
+      final itemQuestionId = (item.result?['question_id'] as String?)?.trim();
+      if (itemQuestionId != null &&
+          itemQuestionId.isNotEmpty &&
+          itemQuestionId != questionId) {
+        continue;
+      }
+      final answered = (item.result?['answered_count'] as num?)?.toInt() ?? 0;
+      final eligible = (item.result?['eligible_count'] as num?)?.toInt() ?? 0;
+      if (eligible > 0 && answered >= eligible) return true;
+    }
+    return false;
+  }
+
+  static bool _hasOptimisticAssistantTurnForKey(
+    InteractiveSessionState session,
+    String clientId,
+  ) {
+    return session.events.any(
+      (event) =>
+          event.eventType == 'interactive_turn' &&
+          event.actorType == 'ai' &&
+          event.payload['client_id'] == clientId,
+    );
   }
 
   static void _addTopicPromptItems({
@@ -1652,8 +1765,27 @@ class _QuizTranscriptItem {
   }
 
   static String? _setupChoiceHostText(StorySessionEvent event) {
-    final text = event.payload['text']?.toString().trim();
+    final text = _friendlySetupChoiceText(
+      event.payload['text']?.toString().trim(),
+    );
     return text?.isNotEmpty == true ? text : null;
+  }
+
+  static String? _friendlySetupChoiceText(String? raw) {
+    if (raw == null || raw.isEmpty) return raw;
+    switch (raw.trim().toLowerCase()) {
+      case 'any_topic':
+        return 'Any topic';
+      case 'start_game':
+        return 'Start game';
+      case 'edit_setup':
+        return 'Edit setup';
+      case 'timed':
+        return 'Timed';
+      case 'untimed':
+        return 'Untimed';
+    }
+    return raw.replaceAll('_', ' ');
   }
 
   static String _effectiveTranscriptPhase({
@@ -3586,6 +3718,10 @@ List<String> _loadingLabelsForTitle(String? title) {
   }
   if (normalized.contains('checking')) {
     return const ['Checking answers...', 'Processing...'];
+  }
+  if (normalized.contains('fetching answer') ||
+      normalized.contains('revealing answer')) {
+    return const ['Revealing answer...', 'Processing...'];
   }
   if (normalized.contains('finding topic')) {
     return const ['Thinking...', 'Processing...'];

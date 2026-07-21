@@ -92,7 +92,7 @@ bool _isReadOnlyInteractiveSession(InteractiveSessionState session) {
 }
 
 class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
-  static const generationSlowThreshold = Duration(seconds: 15);
+  static const generationSlowThreshold = Duration(seconds: 30);
   static const _recoveryRequestTimeout = Duration(seconds: 7);
   static const _socketConnectTimeout = Duration(seconds: 6);
 
@@ -623,15 +623,12 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       optionId,
       key,
     );
-    final optimisticSession =
-        optimisticSetupEvent == null || state.session == null
-        ? state.session
-        : state.session!.copyWith(
-            events: [...state.session!.events, optimisticSetupEvent],
-            lastSeq: optimisticSetupEvent.seq > state.session!.lastSeq
-                ? optimisticSetupEvent.seq
-                : state.session!.lastSeq,
-          );
+    final optimisticSession = _sessionWithOptimisticGroupSetup(
+      state.session,
+      optionId,
+      key,
+      optimisticSetupEvent,
+    );
 
     state = state.copyWith(
       session: optimisticSession,
@@ -665,7 +662,9 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       if (_isDisposed) return;
       final current = state.session;
       if (current == null || current.sessionId != sessionId) return;
-      final mergedSession = _mergeResponseIntoSession(current, response);
+      final canonicalBase =
+          _sessionWithoutOptimisticEvent(current, key) ?? current;
+      final mergedSession = _mergeResponseIntoSession(canonicalBase, response);
       final streamedText = state.streamingAssistantText?.trim();
       state = state.copyWith(
         session: mergedSession,
@@ -732,14 +731,27 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     }
     final key =
         '${state.session?.currentTurn?.turnId ?? state.session?.lastSeq}-text-${DateTime.now().millisecondsSinceEpoch}';
-    final pendingMessage = PendingInteractiveTextMessage(
-      clientId: key,
-      text: trimmed,
+    final optimisticSetupEvent = _optimisticGroupSetupEvent(
+      state.session,
+      trimmed,
+      key,
+    );
+    final optimisticSession = _sessionWithOptimisticGroupSetup(
+      state.session,
+      trimmed,
+      key,
+      optimisticSetupEvent,
     );
 
     state = state.copyWith(
+      session: optimisticSession,
       pendingInputKeys: {...state.pendingInputKeys, key},
-      pendingTextMessages: [...state.pendingTextMessages, pendingMessage],
+      pendingTextMessages: optimisticSetupEvent == null
+          ? [
+              ...state.pendingTextMessages,
+              PendingInteractiveTextMessage(clientId: key, text: trimmed),
+            ]
+          : state.pendingTextMessages,
       streamingAssistantText: null,
       recentStreamedAssistantText: null,
       error: null,
@@ -763,7 +775,9 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       if (_isDisposed) return;
       final current = state.session;
       if (current == null || current.sessionId != sessionId) return;
-      final mergedSession = _mergeResponseIntoSession(current, response);
+      final canonicalBase =
+          _sessionWithoutOptimisticEvent(current, key) ?? current;
+      final mergedSession = _mergeResponseIntoSession(canonicalBase, response);
       final streamedText = state.streamingAssistantText?.trim();
       state = state.copyWith(
         session: mergedSession,
@@ -781,6 +795,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       state = state.copyWith(
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
         pendingTextMessages: _pendingTextMessagesExcluding(key),
+        session: _sessionWithoutOptimisticEvent(state.session, key),
         streamingAssistantText: null,
         error: e.message,
       );
@@ -789,6 +804,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       state = state.copyWith(
         pendingInputKeys: {...state.pendingInputKeys}..remove(key),
         pendingTextMessages: _pendingTextMessagesExcluding(key),
+        session: _sessionWithoutOptimisticEvent(state.session, key),
         streamingAssistantText: null,
         error: '$e',
       );
@@ -1512,6 +1528,252 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     );
   }
 
+  InteractiveSessionState? _sessionWithOptimisticGroupSetup(
+    InteractiveSessionState? session,
+    String optionId,
+    String clientId,
+    StorySessionEvent? setupEvent,
+  ) {
+    if (session == null || setupEvent == null) return session;
+    final aiEvent = _optimisticGroupSetupAiEvent(
+      session,
+      optionId,
+      clientId,
+      setupEvent.seq + 1,
+    );
+    final events = [...session.events, setupEvent];
+    var lastSeq = setupEvent.seq > session.lastSeq
+        ? setupEvent.seq
+        : session.lastSeq;
+    var interactiveState = session.interactiveState;
+    InteractiveTurn? currentTurn = session.currentTurn;
+    if (aiEvent != null) {
+      events.add(aiEvent);
+      lastSeq = aiEvent.seq > lastSeq ? aiEvent.seq : lastSeq;
+      final optimisticTurn = InteractiveTurn.fromJson(aiEvent.payload);
+      currentTurn = optimisticTurn;
+      interactiveState = {
+        ...interactiveState,
+        ...optimisticTurn.statePatch,
+        'current_turn_id': optimisticTurn.turnId,
+      };
+    }
+    return session.copyWith(
+      interactiveState: interactiveState,
+      events: events,
+      currentTurn: currentTurn,
+      lastSeq: lastSeq,
+    );
+  }
+
+  StorySessionEvent? _optimisticGroupSetupAiEvent(
+    InteractiveSessionState session,
+    String optionId,
+    String clientId,
+    int seq,
+  ) {
+    final interactiveState = session.interactiveState;
+    final stage =
+        interactiveState['group_setup_stage']?.toString().trim() ??
+        'topic_subject';
+    final normalized = optionId.trim().toLowerCase();
+    final displayText = _setupOptionDisplayText(session.currentTurn, optionId);
+    List<InteractiveBlock> blocks;
+    Map<String, dynamic> statePatch;
+    if (stage == 'topic_subject') {
+      final selectedTopic = normalized == 'any_topic'
+          ? 'Any topic'
+          : displayText;
+      blocks = [
+        InteractiveTextBlock(text: 'Great, we will focus on $selectedTopic.'),
+        const InteractiveTextBlock(
+          text: 'Should this group quiz be timed or untimed?',
+        ),
+        _optimisticGroupSetupChoiceBlock('round_timer', session.currentTurn),
+      ];
+      statePatch = {
+        'phase': 'group_setup',
+        'group_setup_stage': 'round_timer',
+        'selected_topic': selectedTopic,
+      };
+    } else if (stage == 'round_timer') {
+      final timerEnabled = normalized == 'timed' || normalized == 'timer';
+      final label = timerEnabled ? 'Timed' : 'Untimed';
+      blocks = [
+        InteractiveTextBlock(text: '$label it is.'),
+        const InteractiveTextBlock(
+          text: 'How many questions should this quiz have?',
+        ),
+        _optimisticGroupSetupChoiceBlock('question_count', session.currentTurn),
+      ];
+      statePatch = {
+        'phase': 'group_setup',
+        'group_setup_stage': 'question_count',
+        'quiz_timer_enabled': timerEnabled,
+      };
+    } else if (stage == 'question_count') {
+      final questionCount = _setupQuestionCount(optionId);
+      if (questionCount == null) return null;
+      blocks = [
+        InteractiveTextBlock(
+          text:
+              '$questionCount questions it is. Here is the game setup before we start.',
+        ),
+        InteractiveTextBlock(
+          text: _optimisticGroupSetupSummary({
+            ...interactiveState,
+            'total_rounds': questionCount,
+          }),
+        ),
+        _optimisticGroupSetupChoiceBlock('review', session.currentTurn),
+      ];
+      statePatch = {
+        ...interactiveState,
+        'phase': 'group_setup',
+        'group_setup_stage': 'review',
+        'total_rounds': questionCount,
+      };
+    } else if (stage == 'review') {
+      if (normalized == 'edit_setup' || normalized == 'edit') {
+        blocks = [
+          const InteractiveTextBlock(
+            text: "No problem. Let's update the setup.",
+          ),
+          const InteractiveTextBlock(
+            text: 'What topic should this group quiz focus on?',
+          ),
+          _optimisticGroupSetupChoiceBlock(
+            'topic_subject',
+            session.currentTurn,
+          ),
+        ];
+        statePatch = {
+          ...interactiveState,
+          'phase': 'group_setup',
+          'group_setup_stage': 'topic_subject',
+          'selected_topic': null,
+          'quiz_timer_enabled': null,
+          'total_rounds': null,
+          'quiz_setup_complete': false,
+        };
+      } else {
+        blocks = [
+          const InteractiveTextBlock(
+            text: 'Perfect. Give me a second to line up the first question.',
+          ),
+        ];
+        statePatch = {
+          ...interactiveState,
+          'phase': 'generating_question',
+          'group_setup_stage': 'complete',
+          'quiz_setup_complete': true,
+          'current_question_id': null,
+          'eligible_participant_ids': const <String>[],
+          'answered_participant_ids': const <String>[],
+          'expires_at': null,
+          'question': null,
+          'result': null,
+          'generation_error': null,
+          'generation_requested_at': DateTime.now().toUtc().toIso8601String(),
+        };
+      }
+    } else {
+      return null;
+    }
+
+    final turn = InteractiveTurn(
+      type: 'interactive_turn.v1',
+      sessionId: session.sessionId,
+      turnId: 'local-$clientId-ai',
+      seq: seq,
+      speaker: InteractiveSpeaker(
+        role: session.aiRole,
+        displayName: session.aiRole,
+      ),
+      blocks: blocks,
+      statePatch: statePatch,
+    );
+    return StorySessionEvent(
+      id: 'local-$clientId-ai-event',
+      sessionId: session.sessionId,
+      seq: seq,
+      actorType: 'ai',
+      eventType: 'interactive_turn',
+      payload: {...turn.toJson(), 'client_id': clientId},
+    );
+  }
+
+  static InteractiveChoiceGroupBlock _optimisticGroupSetupChoiceBlock(
+    String stage,
+    InteractiveTurn? currentTurn,
+  ) {
+    if (stage == 'round_timer') {
+      return const InteractiveChoiceGroupBlock(
+        prompt: 'Should this group quiz be timed?',
+        options: [
+          InteractiveOption(id: 'timed', label: 'Timed'),
+          InteractiveOption(id: 'untimed', label: 'Untimed'),
+        ],
+        metadata: {
+          'choice_kind': 'group_quiz_setup',
+          'setup_stage': 'round_timer',
+        },
+      );
+    }
+    if (stage == 'question_count') {
+      return const InteractiveChoiceGroupBlock(
+        prompt: 'How many questions should this quiz have?',
+        options: [
+          InteractiveOption(id: '5', label: '5 questions'),
+          InteractiveOption(id: '10', label: '10 questions'),
+          InteractiveOption(id: '15', label: '15 questions'),
+        ],
+        metadata: {
+          'choice_kind': 'group_quiz_setup',
+          'setup_stage': 'question_count',
+        },
+      );
+    }
+    if (stage == 'review') {
+      return const InteractiveChoiceGroupBlock(
+        prompt: 'Ready to start?',
+        options: [
+          InteractiveOption(id: 'start_game', label: 'Start game'),
+          InteractiveOption(id: 'edit_setup', label: 'Edit setup'),
+        ],
+        metadata: {'choice_kind': 'group_quiz_setup', 'setup_stage': 'review'},
+      );
+    }
+    for (final block in currentTurn?.blocks ?? const <InteractiveBlock>[]) {
+      if (block is InteractiveChoiceGroupBlock &&
+          block.metadata['choice_kind'] == 'group_quiz_setup') {
+        return block;
+      }
+    }
+    return const InteractiveChoiceGroupBlock(
+      prompt: 'What topic should this group quiz focus on?',
+      options: [InteractiveOption(id: 'any_topic', label: 'Any topic')],
+      metadata: {
+        'choice_kind': 'group_quiz_setup',
+        'setup_stage': 'topic_subject',
+      },
+    );
+  }
+
+  String _optimisticGroupSetupSummary(Map<String, dynamic> state) {
+    final topic = state['selected_topic']?.toString().trim().isNotEmpty == true
+        ? state['selected_topic'].toString().trim()
+        : 'Any topic';
+    final mode = state['quiz_timer_enabled'] == true ? 'Timed' : 'Untimed';
+    final count = _setupQuestionCount(state['total_rounds']?.toString() ?? '');
+    final total = count ?? 5;
+    final questionLabel = total == 1 ? 'question' : 'questions';
+    return 'Game setup summary:\n'
+        'Topic: $topic\n'
+        'Mode: $mode\n'
+        'Length: $total $questionLabel';
+  }
+
   String _setupOptionDisplayText(InteractiveTurn? turn, String optionId) {
     for (final block in turn?.blocks ?? const <InteractiveBlock>[]) {
       if (block is! InteractiveChoiceGroupBlock) continue;
@@ -1523,6 +1785,14 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
       }
     }
     return optionId.replaceAll('_', ' ');
+  }
+
+  int? _setupQuestionCount(String optionId) {
+    final digits = RegExp(r'\d+').stringMatch(optionId);
+    if (digits == null) return null;
+    final parsed = int.tryParse(digits);
+    if (parsed == null) return null;
+    return parsed.clamp(1, 20);
   }
 
   String _setupParticipantText({
@@ -1561,16 +1831,69 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     String clientId,
   ) {
     if (session == null) return null;
+    final removedEvents = session.events
+        .where((event) => event.payload['client_id'] == clientId)
+        .toList(growable: false);
     final nextEvents = session.events
         .where((event) => event.payload['client_id'] != clientId)
         .toList(growable: false);
     if (nextEvents.length == session.events.length) return session;
-    final currentTurnSeq = session.currentTurn?.seq ?? 0;
+    final newestTurn = _newestInteractiveTurn(nextEvents);
     final lastSeq = nextEvents.fold<int>(
-      currentTurnSeq,
+      0,
       (maxSeq, event) => event.seq > maxSeq ? event.seq : maxSeq,
     );
-    return session.copyWith(events: nextEvents, lastSeq: lastSeq);
+    final nextState = Map<String, dynamic>.from(session.interactiveState);
+    String? setupStage;
+    for (final event in removedEvents) {
+      if (event.eventType != 'setup_choice_selected') continue;
+      final stage = event.payload['stage']?.toString().trim();
+      if (stage == null || stage.isEmpty) continue;
+      setupStage = stage;
+      break;
+    }
+    if (setupStage != null) {
+      nextState
+        ..['phase'] = 'group_setup'
+        ..['group_setup_stage'] = setupStage
+        ..['current_turn_id'] = newestTurn?.turnId;
+      if (setupStage == 'topic_subject') {
+        nextState
+          ..remove('selected_topic')
+          ..remove('quiz_timer_enabled')
+          ..remove('total_rounds')
+          ..remove('quiz_setup_complete');
+      } else if (setupStage == 'round_timer') {
+        nextState
+          ..remove('quiz_timer_enabled')
+          ..remove('total_rounds')
+          ..remove('quiz_setup_complete');
+      } else if (setupStage == 'question_count') {
+        nextState
+          ..remove('total_rounds')
+          ..remove('quiz_setup_complete');
+      }
+    }
+    return session.copyWith(
+      interactiveState: nextState,
+      events: nextEvents,
+      currentTurn: newestTurn,
+      lastSeq: lastSeq,
+    );
+  }
+
+  InteractiveTurn? _newestInteractiveTurn(List<StorySessionEvent> events) {
+    InteractiveTurn? newest;
+    for (final event in events) {
+      if (event.eventType != 'interactive_turn') continue;
+      try {
+        final turn = InteractiveTurn.fromJson(event.payload);
+        if (newest == null || turn.seq > newest.seq) newest = turn;
+      } catch (_) {
+        // Ignore malformed local/cached events.
+      }
+    }
+    return newest;
   }
 
   bool _isOlderSessionSnapshot(InteractiveSessionState incoming) {

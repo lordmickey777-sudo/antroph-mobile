@@ -564,6 +564,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   bool _groupCompletedPanelCollapsed = true;
   bool _groupSetupPanelCollapsed = false;
   double _groupOptionPanelHeight = 0;
+  bool _transcriptRevealInProgress = true;
   bool _started = false;
   String? _lastGenerationFailureKey;
   String? _stickyGenerationError;
@@ -611,6 +612,11 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     });
   }
 
+  void _handleTranscriptRevealInProgressChanged(bool inProgress) {
+    if (_transcriptRevealInProgress == inProgress) return;
+    setState(() => _transcriptRevealInProgress = inProgress);
+  }
+
   @override
   void dispose() {
     _textController.dispose();
@@ -643,15 +649,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
       return;
     }
     if (widget.interactionMode == 'group') {
-      setState(() => _soloEntryView = _SoloEntryView.session);
-      unawaited(
-        ref
-            .read(interactiveStoryProvider.notifier)
-            .start(
-              storyId: widget.storyId,
-              interactionMode: widget.interactionMode,
-            ),
-      );
+      unawaited(_startGroupSession());
       return;
     }
     if (widget.soloStartFreshOnLaunch) {
@@ -673,6 +671,31 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         honorPreferredSession: !widget.soloOpenHistoryOnLaunch,
       ),
     );
+  }
+
+  Future<void> _startGroupSession() async {
+    if (_soloEntryBusy) return;
+    final requestSerial = ++_soloEntryRequestSerial;
+    final startedAt = DateTime.now();
+    setState(() {
+      _soloEntryView = _SoloEntryView.session;
+      _soloEntryBusy = true;
+      _soloEntryError = null;
+    });
+    await ref
+        .read(interactiveStoryProvider.notifier)
+        .start(
+          storyId: widget.storyId,
+          interactionMode: widget.interactionMode,
+          startFresh: true,
+        );
+    final elapsed = DateTime.now().difference(startedAt);
+    const minimumVisibleLoading = Duration(milliseconds: 1200);
+    if (elapsed < minimumVisibleLoading) {
+      await Future<void>.delayed(minimumVisibleLoading - elapsed);
+    }
+    if (!mounted || requestSerial != _soloEntryRequestSerial) return;
+    setState(() => _soloEntryBusy = false);
   }
 
   SoloInteractiveSessionSummary? get _latestResumableSoloSession {
@@ -1006,12 +1029,11 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     if (text.isEmpty) return;
     final state = session?.interactiveState ?? const <String, dynamic>{};
     final isCustomTopicSubmission =
-        state['session_type'] == 'solo' &&
-        state['phase'] == 'topic_selection' &&
-        _customTopicEntryEnabled;
-    final customAspectMetadata =
-        isCustomTopicSubmission && _customAspectEntryEnabled
-        ? _customAspectExpectationMetadata()
+        state['session_type'] == 'solo' && state['phase'] == 'topic_selection';
+    final isCustomAspectSubmission =
+        isCustomTopicSubmission && state['topic_selection_stage'] == 'aspect';
+    final customAspectMetadata = isCustomAspectSubmission
+        ? _customAspectExpectationMetadata(state)
         : const <String, dynamic>{};
     _textController.clear();
     if (isCustomTopicSubmission) _resetCustomTopicEntry();
@@ -1053,6 +1075,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
       return true;
     }
     if (sessionType != 'solo') return false;
+    if (phase == 'topic_selection') return true;
     if (_hasCompletedSoloQuizSetup(session) &&
         _shouldShowSoloModeSwitch(session) &&
         _effectiveSoloViewMode(session) == 'chat' &&
@@ -1060,9 +1083,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
       return true;
     }
     if (phase == 'discussion') return true;
-    return phase == 'topic_selection' &&
-        _customTopicEntryEnabled &&
-        _customTopicSessionId == session.sessionId;
+    return false;
   }
 
   bool _isAspectSelectionStage(InteractiveSessionState? session) {
@@ -1406,14 +1427,19 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     }
   }
 
-  Map<String, dynamic> _customAspectExpectationMetadata() {
-    final revision = _customAspectRevision?.trim();
-    if (revision == null || revision.isEmpty || _customAspectPath.isEmpty) {
+  Map<String, dynamic> _customAspectExpectationMetadata(
+    Map<String, dynamic> interactiveState,
+  ) {
+    final revision = interactiveState['topic_aspect_revision']
+        ?.toString()
+        .trim();
+    final path = _topicPathSnapshot(interactiveState);
+    if (revision == null || revision.isEmpty || path.isEmpty) {
       return const <String, dynamic>{};
     }
     return <String, dynamic>{
       'expected_revision': revision,
-      'expected_topic_path': [..._customAspectPath],
+      'expected_topic_path': path,
     };
   }
 
@@ -1495,6 +1521,8 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     final currentUserId = ref.watch(authControllerProvider).value?.id;
     final notifier = ref.read(interactiveStoryProvider.notifier);
     final session = state.session;
+    final showLoadingShell =
+        _soloEntryBusy || state.isLoading || session == null;
     if (widget.isLeavingGame) {
       return const SizedBox.expand();
     }
@@ -1659,15 +1687,16 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         isGroupQuizSession &&
         (phase == 'generation_failed' || state.isRetryingGeneration);
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final sessionReadyForOptions = !showLoadingShell;
     final canHostAdvanceGroupQuiz =
-        session != null &&
+        sessionReadyForOptions &&
         isGroupQuizSession &&
         _canCurrentUserHostGroupQuiz(session, currentUserId) &&
         _isGroupQuizManualAdvancePhase(session);
     final groupSetupChoice = session != null && isGroupQuizSession
         ? _activeGroupSetupChoice(session)
         : null;
-    final soloOptionChoice = session != null && isSoloQuizSession
+    final soloOptionChoice = sessionReadyForOptions && isSoloQuizSession
         ? _activeSoloOptionChoice(
             session: session,
             hasPendingBottomChoice: hasPendingBottomChoice,
@@ -1678,7 +1707,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
           )
         : null;
     final canHostSetupGroupQuiz =
-        session != null &&
+        sessionReadyForOptions &&
         isGroupQuizSession &&
         groupSetupChoice != null &&
         _canCurrentUserHostGroupQuiz(session, currentUserId);
@@ -1697,13 +1726,23 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         _textFocusNode.hasFocus &&
         keyboardHeight > 0;
     final showGroupCompletedOptions =
-        session != null && isGroupQuizSession && _isGroupQuizCompleted(session);
-    final showSoloOptionPanel =
+        sessionReadyForOptions &&
+        isGroupQuizSession &&
+        _isGroupQuizCompleted(session);
+    final rawShowSoloOptionPanel =
         soloOptionChoice != null && !hasPendingBottomChoice;
-    final showGroupOptionPanel =
+    final rawShowGroupOptionPanel =
         showGroupCompletedOptions ||
         showGroupHostAdvanceOptions ||
         showGroupSetupOptions;
+    final rawShowAnyOptionPanel =
+        rawShowGroupOptionPanel || rawShowSoloOptionPanel;
+    final blockOptionPanelForReveal =
+        rawShowAnyOptionPanel && _transcriptRevealInProgress;
+    final showSoloOptionPanel =
+        rawShowSoloOptionPanel && !blockOptionPanelForReveal;
+    final showGroupOptionPanel =
+        rawShowGroupOptionPanel && !blockOptionPanelForReveal;
     final showAnyOptionPanel = showGroupOptionPanel || showSoloOptionPanel;
     final fallbackGroupOptionPanelPadding = showGroupCompletedOptions
         ? (_groupCompletedPanelCollapsed ? 118.0 : 250.0)
@@ -1735,7 +1774,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         : const Color(0xFFF3F3F3);
     final mutedText = isDark ? Colors.white60 : Colors.black54;
 
-    _syncGroupOptionPanelHeight(showAnyOptionPanel);
+    _syncGroupOptionPanelHeight(showAnyOptionPanel && !showLoadingShell);
 
     return Stack(
       clipBehavior: Clip.none,
@@ -1744,7 +1783,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
           children: [
             if (isReadOnlyHistory) const SoloHistoryReadOnlyBanner(),
             Expanded(
-              child: state.isLoading || session == null
+              child: showLoadingShell
                   ? _StorySessionLoadingShell(
                       title:
                           widget.launchMode ==
@@ -1768,6 +1807,9 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                         showSoloModeSwitch: showSoloModeSwitch,
                         showQuizTopicDecision: showQuizTopicDecision,
                         hideSoloOptionSuggestions: isSoloQuizSession,
+                        suppressInternalOptionFooter: rawShowAnyOptionPanel,
+                        onTranscriptRevealInProgressChanged:
+                            _handleTranscriptRevealInProgressChanged,
                         alignSoloOptionsRight: !showTextComposer,
                         showAdvanceQuestionStatusAction:
                             !showGroupHostAdvanceOptions,
@@ -1912,7 +1954,9 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
               ),
           ],
         ),
-        if (showGroupHostAdvanceOptions && !isReadOnlyHistory)
+        if (!showLoadingShell &&
+            showGroupHostAdvanceOptions &&
+            !isReadOnlyHistory)
           Positioned(
             left: 0,
             right: 0,
@@ -1949,7 +1993,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
               ),
             ),
           ),
-        if (showGroupSetupOptions && !isReadOnlyHistory)
+        if (!showLoadingShell && showGroupSetupOptions && !isReadOnlyHistory)
           Positioned(
             left: 0,
             right: 0,
@@ -1962,7 +2006,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                 key: _groupOptionPanelKey,
                 width: double.infinity,
                 child: _GroupSetupOptionPanel(
-                  title: groupSetupChoice.prompt,
+                  title: '',
                   options: groupSetupChoice.options,
                   collapsed: _groupSetupPanelCollapsed,
                   disabled: disableQuizGameControls,
@@ -1985,7 +2029,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
               ),
             ),
           ),
-        if (showSoloOptionPanel && !isReadOnlyHistory)
+        if (!showLoadingShell && showSoloOptionPanel && !isReadOnlyHistory)
           Positioned(
             left: 0,
             right: 0,
@@ -2035,7 +2079,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
               ),
             ),
           ),
-        if (showGroupFocusedComposer && !isReadOnlyHistory)
+        if (!showLoadingShell && showGroupFocusedComposer && !isReadOnlyHistory)
           Positioned(
             left: 0,
             right: 0,
@@ -2058,7 +2102,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
               ),
             ),
           ),
-        if (showGroupCompletedOptions)
+        if (!showLoadingShell && showGroupCompletedOptions)
           Positioned(
             left: 0,
             right: 0,
@@ -2102,7 +2146,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
               ),
             ),
           ),
-        if (floatSoloChoiceCall && !showSoloOptionPanel)
+        if (!showLoadingShell && floatSoloChoiceCall && !showSoloOptionPanel)
           CompositedTransformFollower(
             link: _customTopicCallLink,
             showWhenUnlinked: false,
@@ -3640,7 +3684,9 @@ _GroupSetupChoice? _activeGroupSetupChoice(InteractiveSessionState session) {
           );
     return _GroupSetupChoice(
       prompt: prompt.isEmpty ? 'Set up this game' : prompt,
-      options: block.options,
+      options: block.options
+          .where((option) => option.id.trim().toLowerCase() != 'custom_topic')
+          .toList(growable: false),
       allowTextInput: state['group_setup_stage'] == 'topic_subject',
       inputHint: state['group_setup_stage'] == 'topic_subject'
           ? 'Type a topic or subject'
@@ -3719,6 +3765,7 @@ _GroupSetupChoice? _activeSoloOptionChoice({
 
   if (state['phase'] == 'topic_selection' &&
       state['topic_selection_stage'] != 'aspect') {
+    if (!_soloRootTopicPromptReady(state)) return null;
     final options = _soloTopicPanelOptions(
       state['pending_topic_options'],
       state['topic_suggestions'],
@@ -3867,6 +3914,19 @@ String? _soloPanelOptionKeyPrefix(String choiceKind) {
     'solo_quiz_timer' => 'timer-suggestion',
     _ => null,
   };
+}
+
+bool _soloRootTopicPromptReady(Map<String, dynamic> state) {
+  final status = state['topic_prompt_status']?.toString().trim().toLowerCase();
+  final prompt = state['topic_prompt']?.toString().trim();
+  if (status != null && status != 'ready') return false;
+  if (prompt == null || prompt.isEmpty) return false;
+  final normalizedPrompt = prompt.toLowerCase();
+  if (normalizedPrompt == 'connecting...' ||
+      normalizedPrompt == 'preparing room...') {
+    return false;
+  }
+  return true;
 }
 
 List<InteractiveOption> _soloTopicPanelOptions(
@@ -4094,8 +4154,11 @@ bool _isGroupQuizManualAdvancePhase(InteractiveSessionState session) {
   if (state['session_type'] != 'group') return false;
   if (state['template'] != 'quiz') return false;
   final phase = state['phase'] as String? ?? '';
-  if (phase != 'showing_results') return false;
   if (session.isCompleted) return false;
+  if (phase == 'question_active') {
+    return state['quiz_timer_enabled'] != true;
+  }
+  if (phase != 'showing_results') return false;
   final currentRound = (state['current_round'] as num?)?.toInt();
   final totalRounds = (state['total_rounds'] as num?)?.toInt() ?? 1;
   if (currentRound == null) return false;
@@ -4129,6 +4192,10 @@ class _GroupSetupChoice {
 
 String _groupHostAdvancePanelTitle(InteractiveSessionState session) {
   final state = session.interactiveState;
+  if (state['phase'] == 'question_active' &&
+      state['quiz_timer_enabled'] != true) {
+    return 'Reveal the answer';
+  }
   final currentRound = (state['current_round'] as num?)?.toInt();
   final totalRounds = (state['total_rounds'] as num?)?.toInt() ?? 1;
   if (currentRound != null && currentRound >= totalRounds) {
@@ -4139,6 +4206,10 @@ String _groupHostAdvancePanelTitle(InteractiveSessionState session) {
 
 String _groupHostAdvancePanelBody(InteractiveSessionState session) {
   final state = session.interactiveState;
+  if (state['phase'] == 'question_active' &&
+      state['quiz_timer_enabled'] != true) {
+    return 'This round is untimed. Tap when everyone is done answering.';
+  }
   final currentRound = (state['current_round'] as num?)?.toInt();
   final totalRounds = (state['total_rounds'] as num?)?.toInt() ?? 1;
   if (currentRound != null && currentRound >= totalRounds) {
@@ -4149,6 +4220,10 @@ String _groupHostAdvancePanelBody(InteractiveSessionState session) {
 
 String _groupHostAdvancePanelActionLabel(InteractiveSessionState session) {
   final state = session.interactiveState;
+  if (state['phase'] == 'question_active' &&
+      state['quiz_timer_enabled'] != true) {
+    return 'Time up';
+  }
   final currentRound = (state['current_round'] as num?)?.toInt();
   final totalRounds = (state['total_rounds'] as num?)?.toInt() ?? 1;
   if (currentRound != null && currentRound >= totalRounds) {
@@ -4164,12 +4239,95 @@ class _StorySessionLoadingShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 36, 24, 8),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: _SessionStatusLoadingCard(title: title),
+    return Center(child: _SessionStatusLoadingCard(title: title));
+  }
+}
+
+class _SessionLoadingBubble extends StatefulWidget {
+  const _SessionLoadingBubble({required this.title});
+
+  final String title;
+
+  @override
+  State<_SessionLoadingBubble> createState() => _SessionLoadingBubbleState();
+}
+
+class _SessionLoadingBubbleState extends State<_SessionLoadingBubble>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 5200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  List<String> get _labels {
+    final normalized = widget.title.toLowerCase();
+    if (normalized.contains('checking')) {
+      return const ['Checking sessions...', 'Connecting...'];
+    }
+    if (normalized.contains('searching')) {
+      return const ['Searching rooms...', 'Connecting...'];
+    }
+    return const ['Connecting...', 'Fetching intro...', 'Waiting for Aura...'];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: math.min(MediaQuery.sizeOf(context).width * 0.78, 420),
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xED101112),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.22),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.2,
+                  color: Color(0xFF22C55E),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, _) {
+                    return _SessionStatusLabel(
+                      labels: _labels,
+                      progress: _controller.value,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

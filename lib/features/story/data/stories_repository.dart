@@ -30,7 +30,7 @@ class StoriesRepository {
           'collections_page': collectionsPage,
           'collections_page_size': collectionsPageSize,
         },
-        options: Options(receiveTimeout: const Duration(seconds: 45)),
+        options: Options(receiveTimeout: const Duration(seconds: 90)),
       );
       final data = res.data as Map<String, dynamic>;
       return StoriesHomeResponse.fromJson(data);
@@ -287,7 +287,7 @@ class StoriesRepository {
           if (maxParticipants != null) 'max_participants': maxParticipants,
           'start_fresh': startFresh,
         },
-        options: Options(receiveTimeout: const Duration(seconds: 45)),
+        options: Options(receiveTimeout: const Duration(seconds: 90)),
       );
       return InteractiveSessionState.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {

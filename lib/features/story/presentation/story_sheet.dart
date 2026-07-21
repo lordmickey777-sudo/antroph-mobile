@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:antroph_mobile/core/auth/utils/auth_guard.dart';
 import 'package:antroph_mobile/core/network/error_formatter.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
@@ -372,11 +373,13 @@ class _ActiveGameCodeCard extends StatelessWidget {
 
   final String code;
 
-  Future<void> _copy(BuildContext context) async {
-    await Clipboard.setData(ClipboardData(text: code));
-    if (context.mounted) {
-      showToast(context, 'Game code copied', success: true);
-    }
+  void _showActions(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _GameCodeShareSheet(code: code),
+    );
   }
 
   @override
@@ -393,7 +396,7 @@ class _ActiveGameCodeCard extends StatelessWidget {
       color: bg,
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
-        onTap: () => _copy(context),
+        onTap: () => _showActions(context),
         borderRadius: BorderRadius.circular(18),
         child: Container(
           padding: const EdgeInsets.all(14),
@@ -440,9 +443,188 @@ class _ActiveGameCodeCard extends StatelessWidget {
                 ),
               ),
               Icon(
-                CupertinoIcons.doc_on_doc,
+                CupertinoIcons.square_arrow_up,
                 color: isDark ? Colors.white70 : Colors.black54,
                 size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GameCodeShareSheet extends StatelessWidget {
+  const _GameCodeShareSheet({required this.code});
+
+  final String code;
+
+  Future<void> _copy(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!context.mounted) return;
+    Navigator.of(context).pop();
+    showToast(context, 'Game code copied', success: true);
+  }
+
+  Future<void> _share(BuildContext context) async {
+    await Share.share(
+      'Join my Antroph group game with room code: $code',
+      subject: 'Join my Antroph group game',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final surface = isDark ? const Color(0xFF171816) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final mutedText = isDark ? Colors.white60 : Colors.black54;
+    final border = isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : Colors.black.withValues(alpha: 0.08);
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
+              blurRadius: 24,
+              offset: const Offset(0, -8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: mutedText.withValues(alpha: 0.32),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            TypographyText(
+              'Invite players',
+              variant: TypographyVariant.h3,
+              color: textColor,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+            const SizedBox(height: 6),
+            TypographyText(
+              'Share this room code with people you want in the game.',
+              variant: TypographyVariant.body2,
+              color: mutedText,
+              fontSize: 14,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF22C55E).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFF22C55E).withValues(alpha: 0.22),
+                ),
+              ),
+              child: Center(
+                child: TypographyText(
+                  code,
+                  variant: TypographyVariant.h2,
+                  color: textColor,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _GameCodeActionButton(
+                    icon: CupertinoIcons.doc_on_doc,
+                    label: 'Copy',
+                    onTap: () => _copy(context),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _GameCodeActionButton(
+                    icon: CupertinoIcons.square_arrow_up,
+                    label: 'Share',
+                    onTap: () => _share(context),
+                    highlighted: true,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GameCodeActionButton extends StatelessWidget {
+  const _GameCodeActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.highlighted = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDarkMode;
+    final bg = highlighted
+        ? const Color(0xFF22C55E)
+        : isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    final fg = highlighted
+        ? Colors.white
+        : isDark
+        ? Colors.white
+        : Colors.black;
+
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: fg, size: 20),
+              const SizedBox(width: 8),
+              TypographyText(
+                label,
+                variant: TypographyVariant.body1,
+                color: fg,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
               ),
             ],
           ),
