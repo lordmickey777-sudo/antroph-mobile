@@ -10,10 +10,13 @@ import io.flutter.plugin.common.MethodChannel
 import kotlin.math.max
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class MainActivity : FlutterFragmentActivity() {
     private val channelName = "com.antroph.aura/pcm_player"
     private var audioTrack: AudioTrack? = null
+    private val audioExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val gain = 4.0f // software gain to make PCM louder
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -24,47 +27,50 @@ class MainActivity : FlutterFragmentActivity() {
                     "start" -> {
                         val sampleRate = call.argument<Int>("sampleRate") ?: 24000
                         val bufferSize = call.argument<Int>("bufferSize") ?: 4096
-                        startTrack(sampleRate, bufferSize)
-                        result.success(true)
+                        audioExecutor.execute {
+                            startTrack(sampleRate, bufferSize)
+                            result.success(true)
+                        }
                     }
 
                     "write" -> {
                         val bytes = call.argument<ByteArray>("bytes")
-                        if (bytes != null && bytes.isNotEmpty()) {
-                            try {
-                                val shortLen = bytes.size / 2
-                                val shortData = ShortArray(shortLen)
-                                ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-                                    .asShortBuffer()
-                                    .get(shortData)
-                                // Apply a basic gain with clipping protection.
-                                for (i in 0 until shortLen) {
-                                    val boosted =
-                                        (shortData[i] * gain).toInt()
-                                            .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-                                    shortData[i] = boosted.toShort()
-                                }
-                                audioTrack?.write(
-                                    shortData,
-                                    0,
-                                    shortLen,
-                                    AudioTrack.WRITE_BLOCKING,
-                                )
-                            } catch (e: IllegalStateException) {
-                                Log.e(channelName, "write failed", e)
-                            }
+                        if (bytes == null || bytes.isEmpty()) {
+                            result.success(0)
+                            return@setMethodCallHandler
                         }
-                        result.success(bytes?.size ?: 0)
+                        audioExecutor.execute {
+                            writePcm(bytes)
+                            result.success(bytes.size)
+                        }
                     }
 
                     "stop" -> {
+                        // Stop must interrupt a blocking write immediately; queuing this
+                        // behind the writer makes Dart pause/resume controls feel stuck.
                         stopTrack()
+                        result.success(true)
+                    }
+
+                    "pause" -> {
+                        pauseTrack()
+                        result.success(true)
+                    }
+
+                    "resume" -> {
+                        resumeTrack()
                         result.success(true)
                     }
 
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    override fun onDestroy() {
+        audioExecutor.execute { stopTrack() }
+        audioExecutor.shutdown()
+        super.onDestroy()
     }
 
     private fun startTrack(sampleRate: Int, requestedBufferSize: Int) {
@@ -101,6 +107,48 @@ class MainActivity : FlutterFragmentActivity() {
         } catch (e: IllegalStateException) {
             Log.e(channelName, "AudioTrack start failed", e)
             stopTrack()
+        }
+    }
+
+    private fun writePcm(bytes: ByteArray) {
+        try {
+            val shortLen = bytes.size / 2
+            if (shortLen <= 0) return
+            val shortData = ShortArray(shortLen)
+            ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+                .asShortBuffer()
+                .get(shortData)
+            // Apply a basic gain with clipping protection.
+            for (i in 0 until shortLen) {
+                val boosted =
+                    (shortData[i] * gain).toInt()
+                        .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                shortData[i] = boosted.toShort()
+            }
+            audioTrack?.write(
+                shortData,
+                0,
+                shortLen,
+                AudioTrack.WRITE_BLOCKING,
+            )
+        } catch (e: IllegalStateException) {
+            Log.e(channelName, "write failed", e)
+        }
+    }
+
+    private fun pauseTrack() {
+        try {
+            audioTrack?.pause()
+        } catch (e: IllegalStateException) {
+            Log.e(channelName, "pause failed", e)
+        }
+    }
+
+    private fun resumeTrack() {
+        try {
+            audioTrack?.play()
+        } catch (e: IllegalStateException) {
+            Log.e(channelName, "resume failed", e)
         }
     }
 

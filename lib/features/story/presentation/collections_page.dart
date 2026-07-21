@@ -13,7 +13,6 @@ import 'package:antroph_mobile/widgets/shimmer.dart';
 import 'package:antroph_mobile/widgets/empty_state.dart';
 import 'package:antroph_mobile/features/story/presentation/story_chat_flow_page.dart';
 import 'package:antroph_mobile/features/story/models/story_playlists_models.dart';
-import 'package:antroph_mobile/features/story/presentation/story_player_page.dart';
 import '../providers/story_playlists_provider.dart';
 import '../providers/story_providers.dart';
 import '../data/stories_cache.dart';
@@ -225,21 +224,7 @@ class CollectionDetailPage extends ConsumerWidget {
     WidgetRef ref,
     PlaylistStoryDto story,
   ) async {
-    // Check auth first
-    final authResult = await showAuthGuardSheet(
-      context,
-      ref,
-      actionDescription: 'Start a story session',
-    );
-    if (!context.mounted) return;
-    if (authResult != AuthGuardResult.authenticated &&
-        authResult != AuthGuardResult.loginSuccessful) {
-      return;
-    }
-
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => StoryPlayerPage(story: story)));
+    await _startChatForStory(context, ref, story);
   }
 
   Future<void> _startChatForStory(

@@ -102,6 +102,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
   Timer? _generationWatchdogTimer;
   String? _generationWatchdogKey;
   Future<void>? _generationRecovery;
+  bool _silentRefreshInFlight = false;
   final Map<String, List<SoloInteractiveSessionSummary>> _soloHistoryCache =
       <String, List<SoloInteractiveSessionSummary>>{};
   bool _isDisposed = false;
@@ -1129,6 +1130,10 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
           _consumePendingTextByValue(payload['text'] as String?);
         }
         break;
+      case 'setup_choice_selected':
+        _consumePendingOptionByValue(payload['option_id']?.toString());
+        _consumePendingOptionByValue(payload['text']?.toString());
+        break;
       case 'interactive_turn':
         recentStreamedAssistantText = state.streamingAssistantText?.trim();
         nextTurn = InteractiveTurn.fromJson(payload);
@@ -1291,6 +1296,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     _syncGenerationWatchdog(session);
     if (state.isReadOnly || session == null || session.isCompleted) return;
     final phase = session.interactiveState['phase'] as String?;
+    final sessionType = session.interactiveState['session_type'] as String?;
     final topicPromptStatus =
         session.interactiveState['topic_prompt_status'] as String?;
     final topicSelectionStage =
@@ -1317,10 +1323,10 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
             (topicAspectStatus == 'generating' ||
                 topicAspectStatus == 'loading')) ||
         phase == 'finalizing_question' ||
-        phase == 'showing_results' ||
+        (phase == 'showing_results' && sessionType != 'group') ||
         (!hasQuestion && session.currentTurn == null);
     if (!shouldPoll) return;
-    _refreshTimer = Timer(const Duration(seconds: 2), () {
+    _refreshTimer = Timer(const Duration(seconds: 4), () {
       if (_isDisposed) return;
       unawaited(_refreshSilently());
     });
@@ -1328,9 +1334,11 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
 
   Future<void> _refreshSilently() async {
     if (_isDisposed) return;
+    if (_silentRefreshInFlight) return;
     if (state.isReadOnly || state.session?.isCompleted == true) return;
     final sessionId = state.session?.sessionId;
     if (sessionId == null || sessionId.isEmpty) return;
+    _silentRefreshInFlight = true;
     try {
       final repo = ref.read(storiesRepositoryProvider);
       final session = await repo.fetchInteractiveSession(sessionId);
@@ -1354,6 +1362,7 @@ class InteractiveStoryNotifier extends Notifier<InteractiveStoryState> {
     } catch (_) {
       // Keep the current UI state and try again while it is still waiting.
     } finally {
+      _silentRefreshInFlight = false;
       if (!_isDisposed) {
         _scheduleWaitingRefresh();
       }

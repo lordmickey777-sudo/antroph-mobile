@@ -563,9 +563,6 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   bool _groupHostAdvancePanelCollapsed = false;
   bool _groupCompletedPanelCollapsed = true;
   bool _groupSetupPanelCollapsed = false;
-  double _groupOptionPanelHeight = 0;
-  bool _transcriptRevealInProgress = true;
-  Timer? _transcriptRevealGateTimer;
   bool _started = false;
   String? _lastGenerationFailureKey;
   String? _stickyGenerationError;
@@ -591,49 +588,14 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
 
-  void _syncGroupOptionPanelHeight(bool visible) {
-    if (!visible) {
-      if (_groupOptionPanelHeight != 0) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() => _groupOptionPanelHeight = 0);
-        });
-      }
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final renderObject = _groupOptionPanelKey.currentContext
-          ?.findRenderObject();
-      if (renderObject is! RenderBox) return;
-      final height = renderObject.size.height;
-      if (height <= 0 || (height - _groupOptionPanelHeight).abs() < 0.5) {
-        return;
-      }
-      setState(() => _groupOptionPanelHeight = height);
-    });
-  }
-
   void _handleTranscriptRevealInProgressChanged(bool inProgress) {
-    _transcriptRevealGateTimer?.cancel();
-    _transcriptRevealGateTimer = null;
-    if (inProgress) {
-      if (!_transcriptRevealInProgress) {
-        setState(() => _transcriptRevealInProgress = true);
-      }
-      _transcriptRevealGateTimer = Timer(const Duration(milliseconds: 300), () {
-        if (!mounted || !_transcriptRevealInProgress) return;
-        setState(() => _transcriptRevealInProgress = false);
-      });
-      return;
-    }
-    if (_transcriptRevealInProgress) {
-      setState(() => _transcriptRevealInProgress = false);
-    }
+    // The bottom option sheet should resonate with its prompt immediately,
+    // matching the solo flow. Transcript reveal still reports progress for
+    // scroll/padding purposes, but it must not gate option visibility.
   }
 
   @override
   void dispose() {
-    _transcriptRevealGateTimer?.cancel();
     _textController.dispose();
     _textFocusNode.dispose();
     super.dispose();
@@ -691,7 +653,6 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
   Future<void> _startGroupSession() async {
     if (_soloEntryBusy) return;
     final requestSerial = ++_soloEntryRequestSerial;
-    final startedAt = DateTime.now();
     setState(() {
       _soloEntryView = _SoloEntryView.session;
       _soloEntryBusy = true;
@@ -704,11 +665,6 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
           interactionMode: widget.interactionMode,
           startFresh: true,
         );
-    final elapsed = DateTime.now().difference(startedAt);
-    const minimumVisibleLoading = Duration(milliseconds: 1200);
-    if (elapsed < minimumVisibleLoading) {
-      await Future<void>.delayed(minimumVisibleLoading - elapsed);
-    }
     if (!mounted || requestSerial != _soloEntryRequestSerial) return;
     setState(() => _soloEntryBusy = false);
   }
@@ -1726,11 +1682,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         isGroupQuizSession &&
         groupSetupChoice != null &&
         _canCurrentUserHostGroupQuiz(session, currentUserId);
-    final showGroupSetupOptions =
-        canHostSetupGroupQuiz &&
-        !hasPendingBottomChoice &&
-        !_textFocusNode.hasFocus &&
-        keyboardHeight == 0;
+    final showGroupSetupOptions = canHostSetupGroupQuiz;
     final showGroupHostAdvanceOptions =
         canHostAdvanceGroupQuiz &&
         !state.isAdvancingQuestion &&
@@ -1752,31 +1704,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         showGroupSetupOptions;
     final rawShowAnyOptionPanel =
         rawShowGroupOptionPanel || rawShowSoloOptionPanel;
-    final blockOptionPanelForReveal =
-        rawShowAnyOptionPanel && _transcriptRevealInProgress;
-    final showSoloOptionPanel =
-        rawShowSoloOptionPanel && !blockOptionPanelForReveal;
-    final showGroupOptionPanel =
-        rawShowGroupOptionPanel && !blockOptionPanelForReveal;
-    final showAnyOptionPanel = showGroupOptionPanel || showSoloOptionPanel;
-    final fallbackGroupOptionPanelPadding = showGroupCompletedOptions
-        ? (_groupCompletedPanelCollapsed ? 118.0 : 250.0)
-        : showGroupSetupOptions
-        ? (_groupSetupPanelCollapsed ? 150.0 : 340.0)
-        : showGroupHostAdvanceOptions
-        ? (_groupHostAdvancePanelCollapsed ? 150.0 : 300.0)
-        : showSoloOptionPanel
-        ? (_groupSetupPanelCollapsed ? 150.0 : 340.0)
-        : 0.0;
-    final measuredGroupOptionPanelPadding = _groupOptionPanelHeight > 0
-        ? _groupOptionPanelHeight + 18
-        : 0.0;
-    final groupOptionPanelPadding = showAnyOptionPanel
-        ? math.max(
-            fallbackGroupOptionPanelPadding,
-            measuredGroupOptionPanelPadding,
-          )
-        : 0.0;
+    final showSoloOptionPanel = rawShowSoloOptionPanel;
     final questionGenerationError =
         (session?.interactiveState['generation_error'] as String?)?.trim();
     final effectiveQuestionGenerationError =
@@ -1788,8 +1716,6 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
         ? const Color(0xFF1A1A1A)
         : const Color(0xFFF3F3F3);
     final mutedText = isDark ? Colors.white60 : Colors.black54;
-
-    _syncGroupOptionPanelHeight(showAnyOptionPanel && !showLoadingShell);
 
     return Stack(
       clipBehavior: Clip.none,
@@ -1830,7 +1756,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                             !showGroupHostAdvanceOptions,
                         showAdvanceQuestionStatus: !showGroupHostAdvanceOptions,
                         showFinalStandingsActions: !showGroupCompletedOptions,
-                        bottomOverlayPadding: groupOptionPanelPadding,
+                        bottomOverlayPadding: rawShowAnyOptionPanel ? 1 : 0,
                         isAdvancingQuestion: state.isAdvancingQuestion,
                         onRetryGeneration: () => unawaited(
                           notifier.recoverGeneration(
@@ -1960,6 +1886,10 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                 !isReadOnlyHistory &&
                 !floatSoloChoiceCall &&
                 (!canHostAdvanceGroupQuiz || state.isAdvancingQuestion) &&
+                !showGroupHostAdvanceOptions &&
+                !showGroupFocusedComposer &&
+                !showGroupSetupOptions &&
+                !showGroupCompletedOptions &&
                 !showSoloOptionPanel)
               _QuizGameBottomBar(
                 onCall: widget.onCall,
@@ -1967,200 +1897,181 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
                 showMessagePlaceholder:
                     !isSoloQuizSession || hasPendingBottomChoice,
               ),
+            if (!showLoadingShell &&
+                showGroupHostAdvanceOptions &&
+                !isReadOnlyHistory)
+              AnimatedPadding(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(bottom: keyboardHeight),
+                child: SizedBox(
+                  key: _groupOptionPanelKey,
+                  width: double.infinity,
+                  child: _GroupHostAdvanceOptionPanel(
+                    title: _groupHostAdvancePanelTitle(session),
+                    body: _groupHostAdvancePanelBody(session),
+                    actionLabel: _groupHostAdvancePanelActionLabel(session),
+                    collapsed: _groupHostAdvancePanelCollapsed,
+                    disabled:
+                        disableQuizGameControls || state.isAdvancingQuestion,
+                    onToggleCollapsed: () {
+                      setState(
+                        () => _groupHostAdvancePanelCollapsed =
+                            !_groupHostAdvancePanelCollapsed,
+                      );
+                    },
+                    onAdvance: () =>
+                        _advanceGroupHostQuiz(session, currentUserId),
+                    onCall: widget.onCall,
+                    textController: _textController,
+                    textFocusNode: _textFocusNode,
+                    textFieldKey: _groupMessageFieldKey,
+                    canSubmitText: canSubmitText,
+                    onSendText: _sendText,
+                  ),
+                ),
+              ),
+            if (!showLoadingShell &&
+                showGroupSetupOptions &&
+                !isReadOnlyHistory)
+              AnimatedPadding(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(bottom: keyboardHeight),
+                child: SizedBox(
+                  key: _groupOptionPanelKey,
+                  width: double.infinity,
+                  child: _GroupSetupOptionPanel(
+                    title: '',
+                    options: groupSetupChoice.options,
+                    collapsed: _groupSetupPanelCollapsed,
+                    disabled: disableQuizGameControls || hasPendingBottomChoice,
+                    onToggleCollapsed: () {
+                      setState(
+                        () => _groupSetupPanelCollapsed =
+                            !_groupSetupPanelCollapsed,
+                      );
+                    },
+                    onSelected: _handleSoloChoice,
+                    onCall: widget.onCall,
+                    textController: _textController,
+                    textFocusNode: _textFocusNode,
+                    textFieldKey: _groupMessageFieldKey,
+                    canSubmitText:
+                        !hasPendingBottomChoice &&
+                        groupSetupChoice.allowTextInput &&
+                        canSubmitText,
+                    hintText: groupSetupChoice.inputHint,
+                    onSendText: _sendText,
+                  ),
+                ),
+              ),
+            if (!showLoadingShell && showSoloOptionPanel && !isReadOnlyHistory)
+              AnimatedPadding(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(bottom: keyboardHeight),
+                child: SizedBox(
+                  key: _groupOptionPanelKey,
+                  width: double.infinity,
+                  child: _GroupSetupOptionPanel(
+                    title: soloOptionChoice.prompt,
+                    options: hasPendingBottomChoice
+                        ? const <InteractiveOption>[]
+                        : soloOptionChoice.options,
+                    collapsed: _groupSetupPanelCollapsed,
+                    disabled: disableQuizGameControls,
+                    onToggleCollapsed: () {
+                      setState(
+                        () => _groupSetupPanelCollapsed =
+                            !_groupSetupPanelCollapsed,
+                      );
+                    },
+                    onSelected: _handleSoloChoice,
+                    onCall: widget.onCall,
+                    textController: _textController,
+                    textFocusNode: _textFocusNode,
+                    textFieldKey: _groupMessageFieldKey,
+                    canSubmitText:
+                        !hasPendingBottomChoice &&
+                        soloOptionChoice.allowTextInput &&
+                        _canSend,
+                    hintText: soloOptionChoice.inputHint,
+                    optionKeyPrefix: hasPendingBottomChoice
+                        ? null
+                        : soloOptionChoice.optionKeyPrefix,
+                    inputKey: soloOptionChoice.inputKey,
+                    onSendText: _sendText,
+                    onInputRequested:
+                        !hasPendingBottomChoice &&
+                            phase == 'topic_selection' &&
+                            soloOptionChoice.allowTextInput
+                        ? _enableCustomTopicEntry
+                        : null,
+                  ),
+                ),
+              ),
+            if (!showLoadingShell &&
+                showGroupFocusedComposer &&
+                !isReadOnlyHistory)
+              AnimatedPadding(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(bottom: keyboardHeight),
+                child: SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.fromLTRB(10, 8, 10, 16),
+                  child: _GroupFloatingTextComposer(
+                    textController: _textController,
+                    textFocusNode: _textFocusNode,
+                    textFieldKey: _groupMessageFieldKey,
+                    canSubmitText: canSubmitText,
+                    onSendText: _sendText,
+                    onCall: widget.onCall,
+                  ),
+                ),
+              ),
+            if (!showLoadingShell && showGroupCompletedOptions)
+              AnimatedPadding(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: EdgeInsets.only(bottom: keyboardHeight),
+                child: SizedBox(
+                  key: _groupOptionPanelKey,
+                  width: double.infinity,
+                  child: _GroupCompletedOptionPanel(
+                    collapsed: _groupCompletedPanelCollapsed,
+                    onToggleCollapsed: () {
+                      setState(
+                        () => _groupCompletedPanelCollapsed =
+                            !_groupCompletedPanelCollapsed,
+                      );
+                    },
+                    onLeaderboard: () => unawaited(
+                      showGroupQuizResultsBottomSheet(
+                        context,
+                        session: session,
+                        currentUserId: currentUserId,
+                      ),
+                    ),
+                    onReplay: () => unawaited(
+                      notifier.restart(
+                        storyId: widget.storyId,
+                        interactionMode: widget.interactionMode,
+                      ),
+                    ),
+                    onClose: () => unawaited(widget.onLeave()),
+                    onCall: widget.onCall,
+                    textController: _textController,
+                    textFocusNode: _textFocusNode,
+                    textFieldKey: _groupMessageFieldKey,
+                    canSubmitText: canSubmitText,
+                    onSendText: _sendText,
+                  ),
+                ),
+              ),
           ],
         ),
-        if (!showLoadingShell &&
-            showGroupHostAdvanceOptions &&
-            !isReadOnlyHistory)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: AnimatedPadding(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.only(bottom: keyboardHeight),
-              child: SizedBox(
-                key: _groupOptionPanelKey,
-                width: double.infinity,
-                child: _GroupHostAdvanceOptionPanel(
-                  title: _groupHostAdvancePanelTitle(session),
-                  body: _groupHostAdvancePanelBody(session),
-                  actionLabel: _groupHostAdvancePanelActionLabel(session),
-                  collapsed: _groupHostAdvancePanelCollapsed,
-                  disabled:
-                      disableQuizGameControls || state.isAdvancingQuestion,
-                  onToggleCollapsed: () {
-                    setState(
-                      () => _groupHostAdvancePanelCollapsed =
-                          !_groupHostAdvancePanelCollapsed,
-                    );
-                  },
-                  onAdvance: () =>
-                      _advanceGroupHostQuiz(session, currentUserId),
-                  onCall: widget.onCall,
-                  textController: _textController,
-                  textFocusNode: _textFocusNode,
-                  textFieldKey: _groupMessageFieldKey,
-                  canSubmitText: canSubmitText,
-                  onSendText: _sendText,
-                ),
-              ),
-            ),
-          ),
-        if (!showLoadingShell && showGroupSetupOptions && !isReadOnlyHistory)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: AnimatedPadding(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.only(bottom: keyboardHeight),
-              child: SizedBox(
-                key: _groupOptionPanelKey,
-                width: double.infinity,
-                child: _GroupSetupOptionPanel(
-                  title: '',
-                  options: groupSetupChoice.options,
-                  collapsed: _groupSetupPanelCollapsed,
-                  disabled: disableQuizGameControls,
-                  onToggleCollapsed: () {
-                    setState(
-                      () => _groupSetupPanelCollapsed =
-                          !_groupSetupPanelCollapsed,
-                    );
-                  },
-                  onSelected: _handleSoloChoice,
-                  onCall: widget.onCall,
-                  textController: _textController,
-                  textFocusNode: _textFocusNode,
-                  textFieldKey: _groupMessageFieldKey,
-                  canSubmitText:
-                      groupSetupChoice.allowTextInput && canSubmitText,
-                  hintText: groupSetupChoice.inputHint,
-                  onSendText: _sendText,
-                ),
-              ),
-            ),
-          ),
-        if (!showLoadingShell && showSoloOptionPanel && !isReadOnlyHistory)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: AnimatedPadding(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.only(bottom: keyboardHeight),
-              child: SizedBox(
-                key: _groupOptionPanelKey,
-                width: double.infinity,
-                child: _GroupSetupOptionPanel(
-                  title: soloOptionChoice.prompt,
-                  options: hasPendingBottomChoice
-                      ? const <InteractiveOption>[]
-                      : soloOptionChoice.options,
-                  collapsed: _groupSetupPanelCollapsed,
-                  disabled: disableQuizGameControls,
-                  onToggleCollapsed: () {
-                    setState(
-                      () => _groupSetupPanelCollapsed =
-                          !_groupSetupPanelCollapsed,
-                    );
-                  },
-                  onSelected: _handleSoloChoice,
-                  onCall: widget.onCall,
-                  textController: _textController,
-                  textFocusNode: _textFocusNode,
-                  textFieldKey: _groupMessageFieldKey,
-                  canSubmitText:
-                      !hasPendingBottomChoice &&
-                      soloOptionChoice.allowTextInput &&
-                      _canSend,
-                  hintText: soloOptionChoice.inputHint,
-                  optionKeyPrefix: hasPendingBottomChoice
-                      ? null
-                      : soloOptionChoice.optionKeyPrefix,
-                  inputKey: soloOptionChoice.inputKey,
-                  onSendText: _sendText,
-                  onInputRequested:
-                      !hasPendingBottomChoice &&
-                          phase == 'topic_selection' &&
-                          soloOptionChoice.allowTextInput
-                      ? _enableCustomTopicEntry
-                      : null,
-                ),
-              ),
-            ),
-          ),
-        if (!showLoadingShell && showGroupFocusedComposer && !isReadOnlyHistory)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: AnimatedPadding(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.only(bottom: keyboardHeight),
-              child: SafeArea(
-                top: false,
-                minimum: const EdgeInsets.fromLTRB(10, 8, 10, 16),
-                child: _GroupFloatingTextComposer(
-                  textController: _textController,
-                  textFocusNode: _textFocusNode,
-                  textFieldKey: _groupMessageFieldKey,
-                  canSubmitText: canSubmitText,
-                  onSendText: _sendText,
-                  onCall: widget.onCall,
-                ),
-              ),
-            ),
-          ),
-        if (!showLoadingShell && showGroupCompletedOptions)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: AnimatedPadding(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.only(bottom: keyboardHeight),
-              child: SizedBox(
-                key: _groupOptionPanelKey,
-                width: double.infinity,
-                child: _GroupCompletedOptionPanel(
-                  collapsed: _groupCompletedPanelCollapsed,
-                  onToggleCollapsed: () {
-                    setState(
-                      () => _groupCompletedPanelCollapsed =
-                          !_groupCompletedPanelCollapsed,
-                    );
-                  },
-                  onLeaderboard: () => unawaited(
-                    showGroupQuizResultsBottomSheet(
-                      context,
-                      session: session,
-                      currentUserId: currentUserId,
-                    ),
-                  ),
-                  onReplay: () => unawaited(
-                    notifier.restart(
-                      storyId: widget.storyId,
-                      interactionMode: widget.interactionMode,
-                    ),
-                  ),
-                  onClose: () => unawaited(widget.onLeave()),
-                  onCall: widget.onCall,
-                  textController: _textController,
-                  textFocusNode: _textFocusNode,
-                  textFieldKey: _groupMessageFieldKey,
-                  canSubmitText: canSubmitText,
-                  onSendText: _sendText,
-                ),
-              ),
-            ),
-          ),
         if (!showLoadingShell && floatSoloChoiceCall && !showSoloOptionPanel)
           CompositedTransformFollower(
             link: _customTopicCallLink,
@@ -3952,9 +3863,19 @@ List<InteractiveOption> _soloTopicPanelOptions(
   final options = pending.isNotEmpty
       ? pending
       : _interactiveOptionsFromRaw(topicSuggestions);
-  return options
+  final filtered = options
       .where((option) => option.id.trim().toLowerCase() != 'custom_topic')
       .toList(growable: false);
+  if (pending.isNotEmpty ||
+      filtered.any(
+        (option) => option.id.trim().toLowerCase() == 'pick_for_me',
+      )) {
+    return filtered;
+  }
+  return [
+    const InteractiveOption(id: 'pick_for_me', label: 'Pick for me'),
+    ...filtered,
+  ];
 }
 
 List<InteractiveOption> _interactiveOptionsFromRaw(dynamic raw) {
@@ -4909,6 +4830,7 @@ class _StoryOptionsInputPanel extends StatelessWidget {
     required this.onToggleCollapsed,
     this.title = 'What kind of story sounds good?',
     this.onNext,
+    this.onPickForMe,
     this.selectedTitle,
     this.disabled = false,
     this.collapsed = false,
@@ -4920,6 +4842,7 @@ class _StoryOptionsInputPanel extends StatelessWidget {
   final VoidCallback onToggleCollapsed;
   final String title;
   final VoidCallback? onNext;
+  final VoidCallback? onPickForMe;
   final String? selectedTitle;
   final bool disabled;
   final bool collapsed;
@@ -5022,6 +4945,15 @@ class _StoryOptionsInputPanel extends StatelessWidget {
               ],
               const SizedBox(height: 8),
               Divider(height: 1, color: Colors.white.withValues(alpha: 0.13)),
+              if (onPickForMe != null) ...[
+                _StoryActionOptionRow(
+                  label: 'Pick for me',
+                  disabled: disabled,
+                  icon: CupertinoIcons.shuffle,
+                  onPressed: onPickForMe!,
+                ),
+                Divider(height: 1, color: Colors.white.withValues(alpha: 0.13)),
+              ],
               _StoryActionOptionRow(
                 label: 'Try different stories',
                 disabled: disabled,
@@ -5202,6 +5134,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   bool _isSubmittingStoryOption = false;
   bool _isNarrationStarting = false;
   bool _isNarrationPaused = false;
+  bool _narrationControlInFlight = false;
   String? _narratingMessageId;
   ChatMessageModel? _narrationMessage;
   OverlayEntry? _narrationOverlayEntry;
@@ -5262,6 +5195,34 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     }
   }
 
+  bool _isNarrationVoiceActive(VoiceChatState voiceState) {
+    return voiceState.isPlaying ||
+        voiceState.isProcessing ||
+        voiceState.isConnecting ||
+        voiceState.phase == RealtimeVoicePhase.playing ||
+        voiceState.phase == RealtimeVoicePhase.paused ||
+        voiceState.phase == RealtimeVoicePhase.processing ||
+        voiceState.phase == RealtimeVoicePhase.connecting ||
+        voiceState.phase == RealtimeVoicePhase.waitingForReady;
+  }
+
+  void _clearNarrationUiState() {
+    if (_narratingMessageId == null &&
+        _narrationMessage == null &&
+        !_isNarrationStarting &&
+        !_isNarrationPaused) {
+      return;
+    }
+    setState(() {
+      _narratingMessageId = null;
+      _narrationMessage = null;
+      _isNarrationStarting = false;
+      _isNarrationPaused = false;
+      _narrationControlInFlight = false;
+    });
+    _removeNarrationOverlay();
+  }
+
   Future<bool> _startTextStorySession() async {
     setState(() {
       _isStartingTextSession = true;
@@ -5291,6 +5252,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       if (session.id.isNotEmpty) {
         widget.onSessionReady(session.id);
       }
+      _preloadLatestGeneratedChapterNarration();
       _scrollToBottom(jump: true, retries: 4);
       return true;
     } catch (e) {
@@ -5319,6 +5281,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
           ..addAll(refreshedMessages);
         _textSessionError = null;
       });
+      _preloadLatestGeneratedChapterNarration();
       _scrollToBottom(jump: true, retries: 4);
     } catch (_) {
       // Keep the existing chat visible. A later text send or page reopen will
@@ -5477,6 +5440,14 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
           if (sessionId.isNotEmpty) {
             widget.onSessionReady(sessionId);
           }
+          final completedIndex = _messages.indexWhere(
+            (message) => message.id == assistantMessageId,
+          );
+          if (completedIndex != -1) {
+            unawaited(
+              _preloadGeneratedChapterNarration(_messages[completedIndex]),
+            );
+          }
         } else if (event.isError) {
           throw Exception(event.error ?? 'Story stream failed');
         }
@@ -5573,6 +5544,16 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       _dismissedContinuationActions = false;
     });
     _scrollToBottomAfterPanelAnimation();
+  }
+
+  Future<void> _pickStoryOptionForUser(List<_ParsedStoryOption> options) async {
+    if (options.isEmpty || _isSubmittingStoryOption) return;
+    final unselected = options
+        .where((option) => option.title != _confirmedStoryOptionTitle)
+        .toList(growable: false);
+    final candidates = unselected.isEmpty ? options : unselected;
+    final choice = candidates[math.Random().nextInt(candidates.length)];
+    await _confirmStoryOption(choice);
   }
 
   Future<void> _confirmStoryPerspective(_ParsedStoryOption perspective) async {
@@ -5979,8 +5960,11 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     ChatMessageModel message,
     ChatBubblePlayState playState,
   ) async {
+    final isSwitchingNarration =
+        _narratingMessageId != null && _narratingMessageId != message.id;
+    if (_narrationControlInFlight && !isSwitchingNarration) return;
     if (playState == ChatBubblePlayState.pause) {
-      await _stopGeneratedChapterNarration();
+      await _pauseGeneratedChapterNarration();
       return;
     }
     if (playState == ChatBubblePlayState.loading) return;
@@ -5991,13 +5975,13 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
 
     final voiceController = ref.read(voiceChatControllerProvider.notifier);
     try {
+      _narrationControlInFlight = true;
       setState(() {
         _narratingMessageId = message.id;
         _narrationMessage = message;
         _isNarrationStarting = true;
         _isNarrationPaused = false;
       });
-      await voiceController.stopPlayback();
       await voiceController.playTextNarration(
         _narrationPrompt(chapterText),
         storySessionId: _textSession?.id,
@@ -6017,6 +6001,59 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         'Unable to play narration right now.',
         variant: ToastVariant.error,
       );
+    } finally {
+      _narrationControlInFlight = false;
+    }
+  }
+
+  Future<void> _preloadGeneratedChapterNarration(
+    ChatMessageModel message,
+  ) async {
+    if (!_shouldShowGeneratedChapterPlayIcon(message)) return;
+    final chapterText = _cleanStoryBubbleText(message.message);
+    if (chapterText.isEmpty) return;
+
+    await ref
+        .read(voiceChatControllerProvider.notifier)
+        .preloadTextNarration(
+          _narrationPrompt(chapterText),
+          storySessionId: _textSession?.id,
+        );
+  }
+
+  void _preloadLatestGeneratedChapterNarration() {
+    for (final message in _messages.reversed) {
+      if (_shouldShowGeneratedChapterPlayIcon(message)) {
+        unawaited(_preloadGeneratedChapterNarration(message));
+        return;
+      }
+    }
+  }
+
+  Future<void> _pauseGeneratedChapterNarration() async {
+    if (_narrationControlInFlight) return;
+    _narrationControlInFlight = true;
+    if (mounted) {
+      setState(() {
+        _isNarrationStarting = false;
+        _isNarrationPaused = true;
+      });
+    }
+    final controller = ref.read(voiceChatControllerProvider.notifier);
+    try {
+      await controller.pausePlayback();
+      if (!mounted) return;
+      final voiceState = ref.read(voiceChatControllerProvider);
+      setState(() {
+        _isNarrationStarting = false;
+        _isNarrationPaused = voiceState.phase == RealtimeVoicePhase.paused;
+        if (!_isNarrationPaused && !voiceState.isPlaying) {
+          _narratingMessageId = null;
+          _narrationMessage = null;
+        }
+      });
+    } finally {
+      _narrationControlInFlight = false;
     }
   }
 
@@ -6034,7 +6071,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   }
 
   Future<void> _toggleGeneratedChapterNarration() async {
-    if (_isNarrationStarting) return;
+    if (_isNarrationStarting || _narrationControlInFlight) return;
     final message = _narrationMessage;
     if (message == null) return;
 
@@ -6042,9 +6079,59 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     final isPlaying =
         voiceState.isPlaying || voiceState.phase == RealtimeVoicePhase.playing;
     if (isPlaying) {
-      await _stopGeneratedChapterNarration(keepPaused: true);
+      await _pauseGeneratedChapterNarration();
       return;
     }
+    if (_isNarrationPaused || voiceState.phase == RealtimeVoicePhase.paused) {
+      final controller = ref.read(voiceChatControllerProvider.notifier);
+      try {
+        _narrationControlInFlight = true;
+        setState(() {
+          _isNarrationStarting = false;
+          _isNarrationPaused = false;
+        });
+        await controller.resumePlayback();
+        if (!mounted) return;
+        final resumedState = ref.read(voiceChatControllerProvider);
+        setState(() {
+          _isNarrationStarting = false;
+          _isNarrationPaused = resumedState.phase == RealtimeVoicePhase.paused;
+        });
+      } finally {
+        _narrationControlInFlight = false;
+      }
+      return;
+    }
+
+    await _playGeneratedChapterNarration(message, ChatBubblePlayState.play);
+  }
+
+  Future<void> _handleGeneratedChapterPlayTap(ChatMessageModel message) async {
+    if (_narrationControlInFlight) return;
+
+    final isCurrentChapter = _narratingMessageId == message.id;
+    final voiceState = ref.read(voiceChatControllerProvider);
+    final isPlaying =
+        voiceState.isPlaying || voiceState.phase == RealtimeVoicePhase.playing;
+    final isPaused =
+        _isNarrationPaused || voiceState.phase == RealtimeVoicePhase.paused;
+    final isLoading =
+        _isNarrationStarting ||
+        voiceState.isConnecting ||
+        voiceState.isProcessing ||
+        voiceState.phase == RealtimeVoicePhase.connecting ||
+        voiceState.phase == RealtimeVoicePhase.waitingForReady ||
+        voiceState.phase == RealtimeVoicePhase.processing;
+
+    if (isCurrentChapter && isPlaying) {
+      await _pauseGeneratedChapterNarration();
+      return;
+    }
+    if (isCurrentChapter && isPaused) {
+      await _toggleGeneratedChapterNarration();
+      return;
+    }
+    if (isCurrentChapter && isLoading) return;
 
     await _playGeneratedChapterNarration(message, ChatBubblePlayState.play);
   }
@@ -6086,24 +6173,29 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         final top = MediaQuery.of(context).padding.top + 22;
         return Positioned(
           top: top,
-          left: 18,
-          right: 18,
-          child: Material(
-            color: Colors.transparent,
-            child: _StoryNarrationVoiceBar(
-              levelStream: aiAudioLevelStream,
-              isLoading:
-                  _isNarrationStarting ||
-                  voiceState.isConnecting ||
-                  voiceState.isProcessing,
-              isPaused: _isNarrationPaused,
-              isPlaying:
-                  voiceState.isPlaying ||
-                  voiceState.phase == RealtimeVoicePhase.playing,
-              onTogglePlayback: () =>
-                  unawaited(_toggleGeneratedChapterNarration()),
-              onStop: () => unawaited(_stopGeneratedChapterNarration()),
-            ),
+          left: 0,
+          right: 0,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Material(
+                color: Colors.transparent,
+                child: _StoryNarrationVoiceBar(
+                  levelStream: aiAudioLevelStream,
+                  isLoading:
+                      _isNarrationStarting ||
+                      voiceState.isConnecting ||
+                      voiceState.isProcessing,
+                  isPaused: _isNarrationPaused,
+                  isPlaying:
+                      voiceState.isPlaying ||
+                      voiceState.phase == RealtimeVoicePhase.playing,
+                  onTogglePlayback: () =>
+                      unawaited(_toggleGeneratedChapterNarration()),
+                  onStop: () => unawaited(_stopGeneratedChapterNarration()),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -6132,6 +6224,9 @@ $chapterText
         voiceState.phase == RealtimeVoicePhase.playing) {
       return ChatBubblePlayState.pause;
     }
+    if (_isNarrationPaused || voiceState.phase == RealtimeVoicePhase.paused) {
+      return ChatBubblePlayState.play;
+    }
     if (_isNarrationStarting ||
         voiceState.isConnecting ||
         voiceState.isProcessing ||
@@ -6149,6 +6244,17 @@ $chapterText
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<VoiceChatState>(voiceChatControllerProvider, (previous, next) {
+      if (!mounted || _narratingMessageId == null) return;
+      final wasActive = previous == null
+          ? false
+          : _isNarrationVoiceActive(previous);
+      final isActive = _isNarrationVoiceActive(next);
+      if (wasActive && !isActive) {
+        _clearNarrationUiState();
+      }
+    });
+
     final messages = _buildMessages();
     final voiceState = ref.watch(voiceChatControllerProvider);
     final visibleMessages = messages.isEmpty && _isStartingTextSession
@@ -6272,6 +6378,7 @@ $chapterText
                   return const SizedBox.shrink();
                 }
                 final displayMessage = message.copyWith(message: introText);
+                final playState = _chapterPlayState(displayMessage, voiceState);
                 return _AnimatedBubble(
                   key: ValueKey('${message.id}_intro'),
                   child: Column(
@@ -6282,6 +6389,13 @@ $chapterText
                         onRetry: () {},
                         maxWidth: assistantBubbleMaxWidth,
                         renderMarkdownBold: true,
+                        showPlayIcon: _shouldShowGeneratedChapterPlayIcon(
+                          displayMessage,
+                        ),
+                        onPlayIcon: () => unawaited(
+                          _handleGeneratedChapterPlayTap(displayMessage),
+                        ),
+                        playState: playState,
                       ),
                     ],
                   ),
@@ -6312,7 +6426,7 @@ $chapterText
                           ? userBubbleMaxWidth
                           : assistantBubbleMaxWidth,
                       loadingLabel: displayMessage.id == 'story_text_connecting'
-                          ? 'Connecting…'
+                          ? 'Story setup…'
                           : _loadingLabelByMessageId[displayMessage.id] ??
                                 'Thinking…',
                       renderMarkdownBold: !displayMessage.isUser,
@@ -6320,10 +6434,7 @@ $chapterText
                         displayMessage,
                       ),
                       onPlayIcon: () => unawaited(
-                        _playGeneratedChapterNarration(
-                          displayMessage,
-                          playState,
-                        ),
+                        _handleGeneratedChapterPlayTap(displayMessage),
                       ),
                       playState: playState,
                     ),
@@ -6405,6 +6516,13 @@ $chapterText
                                       ? _restorePreviousStoryOptions
                                       : () => unawaited(
                                           _regenerateStoryOptions(),
+                                        ),
+                                  onPickForMe: showingPerspectiveOptions
+                                      ? null
+                                      : () => unawaited(
+                                          _pickStoryOptionForUser(
+                                            composerOptions,
+                                          ),
                                         ),
                                   onToggleCollapsed:
                                       _toggleComposerPanelCollapsed,
@@ -6642,99 +6760,97 @@ class _StoryNarrationVoiceBarState extends State<_StoryNarrationVoiceBar>
         ? Colors.white.withValues(alpha: 0.14)
         : Colors.black.withValues(alpha: 0.08);
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 360),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: surface,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(CupertinoIcons.waveform, color: foreground, size: 19),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 166,
+                height: 30,
+                child: widget.isLoading
+                    ? AnimatedBuilder(
+                        animation: _pulseController,
+                        builder: (context, _) {
+                          final opacity =
+                              0.58 + (_pulseController.value * 0.34);
+                          return Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Processing voice',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: foreground.withValues(alpha: opacity),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                height: 1.1,
+                              ),
+                            ),
+                          );
+                        },
+                      )
+                    : widget.isPaused
+                    ? Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Paused',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: foreground.withValues(alpha: 0.72),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            height: 1.1,
+                          ),
+                        ),
+                      )
+                    : StreamBuilder<double>(
+                        stream: widget.levelStream,
+                        initialData: 0,
+                        builder: (context, snapshot) {
+                          final level = (snapshot.data ?? 0).clamp(0.0, 1.0);
+                          return _StoryNarrationWaveform(
+                            level: level,
+                            loadingPulse: 0,
+                            color: foreground,
+                          );
+                        },
+                      ),
+              ),
+              const SizedBox(width: 4),
+              _StoryNarrationIconButton(
+                tooltip: widget.isPlaying ? 'Pause' : 'Play',
+                onTap: widget.isLoading ? null : widget.onTogglePlayback,
+                icon: widget.isPlaying
+                    ? CupertinoIcons.pause_fill
+                    : CupertinoIcons.play_fill,
+                color: foreground,
+              ),
+              _StoryNarrationIconButton(
+                tooltip: 'Close',
+                onTap: widget.onStop,
+                icon: CupertinoIcons.xmark,
+                color: foreground,
               ),
             ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(CupertinoIcons.waveform, color: foreground, size: 19),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 166,
-                  height: 30,
-                  child: widget.isLoading
-                      ? AnimatedBuilder(
-                          animation: _pulseController,
-                          builder: (context, _) {
-                            final opacity =
-                                0.58 + (_pulseController.value * 0.34);
-                            return Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Processing voice',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: foreground.withValues(alpha: opacity),
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.1,
-                                ),
-                              ),
-                            );
-                          },
-                        )
-                      : widget.isPaused
-                      ? Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Paused',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: foreground.withValues(alpha: 0.72),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              height: 1.1,
-                            ),
-                          ),
-                        )
-                      : StreamBuilder<double>(
-                          stream: widget.levelStream,
-                          initialData: 0,
-                          builder: (context, snapshot) {
-                            final level = (snapshot.data ?? 0).clamp(0.0, 1.0);
-                            return _StoryNarrationWaveform(
-                              level: level,
-                              loadingPulse: 0,
-                              color: foreground,
-                            );
-                          },
-                        ),
-                ),
-                const SizedBox(width: 4),
-                _StoryNarrationIconButton(
-                  tooltip: widget.isPlaying ? 'Pause' : 'Play',
-                  onTap: widget.isLoading ? null : widget.onTogglePlayback,
-                  icon: widget.isPlaying
-                      ? CupertinoIcons.pause_fill
-                      : CupertinoIcons.play_fill,
-                  color: foreground,
-                ),
-                _StoryNarrationIconButton(
-                  tooltip: 'Close',
-                  onTap: widget.onStop,
-                  icon: CupertinoIcons.xmark,
-                  color: foreground,
-                ),
-              ],
-            ),
           ),
         ),
       ),

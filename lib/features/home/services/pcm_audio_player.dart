@@ -13,7 +13,9 @@ abstract class AudioChunkPlayer {
     VoidCallback? onFinished,
   });
 
-  Future<void> stop();
+  Future<void> stop({bool notifyFinished = true});
+  Future<void> pause();
+  Future<void> resume();
   Future<void> dispose();
 }
 
@@ -63,10 +65,24 @@ class PcmAudioPlayer implements AudioChunkPlayer {
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> stop({bool notifyFinished = true}) async {
     if (_stopped) return;
     await _resetPlayer();
-    _notifyFinished();
+    if (notifyFinished) {
+      _notifyFinished();
+    }
+  }
+
+  @override
+  Future<void> pause() async {
+    if (_stopped) return;
+    await _player.pausePlayer();
+  }
+
+  @override
+  Future<void> resume() async {
+    if (_stopped) return;
+    await _player.resumePlayer();
   }
 
   @override
@@ -154,16 +170,45 @@ class IOSAudioTrackPlayer implements AudioChunkPlayer {
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> stop({bool notifyFinished = true}) async {
     if (_stopped) return;
     await _reset();
-    _notifyFinished();
+    if (notifyFinished) {
+      _notifyFinished();
+    }
+  }
+
+  @override
+  Future<void> pause() async {
+    if (_stopped) return;
+    try {
+      await _channel.invokeMethod<void>('pause');
+    } on MissingPluginException {
+      // Older installed builds do not have native pause/resume yet. Surface
+      // the error so the controller does not pretend playback can resume.
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> resume() async {
+    if (_stopped) return;
+    try {
+      await _channel.invokeMethod<void>('resume');
+    } on MissingPluginException {
+      // Native resume is available after reinstalling a build with the updated
+      // platform channel. Surface the error so UI state stays honest.
+      rethrow;
+    }
   }
 
   @override
   Future<void> dispose() => stop();
 
-  Future<void> _start({required int sampleRate, required int bufferSize}) async {
+  Future<void> _start({
+    required int sampleRate,
+    required int bufferSize,
+  }) async {
     _finishedNotified = false;
     try {
       await _channel.invokeMethod<void>('start', {
@@ -230,16 +275,45 @@ class AndroidAudioTrackPlayer implements AudioChunkPlayer {
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> stop({bool notifyFinished = true}) async {
     if (_stopped) return;
     await _reset();
-    _notifyFinished();
+    if (notifyFinished) {
+      _notifyFinished();
+    }
+  }
+
+  @override
+  Future<void> pause() async {
+    if (_stopped) return;
+    try {
+      await _channel.invokeMethod<void>('pause');
+    } on MissingPluginException {
+      // Older installed builds do not have native pause/resume yet. Surface
+      // the error so the controller does not pretend playback can resume.
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> resume() async {
+    if (_stopped) return;
+    try {
+      await _channel.invokeMethod<void>('resume');
+    } on MissingPluginException {
+      // Native resume is available after reinstalling a build with the updated
+      // platform channel. Surface the error so UI state stays honest.
+      rethrow;
+    }
   }
 
   @override
   Future<void> dispose() => stop();
 
-  Future<void> _start({required int sampleRate, required int bufferSize}) async {
+  Future<void> _start({
+    required int sampleRate,
+    required int bufferSize,
+  }) async {
     _finishedNotified = false;
     try {
       await _channel.invokeMethod<void>('start', {

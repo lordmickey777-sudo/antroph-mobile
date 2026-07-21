@@ -308,6 +308,7 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
   int _lastPendingCount = 0;
   int _lastPendingKeyCount = 0;
   String _lastStreamingAssistantText = '';
+  double _lastBottomOverlayPadding = 0;
   bool _lastRevealInProgress = false;
   bool _hasSyncedRevealState = false;
 
@@ -318,6 +319,7 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
     _lastPendingCount = widget.pendingTextMessages.length;
     _lastPendingKeyCount = widget.pendingKeys.length;
     _lastStreamingAssistantText = widget.streamingAssistantText ?? '';
+    _lastBottomOverlayPadding = widget.bottomOverlayPadding;
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
   }
 
@@ -327,15 +329,26 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
     final pendingCount = widget.pendingTextMessages.length;
     final pendingKeyCount = widget.pendingKeys.length;
     final streamingAssistantText = widget.streamingAssistantText ?? '';
-    if (widget.session.lastSeq != _lastSeq ||
+    final bottomOverlayPaddingChanged =
+        (widget.bottomOverlayPadding - _lastBottomOverlayPadding).abs() > 0.5;
+    final bottomOverlayPaddingIncreased =
+        widget.bottomOverlayPadding > _lastBottomOverlayPadding;
+    final contentChanged =
+        widget.session.lastSeq != _lastSeq ||
         pendingCount != _lastPendingCount ||
         pendingKeyCount != _lastPendingKeyCount ||
-        streamingAssistantText != _lastStreamingAssistantText) {
+        streamingAssistantText != _lastStreamingAssistantText;
+    if (contentChanged || bottomOverlayPaddingChanged) {
       _lastSeq = widget.session.lastSeq;
       _lastPendingCount = pendingCount;
       _lastPendingKeyCount = pendingKeyCount;
       _lastStreamingAssistantText = streamingAssistantText;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      _lastBottomOverlayPadding = widget.bottomOverlayPadding;
+      _scheduleBottomSettleScroll(
+        force:
+            bottomOverlayPaddingIncreased ||
+            (contentChanged && widget.bottomOverlayPadding > 0),
+      );
     }
   }
 
@@ -350,11 +363,26 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
     _controller.jumpTo(_controller.position.maxScrollExtent);
   }
 
-  void _scrollToBottom() {
+  void _scheduleBottomSettleScroll({required bool force}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom(force: force);
+      if (!force) return;
+      Future<void>.delayed(const Duration(milliseconds: 80), () {
+        if (!mounted) return;
+        _scrollToBottom(force: true);
+      });
+      Future<void>.delayed(const Duration(milliseconds: 180), () {
+        if (!mounted) return;
+        _scrollToBottom(force: true);
+      });
+    });
+  }
+
+  void _scrollToBottom({bool force = false}) {
     if (!_controller.hasClients) return;
     final distanceFromBottom =
         _controller.position.maxScrollExtent - _controller.offset;
-    if (distanceFromBottom > 180) return;
+    if (!force && distanceFromBottom > 180) return;
     _controller.animateTo(
       _controller.position.maxScrollExtent,
       duration: const Duration(milliseconds: 260),
@@ -521,7 +549,8 @@ class _QuizTranscriptViewState extends State<_QuizTranscriptView> {
           onAdvanceQuestion: widget.onAdvanceQuestion,
           onReplay: widget.onReplay,
           onLeave: widget.onLeave,
-          onTextRevealTick: _scrollToBottom,
+          onTextRevealTick: () =>
+              _scrollToBottom(force: widget.bottomOverlayPadding > 0),
           completedTranscriptAnimationIds: _completedTranscriptAnimationIds,
           onTranscriptAnimationComplete: _markTranscriptAnimationComplete,
         );
@@ -1394,7 +1423,7 @@ class _QuizTranscriptItem {
         _QuizTranscriptItem(
           kind: _QuizTranscriptItemKind.pendingAssistant,
           seq: session.lastSeq + 3,
-          statusTitle: 'Revealing answer...',
+          statusTitle: 'Explanation on the way...',
           showLoading: true,
         ),
       );
@@ -2416,6 +2445,7 @@ class _QuizTranscriptRow extends StatelessWidget {
         busyOptionId: _busyOptionId(item.question!.questionId),
         active: item.isActiveQuestion,
         interactionEnabled: quizInteractionEnabled,
+        onActiveQuestionTick: onTextRevealTick,
         onSelected: (optionId) =>
             onQuizAnswer(optionId, item.question!.questionId),
       ),
@@ -2719,6 +2749,7 @@ class _QuestionTranscriptBubble extends StatelessWidget {
     required this.busyOptionId,
     required this.active,
     required this.interactionEnabled,
+    required this.onActiveQuestionTick,
     required this.onSelected,
   });
 
@@ -2729,6 +2760,7 @@ class _QuestionTranscriptBubble extends StatelessWidget {
   final String? busyOptionId;
   final bool active;
   final bool interactionEnabled;
+  final VoidCallback onActiveQuestionTick;
   final ValueChanged<String> onSelected;
 
   @override
@@ -2740,6 +2772,7 @@ class _QuestionTranscriptBubble extends StatelessWidget {
         selectedOptionId: selectedAnswer,
         busyOptionId: busyOptionId,
         interactionEnabled: interactionEnabled,
+        onTick: onActiveQuestionTick,
         onSelected: onSelected,
       );
     }
@@ -3726,8 +3759,9 @@ List<String> _loadingLabelsForTitle(String? title) {
     return const ['Checking answers...', 'Processing...'];
   }
   if (normalized.contains('fetching answer') ||
-      normalized.contains('revealing answer')) {
-    return const ['Revealing answer...', 'Processing...'];
+      normalized.contains('revealing answer') ||
+      normalized.contains('explanation on the way')) {
+    return const ['Explanation on the way...', 'Revealing answer...'];
   }
   if (normalized.contains('finding topic')) {
     return const ['Thinking...', 'Processing...'];
@@ -4525,6 +4559,7 @@ class _LiveQuizQuestionGroup extends StatefulWidget {
     required this.selectedOptionId,
     required this.busyOptionId,
     required this.interactionEnabled,
+    required this.onTick,
     required this.onSelected,
   });
 
@@ -4533,6 +4568,7 @@ class _LiveQuizQuestionGroup extends StatefulWidget {
   final String? selectedOptionId;
   final String? busyOptionId;
   final bool interactionEnabled;
+  final VoidCallback onTick;
   final ValueChanged<String> onSelected;
 
   @override
@@ -4548,7 +4584,9 @@ class _LiveQuizQuestionGroupState extends State<_LiveQuizQuestionGroup> {
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() {});
+      widget.onTick();
     });
   }
 
@@ -4558,6 +4596,9 @@ class _LiveQuizQuestionGroupState extends State<_LiveQuizQuestionGroup> {
     if (oldWidget.question.questionId != widget.question.questionId) {
       _questionRevealComplete = false;
       _draftOptionId = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onTick();
+      });
     }
     if (widget.selectedOptionId != null) {
       _questionRevealComplete = true;

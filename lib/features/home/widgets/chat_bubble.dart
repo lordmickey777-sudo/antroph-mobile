@@ -226,10 +226,21 @@ class _StreamingStatusLabelState extends State<_StreamingStatusLabel>
   }
 
   List<String> get _labelWidthBasis => switch (widget.label) {
+    'Story setup…' => const [
+      'Connecting…',
+      'Generating story…',
+      'Loading story…',
+      'Setting up story…',
+    ],
     'Connecting…' ||
     'Preparing…' ||
     'Loading…' => const ['Connecting…', 'Preparing…', 'Loading…'],
     _ => const ['Thinking…', 'Processing…', 'Generating…'],
+  };
+
+  List<String> get _displayLabels => switch (widget.label) {
+    'Story setup…' => _labelWidthBasis,
+    _ => [widget.label],
   };
 
   Size _measureLabelBox(BuildContext context, List<String> labels) {
@@ -257,9 +268,19 @@ class _StreamingStatusLabelState extends State<_StreamingStatusLabel>
   @override
   Widget build(BuildContext context) {
     final labelBoxSize = _measureLabelBox(context, _labelWidthBasis);
+    final displayLabels = _displayLabels;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
+        final scaledProgress = _controller.value * displayLabels.length;
+        final labelIndex = scaledProgress.floor().clamp(
+          0,
+          displayLabels.length - 1,
+        );
+        final labelProgress = displayLabels.length == 1
+            ? _controller.value
+            : scaledProgress - labelIndex;
+        final label = displayLabels[labelIndex];
         return SizedBox(
           width: labelBoxSize.width,
           height: labelBoxSize.height,
@@ -273,10 +294,10 @@ class _StreamingStatusLabelState extends State<_StreamingStatusLabel>
                 return FadeTransition(opacity: animation, child: child);
               },
               child: _HandwritingStatusLabel(
-                key: ValueKey(widget.label),
-                label: widget.label,
+                key: ValueKey(label),
+                label: label,
                 color: widget.color,
-                progress: _controller.value,
+                progress: labelProgress,
               ),
             ),
           ),

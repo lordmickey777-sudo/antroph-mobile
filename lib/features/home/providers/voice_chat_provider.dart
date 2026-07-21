@@ -191,12 +191,22 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   bool _isBargeInMonitoring = false;
   bool _suppressNextPlaybackComplete = false;
   bool _suppressAutoListenAfterPlayback = false;
+  bool _isPreloadingNarration = false;
+  bool _hasActiveRealtimeResponse = false;
+  bool _playNarrationInFlight = false;
+  bool _pausePlaybackInFlight = false;
+  bool _resumePlaybackInFlight = false;
   final Queue<_TimedRmsSample> _pendingAiRmsSamples = Queue<_TimedRmsSample>();
   final Queue<Uint8List> _pendingMicChunks = Queue<Uint8List>();
   final LinkedHashMap<String, Uint8List> _narrationAudioCache =
       LinkedHashMap<String, Uint8List>();
   final StringBuffer _aiTextBuffer = StringBuffer();
   BytesBuilder? _activeNarrationAudioBuffer;
+  Completer<void>? _activeNarrationPreloadCompleter;
+  Uint8List? _activeNarrationPlaybackBytes;
+  DateTime? _activeNarrationPlaybackStartedAt;
+  int _activeNarrationPlaybackStartOffsetBytes = 0;
+  int _activeNarrationPausedOffsetBytes = 0;
   BytesBuilder _audioBuffer = BytesBuilder(copy: false);
   int _pendingMicBytes = 0;
   Completer<bool>? _permissionDialogCompleter;
@@ -208,7 +218,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Future<void>? _micCaptureStartFuture;
   Future<void> _recorderOperation = Future.value();
   String? _pendingStorySessionId;
+  String? _connectedSocketStorySessionId;
   String? _activeNarrationCacheKey;
+  String? _activeNarrationPlaybackKey;
   final Set<String> _syncedStorySessionIds = <String>{};
   Future<bool>? _microphonePermissionFuture;
 
@@ -422,7 +434,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         showPendingAssistantBubble: false,
       );
 
-      await _connectSocket(storySessionId: storySessionId);
+      await _ensureNarrationSocket(storySessionId: storySessionId);
 
       state = state.copyWith(
         phase: RealtimeVoicePhase.waitingForReady,
@@ -595,7 +607,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       // Only connect if not in story mode and socket not already open
       // (story mode already connected, and for continuous listening we reuse the socket)
-      if (!state.isStoryMode && !_socketOpen) {
+      if (!state.isStoryMode &&
+          (!_socketOpen || _connectedSocketStorySessionId != null)) {
         await _connectSocket();
       }
 
@@ -646,6 +659,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _log.i('Connecting to realtime voice socket $uri');
     await _client.connect(uri, config: config);
     _socketOpen = true;
+    _connectedSocketStorySessionId = config.storySessionId;
     _socketSub = _client.messages.listen(
       _handleIncomingMessage,
       onError: (err, st) =>
@@ -653,6 +667,18 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       onDone: _handleSocketClosed,
       cancelOnError: true,
     );
+  }
+
+  Future<void> _ensureNarrationSocket({String? storySessionId}) async {
+    final normalizedStorySessionId = storySessionId?.trim();
+    final sameNarrationSocket =
+        _socketOpen &&
+        _client.isOpen &&
+        !state.isStoryMode &&
+        (_connectedSocketStorySessionId ?? '') ==
+            (normalizedStorySessionId ?? '');
+    if (sameNarrationSocket) return;
+    await _connectSocket(storySessionId: normalizedStorySessionId);
   }
 
   Future<Uri?> _voiceUri() async {
@@ -911,6 +937,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         !_responseDoneForCurrentTurn &&
         (state.isProcessing || state.isPlaying || state.isConnecting)) {
       _client.send({'type': 'response.cancel'});
+      _hasActiveRealtimeResponse = false;
     }
     unawaited(_player.stop());
     state = state.copyWith(
@@ -1179,6 +1206,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _log.i(
         'Sending response.create with ${recordedBytes.length} bytes of audio',
       );
+      _hasActiveRealtimeResponse = true;
       _client.send({
         'type': 'response.create',
         'response': {
@@ -1287,11 +1315,15 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
       // Audio/transcript messages
       case RealtimeServerMessageType.responseCreated:
+        _hasActiveRealtimeResponse = true;
         _ignoreIncomingAudioUntilNextResponse = false;
         _responseDoneForCurrentTurn = false;
         _receivedAiAudioForCurrentTurn = false;
         _lastAiAudioAt = null;
         _suppressNextPlaybackComplete = false;
+        if (_isPreloadingNarration) {
+          break;
+        }
         state = state.copyWith(
           isRecording: false,
           isPlaying: false,
@@ -1379,15 +1411,24 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         }
         break;
       case RealtimeServerMessageType.responseDone:
+        _hasActiveRealtimeResponse = false;
         if (_ignoreIncomingAudioUntilNextResponse) {
           _discardNarrationCacheCapture();
+          _completeNarrationPreload();
           _commitSent = false;
           break;
         }
         // Save completed turn into conversation history for display
-        _saveCompletedTurn();
+        if (!_isPreloadingNarration && _activeNarrationCacheKey == null) {
+          _saveCompletedTurn();
+        }
         _finalizeNarrationCacheCapture();
         _responseDoneForCurrentTurn = true;
+        if (_isPreloadingNarration) {
+          _completeNarrationPreload();
+          _commitSent = false;
+          break;
+        }
         state = state.copyWith(
           isRecording: false,
           isProcessing: false,
@@ -1749,6 +1790,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   void _handleErrorMessage(Map<String, dynamic> payload) {
     final error = RealtimeVoiceError.fromJson(payload);
     _log.w('Voice socket error: ${error.code} - ${error.message}');
+    _hasActiveRealtimeResponse = false;
 
     final normalizedMessage = error.message.toLowerCase();
     final isBenignCancellationRace =
@@ -1788,15 +1830,23 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   Future<void> _handleAudioDelta(String base64Audio) async {
     if (!ref.mounted) return;
-    if (!_audioEnabled) return;
     if (_ignoreIncomingAudioUntilNextResponse) return;
-    _cancelAutoListenTimer();
     try {
       final normalized = base64.normalize(base64Audio);
       final bytes = base64Decode(normalized);
       if (bytes.isEmpty) return;
       _log.t('Decoded audio delta ${bytes.length} bytes');
       _appendNarrationCacheAudio(bytes);
+      if (_activeNarrationPlaybackKey != null &&
+          _activeNarrationPlaybackStartedAt == null) {
+        _markNarrationPlaybackStarted(bytes: _activeNarrationPlaybackBytes);
+      }
+      if (_isPreloadingNarration) {
+        _receivedAiAudioForCurrentTurn = true;
+        return;
+      }
+      if (!_audioEnabled) return;
+      _cancelAutoListenTimer();
       _receivedAiAudioForCurrentTurn = true;
       _lastAiAudioAt = DateTime.now();
       _schedulePlaybackIdleStop(bytes.length);
@@ -1812,6 +1862,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         onFinished: _handlePlaybackComplete,
       );
       if (!ref.mounted) return;
+      if (state.phase == RealtimeVoicePhase.paused) return;
       state = state.copyWith(
         isRecording: false,
         isPlaying: true,
@@ -1840,13 +1891,21 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   Future<void> _handleAudioBytes(Uint8List bytes) async {
     if (!ref.mounted) return;
-    if (!_audioEnabled) return;
     if (_ignoreIncomingAudioUntilNextResponse) return;
-    _cancelAutoListenTimer();
     try {
       if (bytes.isEmpty) return;
       _log.t('Received binary audio ${bytes.length} bytes');
       _appendNarrationCacheAudio(bytes);
+      if (_activeNarrationPlaybackKey != null &&
+          _activeNarrationPlaybackStartedAt == null) {
+        _markNarrationPlaybackStarted(bytes: _activeNarrationPlaybackBytes);
+      }
+      if (_isPreloadingNarration) {
+        _receivedAiAudioForCurrentTurn = true;
+        return;
+      }
+      if (!_audioEnabled) return;
+      _cancelAutoListenTimer();
       _receivedAiAudioForCurrentTurn = true;
       _lastAiAudioAt = DateTime.now();
       _schedulePlaybackIdleStop(bytes.length);
@@ -1862,6 +1921,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         onFinished: _handlePlaybackComplete,
       );
       if (!ref.mounted) return;
+      if (state.phase == RealtimeVoicePhase.paused) return;
       state = state.copyWith(
         isRecording: false,
         isPlaying: true,
@@ -1900,6 +1960,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _responseDoneForCurrentTurn = false;
     _receivedAiAudioForCurrentTurn = false;
     _lastAiAudioAt = null;
+    _activeNarrationPlaybackKey = null;
+    _clearNarrationPlaybackPosition();
     _disableAudio();
     _stopAiAudioLevelTimer();
     _emitAiAudioLevelValue(0.0);
@@ -1940,23 +2002,93 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _activeNarrationAudioBuffer = null;
     if (key == null || buffer == null || buffer.isEmpty) return;
 
-    _narrationAudioCache[key] = buffer.takeBytes();
+    final completedBytes = buffer.takeBytes();
+    _narrationAudioCache[key] = completedBytes;
+    if (_activeNarrationPlaybackKey == key) {
+      _activeNarrationPlaybackBytes = completedBytes;
+    }
     const maxCachedNarrations = 12;
     while (_narrationAudioCache.length > maxCachedNarrations) {
       _narrationAudioCache.remove(_narrationAudioCache.keys.first);
     }
   }
 
+  void _completeNarrationPreload() {
+    _isPreloadingNarration = false;
+    final completer = _activeNarrationPreloadCompleter;
+    _activeNarrationPreloadCompleter = null;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+  }
+
+  int get _narrationBytesPerSecond => _sampleRate * 2;
+
+  int _alignPcmOffset(int offset, int length) {
+    if (length <= 0) return 0;
+    final clamped = offset.clamp(0, length);
+    return clamped.isEven ? clamped : clamped - 1;
+  }
+
+  int _currentNarrationOffsetBytes() {
+    final bytes = _activeNarrationPlaybackBytes;
+    if (bytes == null || bytes.isEmpty) {
+      return _activeNarrationPausedOffsetBytes;
+    }
+    final startedAt = _activeNarrationPlaybackStartedAt;
+    if (startedAt == null) {
+      return _alignPcmOffset(_activeNarrationPausedOffsetBytes, bytes.length);
+    }
+    final elapsed = DateTime.now().difference(startedAt);
+    final elapsedBytes =
+        (elapsed.inMicroseconds * _narrationBytesPerSecond) ~/ 1000000;
+    return _alignPcmOffset(
+      _activeNarrationPlaybackStartOffsetBytes + elapsedBytes,
+      bytes.length,
+    );
+  }
+
+  void _markNarrationPlaybackStarted({
+    required Uint8List? bytes,
+    int offsetBytes = 0,
+  }) {
+    _activeNarrationPlaybackBytes = bytes;
+    _activeNarrationPlaybackStartOffsetBytes = bytes == null
+        ? 0
+        : _alignPcmOffset(offsetBytes, bytes.length);
+    _activeNarrationPausedOffsetBytes =
+        _activeNarrationPlaybackStartOffsetBytes;
+    _activeNarrationPlaybackStartedAt = DateTime.now();
+  }
+
+  void _clearNarrationPlaybackPosition() {
+    _activeNarrationPlaybackBytes = null;
+    _activeNarrationPlaybackStartedAt = null;
+    _activeNarrationPlaybackStartOffsetBytes = 0;
+    _activeNarrationPausedOffsetBytes = 0;
+  }
+
   void _discardNarrationCacheCapture() {
     _activeNarrationCacheKey = null;
     _activeNarrationAudioBuffer = null;
+    _completeNarrationPreload();
   }
 
-  Future<void> _playCachedNarration(Uint8List bytes) async {
+  Future<void> _playCachedNarration(
+    Uint8List bytes, {
+    int startOffsetBytes = 0,
+  }) async {
+    final startOffset = _alignPcmOffset(startOffsetBytes, bytes.length);
+    final playableBytes = startOffset <= 0 ? bytes : bytes.sublist(startOffset);
+    if (playableBytes.isEmpty) {
+      _handlePlaybackComplete();
+      return;
+    }
     _aiTextBuffer.clear();
     _commitSent = false;
     _resetAudioBuffer();
     _discardNarrationCacheCapture();
+    _markNarrationPlaybackStarted(bytes: bytes, offsetBytes: startOffset);
     _suppressAutoListenAfterPlayback = true;
     _enableAudio();
     _cancelAutoListenTimer();
@@ -1980,14 +2112,38 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
     _receivedAiAudioForCurrentTurn = true;
     _lastAiAudioAt = DateTime.now();
-    _schedulePlaybackIdleStop(bytes.length);
-    _queueAiAudioLevel(bytes);
+    _schedulePlaybackIdleStop(playableBytes.length);
+    _queueAiAudioLevel(playableBytes);
     await _configureAudioSession(_VoiceAudioSessionMode.playback);
-    await _player.addChunk(
-      bytes,
-      sampleRate: _sampleRate,
-      onFinished: _handlePlaybackComplete,
-    );
+    unawaited(_writeCachedNarrationBytes(playableBytes));
+  }
+
+  Future<void> _writeCachedNarrationBytes(Uint8List playableBytes) async {
+    try {
+      await _player.addChunk(
+        playableBytes,
+        sampleRate: _sampleRate,
+        onFinished: _handlePlaybackComplete,
+      );
+    } catch (error, stackTrace) {
+      _log.e(
+        'Failed to write cached narration audio',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (!ref.mounted) return;
+      _activeNarrationPlaybackKey = null;
+      _clearNarrationPlaybackPosition();
+      _cancelPlaybackIdleTimer();
+      _disableAudio();
+      state = state.copyWith(
+        isPlaying: false,
+        isProcessing: false,
+        isConnecting: false,
+        phase: RealtimeVoicePhase.ready,
+        errorMessage: 'Failed to play narration audio.',
+      );
+    }
   }
 
   /// Schedules auto-listening after a brief delay if enabled in settings.
@@ -2056,6 +2212,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void _handlePlaybackIdleTimeout() {
+    if (state.phase == RealtimeVoicePhase.paused) {
+      return;
+    }
     // Temporary interruption guard: while a turn is still streaming (no
     // response.done yet), don't cut playback due to transport gaps.
     if (!_responseDoneForCurrentTurn) {
@@ -2168,6 +2327,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         ],
       };
 
+      _hasActiveRealtimeResponse = true;
       _client.send({'type': 'response.create', 'response': response});
 
       if (textOnly) {
@@ -2199,17 +2359,59 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }) async {
     final trimmed = prompt.trim();
     if (trimmed.isEmpty) return;
+    if (_playNarrationInFlight) return;
+    final activePlaybackKey = _activeNarrationPlaybackKey;
+    final hasActivePlayback =
+        state.isPlaying ||
+        state.isProcessing ||
+        state.phase == RealtimeVoicePhase.paused ||
+        state.phase == RealtimeVoicePhase.playing ||
+        _hasActiveRealtimeResponse;
+    if (activePlaybackKey == trimmed && hasActivePlayback) {
+      if (state.phase == RealtimeVoicePhase.paused) {
+        await resumePlayback();
+      }
+      return;
+    }
+    if (activePlaybackKey != null &&
+        activePlaybackKey != trimmed &&
+        hasActivePlayback) {
+      await stopPlayback();
+    }
+    if (_isPreloadingNarration && _activeNarrationCacheKey == trimmed) {
+      await _activeNarrationPreloadCompleter?.future.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {},
+      );
+    }
+    if (_hasActiveRealtimeResponse) {
+      return;
+    }
     final cachedAudio = _narrationAudioCache[trimmed];
     if (cachedAudio != null && cachedAudio.isNotEmpty) {
-      await _playCachedNarration(cachedAudio);
+      _playNarrationInFlight = true;
+      _activeNarrationPlaybackKey = trimmed;
+      try {
+        await _playCachedNarration(cachedAudio);
+      } catch (_) {
+        _activeNarrationPlaybackKey = null;
+        _clearNarrationPlaybackPosition();
+        rethrow;
+      } finally {
+        _playNarrationInFlight = false;
+      }
       return;
     }
 
     try {
+      _playNarrationInFlight = true;
+      _activeNarrationPlaybackKey = trimmed;
       _aiTextBuffer.clear();
       _commitSent = false;
       _resetAudioBuffer();
       _beginNarrationCacheCapture(trimmed);
+      _isPreloadingNarration = false;
+      _activeNarrationPreloadCompleter = null;
       _suppressAutoListenAfterPlayback = true;
       _enableAudio();
 
@@ -2230,8 +2432,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         phase: RealtimeVoicePhase.processing,
       );
 
-      await _connectSocket(storySessionId: storySessionId);
+      await _ensureNarrationSocket(storySessionId: storySessionId);
 
+      _hasActiveRealtimeResponse = true;
       _client.send({
         'type': 'response.create',
         'response': {
@@ -2250,6 +2453,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       });
     } catch (e, st) {
       _log.e('Failed to play narration', error: e, stackTrace: st);
+      _activeNarrationPlaybackKey = null;
+      _clearNarrationPlaybackPosition();
       _discardNarrationCacheCapture();
       _suppressAutoListenAfterPlayback = false;
       state = state.copyWith(
@@ -2261,6 +2466,55 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         errorMessage: 'Failed to play narration: $e',
       );
       await _teardownSocket();
+    } finally {
+      _playNarrationInFlight = false;
+    }
+  }
+
+  Future<void> preloadTextNarration(
+    String prompt, {
+    String? storySessionId,
+  }) async {
+    final trimmed = prompt.trim();
+    if (trimmed.isEmpty) return;
+    if (_narrationAudioCache.containsKey(trimmed)) return;
+    if (_isPreloadingNarration && _activeNarrationCacheKey == trimmed) return;
+    if (_isPreloadingNarration) return;
+    if (_hasActiveRealtimeResponse) return;
+    if (state.isRecording || state.isPlaying || state.isProcessing) return;
+
+    try {
+      _aiTextBuffer.clear();
+      _commitSent = false;
+      _resetAudioBuffer();
+      _beginNarrationCacheCapture(trimmed);
+      _isPreloadingNarration = true;
+      _activeNarrationPreloadCompleter = Completer<void>();
+      _suppressAutoListenAfterPlayback = true;
+      _disableAudio();
+
+      await _ensureNarrationSocket(storySessionId: storySessionId);
+
+      _hasActiveRealtimeResponse = true;
+      _client.send({
+        'type': 'response.create',
+        'response': {
+          'metadata': {'source': 'chapter_narration_preload'},
+          'modalities': ['audio'],
+          'input': [
+            {
+              'type': 'message',
+              'role': 'user',
+              'content': [
+                {'type': 'input_text', 'text': trimmed},
+              ],
+            },
+          ],
+        },
+      });
+    } catch (e, st) {
+      _log.e('Failed to preload narration', error: e, stackTrace: st);
+      _discardNarrationCacheCapture();
     }
   }
 
@@ -2301,6 +2555,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         state.phase != RealtimeVoicePhase.idle &&
         state.phase != RealtimeVoicePhase.closed;
     _socketOpen = false;
+    _connectedSocketStorySessionId = null;
+    _hasActiveRealtimeResponse = false;
+    _activeNarrationPlaybackKey = null;
+    _clearNarrationPlaybackPosition();
     unawaited(_player.stop());
     _disableAudio();
     _stopAiAudioLevelTimer();
@@ -2360,6 +2618,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   /// Stop audio playback and optionally return to listening immediately.
   Future<void> stopPlayback({bool restartListening = false}) async {
+    if (!state.isPlaying &&
+        !state.isProcessing &&
+        !state.isConnecting &&
+        state.phase != RealtimeVoicePhase.paused &&
+        !_hasActiveRealtimeResponse) {
+      return;
+    }
     _cancelAutoListenTimer();
     _cancelPlaybackIdleTimer();
     final shouldCancelActiveResponse =
@@ -2368,6 +2633,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         (state.isProcessing || state.isPlaying || state.isConnecting);
     if (shouldCancelActiveResponse) {
       _client.send({'type': 'response.cancel'});
+      _hasActiveRealtimeResponse = false;
     }
     _ignoreIncomingAudioUntilNextResponse = true;
     _disableAudio();
@@ -2386,6 +2652,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
     _resetAudioBuffer();
     _lastSpeechAt = null;
+    _activeNarrationPlaybackKey = null;
+    _clearNarrationPlaybackPosition();
     final nextPhase = state.isStoryMode
         ? (state.isSessionReady ? RealtimeVoicePhase.ready : state.phase)
         : state.phase;
@@ -2403,6 +2671,63 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         !state.isMuted &&
         (state.isSessionReady || !state.isStoryMode)) {
       await startRecording();
+    }
+  }
+
+  Future<void> pausePlayback() async {
+    if (_pausePlaybackInFlight) return;
+    if (state.phase == RealtimeVoicePhase.paused) return;
+    if (!state.isPlaying && state.phase != RealtimeVoicePhase.playing) return;
+    _pausePlaybackInFlight = true;
+    _cancelPlaybackIdleTimer();
+    _activeNarrationPausedOffsetBytes = _currentNarrationOffsetBytes();
+    _activeNarrationPlaybackStartedAt = null;
+    state = state.copyWith(isPlaying: false, phase: RealtimeVoicePhase.paused);
+    try {
+      await _player.pause();
+    } catch (error, stackTrace) {
+      _log.e('Failed to pause playback', error: error, stackTrace: stackTrace);
+      if (!ref.mounted) return;
+      state = state.copyWith(isPlaying: false, phase: RealtimeVoicePhase.ready);
+      _activeNarrationPlaybackKey = null;
+      _clearNarrationPlaybackPosition();
+    } finally {
+      _pausePlaybackInFlight = false;
+    }
+  }
+
+  Future<void> resumePlayback() async {
+    if (_resumePlaybackInFlight) return;
+    if (state.isPlaying || state.phase == RealtimeVoicePhase.playing) return;
+    if (state.phase != RealtimeVoicePhase.paused) return;
+    _resumePlaybackInFlight = true;
+    state = state.copyWith(isPlaying: true, phase: RealtimeVoicePhase.playing);
+    try {
+      final bytes = _activeNarrationPlaybackBytes;
+      final resumeOffset = bytes == null
+          ? 0
+          : _alignPcmOffset(_activeNarrationPausedOffsetBytes, bytes.length);
+      if (bytes != null && bytes.isNotEmpty && resumeOffset > 0) {
+        _suppressNextPlaybackComplete = true;
+        try {
+          await _player.stop(notifyFinished: false);
+        } finally {
+          _suppressNextPlaybackComplete = false;
+        }
+        await _playCachedNarration(bytes, startOffsetBytes: resumeOffset);
+      } else {
+        _activeNarrationPlaybackStartedAt = DateTime.now();
+        await _player.resume();
+      }
+    } catch (error, stackTrace) {
+      _log.e('Failed to resume playback', error: error, stackTrace: stackTrace);
+      if (!ref.mounted) return;
+      state = state.copyWith(
+        isPlaying: false,
+        phase: RealtimeVoicePhase.paused,
+      );
+    } finally {
+      _resumePlaybackInFlight = false;
     }
   }
 
@@ -2588,6 +2913,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   Future<void> _teardownSocket() async {
     _socketOpen = false;
+    _connectedSocketStorySessionId = null;
+    _hasActiveRealtimeResponse = false;
+    _activeNarrationPlaybackKey = null;
+    _clearNarrationPlaybackPosition();
     _ignoreIncomingAudioUntilNextResponse = false;
     await _socketSub?.cancel();
     _socketSub = null;

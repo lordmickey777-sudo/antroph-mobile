@@ -51,6 +51,16 @@ import FirebaseCore
         self.stopAudioEngine()
         result(true)
 
+      case "pause":
+        self.playerNode?.pause()
+        result(true)
+
+      case "resume":
+        if self.audioEngine?.isRunning == true {
+          self.playerNode?.play()
+        }
+        result(true)
+
       default:
         result(FlutterMethodNotImplemented)
       }
