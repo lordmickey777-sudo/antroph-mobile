@@ -1242,12 +1242,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (payload == null) return;
     final type = message.type;
     final typeStr = (payload['type'] as String?) ?? '';
-    _log.t('Voice socket message type=$typeStr');
+    if (!_isNoisyRealtimeEvent(type, typeStr)) {
+      _log.t('Voice socket message type=$typeStr');
+    }
 
     switch (type) {
       // Story-specific messages
       case RealtimeServerMessageType.storySessionReady:
-        _log.i('[IncomingMessage] >>> story_session_ready received! <<<');
+        _log.t('[IncomingMessage] story_session_ready received');
         _handleStorySessionReady(payload);
         break;
       case RealtimeServerMessageType.storyStarted:
@@ -1266,26 +1268,24 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         _handleRoomJoined(payload);
         break;
       case RealtimeServerMessageType.storyResumed:
-        _log.i('[IncomingMessage] story_resumed received');
+        _log.t('[IncomingMessage] story_resumed received');
         _handleStoryStarted(payload); // Same handling as story_started
         break;
       case RealtimeServerMessageType.storyAck:
-        _log.i('[IncomingMessage] story_ack received: $payload');
+        _log.t('[IncomingMessage] story_ack received');
         break;
 
       // OpenAI session messages - use session.updated as fallback for ready state
       case RealtimeServerMessageType.sessionCreated:
-        _log.i('[IncomingMessage] session.created received');
+        _log.t('[IncomingMessage] session.created received');
         break;
       case RealtimeServerMessageType.sessionUpdated:
-        _log.i(
-          '[IncomingMessage] session.updated received - transitioning to ready',
-        );
+        _log.t('[IncomingMessage] session.updated received');
         // If we're waiting for ready and receive session.updated, treat it as ready
         // This is a fallback in case story_session_ready is not sent by the backend
         if (state.isStoryMode &&
             state.phase == RealtimeVoicePhase.waitingForReady) {
-          _log.i('[IncomingMessage] Using session.updated as ready signal');
+          _log.t('[IncomingMessage] Using session.updated as ready signal');
           final sessionInfo = state.storySession;
           state = state.copyWith(
             phase: RealtimeVoicePhase.ready,
@@ -1344,7 +1344,6 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       case RealtimeServerMessageType.outputAudioDelta:
         final audio = _firstString([payload['audio'], payload['delta']]);
         if (audio != null && audio.isNotEmpty) {
-          _log.t('Voice audio payload length=${audio.length}');
           unawaited(_handleAudioDelta(audio));
         } else {
           _log.w('Audio event without audio field: $payload');
@@ -1477,8 +1476,35 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     }
   }
 
+  bool _isNoisyRealtimeEvent(RealtimeServerMessageType type, String typeStr) {
+    const noisyRawTypes = {
+      'conversation.item.added',
+      'conversation.item.done',
+      'input_audio_buffer.speech_started',
+      'input_audio_buffer.speech_stopped',
+      'rate_limits.updated',
+      'response.content_part.added',
+      'response.content_part.done',
+      'response.output_item.added',
+      'response.output_item.done',
+      'response.audio_transcript.done',
+      'session.created',
+      'session.updated',
+    };
+    return type == RealtimeServerMessageType.responseAudio ||
+        type == RealtimeServerMessageType.responseAudioDelta ||
+        type == RealtimeServerMessageType.responseOutputAudio ||
+        type == RealtimeServerMessageType.responseOutputAudioDelta ||
+        type == RealtimeServerMessageType.outputAudioDelta ||
+        type == RealtimeServerMessageType.responseAudioTranscriptDelta ||
+        type == RealtimeServerMessageType.responseAudioTranscriptDone ||
+        type == RealtimeServerMessageType.mascotExpression ||
+        type == RealtimeServerMessageType.conversationHistoryFull ||
+        noisyRawTypes.contains(typeStr);
+  }
+
   void _handleStorySessionReady(Map<String, dynamic> payload) {
-    _log.i('Story session ready');
+    _log.t('Story session ready');
     final sessionInfo = StorySessionInfo.fromJson(payload);
     state = state.copyWith(
       phase: RealtimeVoicePhase.ready,
@@ -1493,7 +1519,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void _handleStoryStarted(Map<String, dynamic> payload) {
-    _log.i('Story started: $payload');
+    _log.t('Story started');
     final sessionInfo = StorySessionInfo.fromJson(payload);
     final roomData = payload['room'] as Map<String, dynamic>?;
     RoomState? roomState;
@@ -1508,7 +1534,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void _handleStoryResponse(Map<String, dynamic> payload) {
-    _log.i('Story response: $payload');
+    _log.t('Story response: ${payload['action']}');
     final action = payload['action'] as String?;
     if (action == 'paused') {
       state = state.copyWith(phase: RealtimeVoicePhase.paused);
@@ -1554,11 +1580,10 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   }
 
   void _handleConversationItem(Map<String, dynamic> payload) {
-    _log.i('Conversation item: $payload');
     final item = ConversationItem.fromJson(payload);
     if (item.content.isEmpty) return;
     final history = _appendConversationItem(state.conversationHistory, item);
-    _log.i(
+    _log.t(
       '[ChatDebug] conversation.item append role=${item.role} '
       'contentLen=${item.content.length} history.len=${history.length}',
     );
@@ -1567,7 +1592,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
   void _handleMascotExpression(Map<String, dynamic> payload) {
     final event = MascotExpressionEvent.fromJson(payload);
-    _log.d(
+    _log.t(
       'Mascot expression received: ${event.expression} '
       '(intensity=${event.intensity}, durationMs=${event.durationMs}, '
       'riveElementId=${event.riveElementId})',
@@ -1582,8 +1607,8 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   /// sync updates arrive.
   void _handleConversationHistoryFull(Map<String, dynamic> payload) {
     final historyList = payload['history'] as List<dynamic>? ?? [];
-    _log.i('Received full conversation history: ${historyList.length} turns');
-    _log.i(
+    _log.t('Received full conversation history: ${historyList.length} turns');
+    _log.t(
       '[ChatDebug] history.full speakers='
       '${historyList.whereType<Map<String, dynamic>>().map((e) => e['speaker']).toList()}',
     );
@@ -1599,7 +1624,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     }
     final before = state.conversationHistory;
     final merged = _mergeConversationHistory(before, _normalizeHistory(items));
-    _log.i(
+    _log.t(
       '[ChatDebug] merge: local=${before.map((e) => e.role).toList()} '
       'incoming=${items.map((e) => e.role).toList()} '
       'merged=${merged.map((e) => e.role).toList()}',
@@ -1835,11 +1860,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       final normalized = base64.normalize(base64Audio);
       final bytes = base64Decode(normalized);
       if (bytes.isEmpty) return;
-      _log.t('Decoded audio delta ${bytes.length} bytes');
       _appendNarrationCacheAudio(bytes);
       if (_activeNarrationPlaybackKey != null &&
           _activeNarrationPlaybackStartedAt == null) {
-        _markNarrationPlaybackStarted(bytes: _activeNarrationPlaybackBytes);
+        _markNarrationPlaybackStarted(
+          bytes:
+              _activeNarrationPlaybackBytes ?? _currentNarrationCacheSnapshot(),
+        );
       }
       if (_isPreloadingNarration) {
         _receivedAiAudioForCurrentTurn = true;
@@ -1894,11 +1921,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (_ignoreIncomingAudioUntilNextResponse) return;
     try {
       if (bytes.isEmpty) return;
-      _log.t('Received binary audio ${bytes.length} bytes');
       _appendNarrationCacheAudio(bytes);
       if (_activeNarrationPlaybackKey != null &&
           _activeNarrationPlaybackStartedAt == null) {
-        _markNarrationPlaybackStarted(bytes: _activeNarrationPlaybackBytes);
+        _markNarrationPlaybackStarted(
+          bytes:
+              _activeNarrationPlaybackBytes ?? _currentNarrationCacheSnapshot(),
+        );
       }
       if (_isPreloadingNarration) {
         _receivedAiAudioForCurrentTurn = true;
@@ -1971,7 +2000,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       isUserSpeaking: false,
       currentExpression: RobotExpression.neutral,
       clearFace: true,
-      phase: state.isStoryMode ? RealtimeVoicePhase.ready : state.phase,
+      phase: RealtimeVoicePhase.ready,
     );
 
     if (_suppressAutoListenAfterPlayback) {
@@ -1993,6 +2022,14 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       return;
     }
     buffer.add(bytes);
+  }
+
+  Uint8List? _currentNarrationCacheSnapshot() {
+    final buffer = _activeNarrationAudioBuffer;
+    if (_activeNarrationCacheKey == null || buffer == null || buffer.isEmpty) {
+      return null;
+    }
+    return buffer.toBytes();
   }
 
   void _finalizeNarrationCacheCapture() {
@@ -2077,6 +2114,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
   Future<void> _playCachedNarration(
     Uint8List bytes, {
     int startOffsetBytes = 0,
+    bool preserveActiveCapture = false,
   }) async {
     final startOffset = _alignPcmOffset(startOffsetBytes, bytes.length);
     final playableBytes = startOffset <= 0 ? bytes : bytes.sublist(startOffset);
@@ -2087,7 +2125,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _aiTextBuffer.clear();
     _commitSent = false;
     _resetAudioBuffer();
-    _discardNarrationCacheCapture();
+    if (!preserveActiveCapture) {
+      _discardNarrationCacheCapture();
+    }
     _markNarrationPlaybackStarted(bytes: bytes, offsetBytes: startOffset);
     _suppressAutoListenAfterPlayback = true;
     _enableAudio();
@@ -2152,7 +2192,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
 
     // Don't auto-listen if muted
     if (state.isMuted) {
-      _log.i('Auto-listen skipped: muted');
+      _log.t('Auto-listen skipped: muted');
       return;
     }
 
@@ -2331,7 +2371,7 @@ class VoiceChatController extends Notifier<VoiceChatState> {
       _client.send({'type': 'response.create', 'response': response});
 
       if (textOnly) {
-        _log.i(
+        _log.t(
           '[ChatDebug] textOnly user msg appended. history.len=${optimisticHistory.length} '
           'tail=${optimisticHistory.map((e) => '${e.role}:${e.content.length}c').toList()}',
         );
@@ -2680,11 +2720,21 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     if (!state.isPlaying && state.phase != RealtimeVoicePhase.playing) return;
     _pausePlaybackInFlight = true;
     _cancelPlaybackIdleTimer();
+    _activeNarrationPlaybackBytes =
+        _currentNarrationCacheSnapshot() ?? _activeNarrationPlaybackBytes;
     _activeNarrationPausedOffsetBytes = _currentNarrationOffsetBytes();
     _activeNarrationPlaybackStartedAt = null;
+    final usePcmSnapshotResume = _activeNarrationPlaybackKey != null;
+    if (usePcmSnapshotResume) {
+      _audioEnabled = false;
+    }
     state = state.copyWith(isPlaying: false, phase: RealtimeVoicePhase.paused);
     try {
-      await _player.pause();
+      if (usePcmSnapshotResume) {
+        await _player.stop(notifyFinished: false);
+      } else {
+        await _player.pause();
+      }
     } catch (error, stackTrace) {
       _log.e('Failed to pause playback', error: error, stackTrace: stackTrace);
       if (!ref.mounted) return;
@@ -2703,7 +2753,9 @@ class VoiceChatController extends Notifier<VoiceChatState> {
     _resumePlaybackInFlight = true;
     state = state.copyWith(isPlaying: true, phase: RealtimeVoicePhase.playing);
     try {
-      final bytes = _activeNarrationPlaybackBytes;
+      final bytes =
+          _currentNarrationCacheSnapshot() ?? _activeNarrationPlaybackBytes;
+      _activeNarrationPlaybackBytes = bytes;
       final resumeOffset = bytes == null
           ? 0
           : _alignPcmOffset(_activeNarrationPausedOffsetBytes, bytes.length);
@@ -2714,8 +2766,13 @@ class VoiceChatController extends Notifier<VoiceChatState> {
         } finally {
           _suppressNextPlaybackComplete = false;
         }
-        await _playCachedNarration(bytes, startOffsetBytes: resumeOffset);
+        await _playCachedNarration(
+          bytes,
+          startOffsetBytes: resumeOffset,
+          preserveActiveCapture: _activeNarrationCacheKey != null,
+        );
       } else {
+        _audioEnabled = true;
         _activeNarrationPlaybackStartedAt = DateTime.now();
         await _player.resume();
       }

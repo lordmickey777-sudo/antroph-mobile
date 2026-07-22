@@ -1012,6 +1012,78 @@ void main() {
     },
   );
 
+  testWidgets(
+    'InteractiveStoryRenderer waits for explanation after solo answer reveal',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(400, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final session = InteractiveSessionState.fromJson({
+        'session_id': 'session-1',
+        'story_id': 'story-1',
+        'interaction_mode': 'interactive',
+        'ai_role': 'host',
+        'interactive_state': {
+          'template': 'quiz',
+          'phase': 'showing_results',
+          'session_type': 'solo',
+          'current_round': 1,
+          'total_rounds': 3,
+          'result': {
+            'question_id': 'q1',
+            'correct_option_id': 'golf',
+            'explanation': 'A hole in one belongs to golf.',
+            'answered_count': 1,
+            'eligible_count': 1,
+            'answers': const [],
+            'standings': const [],
+          },
+        },
+        'participants': const [],
+        'events': const [],
+        'current_turn': {
+          'type': 'interactive_turn.v1',
+          'session_id': 'session-1',
+          'turn_id': 'turn-1',
+          'seq': 2,
+          'speaker': {'type': 'ai', 'role': 'host'},
+          'blocks': [
+            {
+              'kind': 'text',
+              'text': 'Good. Give me a second to line up the next question.',
+            },
+          ],
+        },
+        'last_seq': 1,
+        'is_completed': false,
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: InteractiveStoryRenderer(
+              session: session,
+              onChoice: (_) {},
+              onQuizAnswer: (_, _) {},
+              onRetryGeneration: () {},
+              onReplay: () {},
+              onLeave: () {},
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.text('Getting explanation...'), findsOneWidget);
+      expect(find.text('Getting questions...'), findsNothing);
+      expect(
+        find.text('Good. Give me a second to line up the next question.'),
+        findsNothing,
+      );
+    },
+  );
+
   testWidgets('untimed solo quiz answers stay left after question reveal', (
     tester,
   ) async {
@@ -1861,7 +1933,7 @@ void main() {
 
       expect(firstAspect, findsOneWidget);
       expect(secondAspect, findsOneWidget);
-      expect(thirdAspect, findsOneWidget);
+      expect(thirdAspect, findsNothing);
       expect(customAspect, findsOneWidget);
       expect(
         find.byKey(const ValueKey('topic-aspect-unused_fourth')),
@@ -2310,10 +2382,7 @@ void main() {
       find.byKey(const ValueKey('topic-aspect-trade_routes')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey('topic-aspect-daily_life')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('topic-aspect-daily_life')), findsNothing);
     expect(
       find.byKey(const ValueKey('topic-aspect-custom_aspect')),
       findsOneWidget,
@@ -2428,7 +2497,7 @@ void main() {
 
       expect(firstAspect, findsOneWidget);
       expect(secondAspect, findsOneWidget);
-      expect(thirdAspect, findsOneWidget);
+      expect(thirdAspect, findsNothing);
       expect(customAspect, findsOneWidget);
       expect(continueAction, findsOneWidget);
       expect(find.text('Type my own aspect'), findsOneWidget);
@@ -2442,13 +2511,7 @@ void main() {
         findsNothing,
       );
 
-      final ordered = [
-        firstAspect,
-        secondAspect,
-        thirdAspect,
-        customAspect,
-        continueAction,
-      ];
+      final ordered = [firstAspect, secondAspect, customAspect, continueAction];
       for (var index = 0; index < ordered.length - 1; index++) {
         expect(
           tester.getRect(ordered[index]).top,

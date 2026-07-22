@@ -1126,6 +1126,8 @@ class _QuizTranscriptItem {
     }
 
     if (currentTurn != null) {
+      final suppressSoloNextQuestionTransition =
+          sessionType == 'solo' && phase == 'showing_results';
       final hideCurrentSetupTurn =
           sessionType == 'group' &&
           !isCurrentUserGroupHost &&
@@ -1133,11 +1135,13 @@ class _QuizTranscriptItem {
       final currentTurnItems = <_QuizTranscriptItem>[
         if (!hideCurrentSetupTurn) ...[
           for (final text in _turnTexts(currentTurn))
-            _QuizTranscriptItem(
-              kind: _QuizTranscriptItemKind.aiMessage,
-              seq: currentTurn.seq,
-              statusTitle: text,
-            ),
+            if (!suppressSoloNextQuestionTransition ||
+                !_isSoloNextQuestionTransitionText(text))
+              _QuizTranscriptItem(
+                kind: _QuizTranscriptItemKind.aiMessage,
+                seq: currentTurn.seq,
+                statusTitle: text,
+              ),
           ..._turnChoiceItems(
             currentTurn,
             currentTurn.seq,
@@ -1458,6 +1462,8 @@ class _QuizTranscriptItem {
                 ? 'Calculating results...'
                 : checkingAnswers
                 ? 'Checking answers'
+                : !isGroupSession && waitingAfterResult
+                ? 'Getting explanation...'
                 : 'Aura is getting the next question ready',
             statusBody: manualAdvance
                 ? (canAdvanceQuestion
@@ -1713,6 +1719,12 @@ class _QuizTranscriptItem {
       }
     }
     return texts;
+  }
+
+  static bool _isSoloNextQuestionTransitionText(String text) {
+    final normalized = text.trim().toLowerCase();
+    return normalized.contains('line up the next question') ||
+        normalized.contains('getting the next question ready');
   }
 
   static String? _groupSetupStage(InteractiveTurn turn) {
@@ -3760,8 +3772,9 @@ List<String> _loadingLabelsForTitle(String? title) {
   }
   if (normalized.contains('fetching answer') ||
       normalized.contains('revealing answer') ||
+      normalized.contains('getting explanation') ||
       normalized.contains('explanation on the way')) {
-    return const ['Explanation on the way...', 'Revealing answer...'];
+    return const ['Getting explanation...'];
   }
   if (normalized.contains('finding topic')) {
     return const ['Thinking...', 'Processing...'];

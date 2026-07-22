@@ -2727,131 +2727,167 @@ class _GroupSetupOptionPanel extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: Stack(
           children: [
-            AnimatedSize(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.only(bottom: collapsed ? 8 : 0),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          if (collapsed)
-                            if (hasTitle)
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.only(left: 2),
-                                  child: Text(
-                                    title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      height: 1.2,
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.only(bottom: collapsed ? 8 : 0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              if (collapsed)
+                                if (hasTitle)
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(left: 2),
+                                      child: Text(
+                                        title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1.2,
+                                        ),
+                                      ),
                                     ),
+                                  )
+                                else
+                                  const Spacer()
+                              else
+                                const Spacer(),
+                              SizedBox.square(
+                                dimension: 28,
+                                child: IconButton(
+                                  tooltip: collapsed
+                                      ? 'Show options'
+                                      : 'Hide options',
+                                  padding: EdgeInsets.zero,
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: disabled
+                                      ? null
+                                      : onToggleCollapsed,
+                                  icon: Icon(
+                                    collapsed
+                                        ? CupertinoIcons.chevron_up
+                                        : CupertinoIcons.chevron_down,
+                                    size: 20,
+                                    color: disabled
+                                        ? Colors.white30
+                                        : Colors.white54,
                                   ),
                                 ),
-                              )
-                            else
-                              const Spacer()
-                          else
-                            const Spacer(),
-                          SizedBox.square(
-                            dimension: 28,
-                            child: IconButton(
-                              tooltip: collapsed
-                                  ? 'Show options'
-                                  : 'Hide options',
-                              padding: EdgeInsets.zero,
-                              visualDensity: VisualDensity.compact,
-                              onPressed: disabled ? null : onToggleCollapsed,
-                              icon: Icon(
-                                collapsed
-                                    ? CupertinoIcons.chevron_up
-                                    : CupertinoIcons.chevron_down,
-                                size: 20,
-                                color: disabled
-                                    ? Colors.white30
-                                    : Colors.white54,
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (!collapsed) ...[
+                          if (hasTitle) ...[
+                            Text(
+                              title,
+                              maxLines: title.contains('\n') ? 8 : 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                height: 1.22,
                               ),
                             ),
-                          ),
+                            const SizedBox(height: 10),
+                            Divider(
+                              height: 1,
+                              color: Colors.white.withValues(alpha: 0.13),
+                            ),
+                          ],
+                          for (
+                            var index = 0;
+                            index < options.length;
+                            index++
+                          ) ...[
+                            _StoryActionOptionRow(
+                              key: optionKeyPrefix == null
+                                  ? null
+                                  : ValueKey(
+                                      '$optionKeyPrefix-${options[index].id}',
+                                    ),
+                              label: options[index].label.isEmpty
+                                  ? options[index].id
+                                  : options[index].label,
+                              disabled: disabled,
+                              icon: CupertinoIcons.chevron_right,
+                              onPressed: () => onSelected(options[index].id),
+                            ),
+                            if (index < options.length - 1)
+                              Divider(
+                                height: 1,
+                                color: Colors.white.withValues(alpha: 0.13),
+                              ),
+                          ],
                         ],
+                      ],
+                    ),
+                  ),
+                ),
+                Divider(
+                  height: 1,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.09)
+                      : Colors.black.withValues(alpha: 0.08),
+                ),
+                const SizedBox(height: 4),
+                _GroupAttachedTextComposer(
+                  textController: textController,
+                  textFocusNode: textFocusNode,
+                  textFieldKey: textFieldKey,
+                  canSubmitText: canSubmitText,
+                  hintText: hintText,
+                  onSendText: onSendText,
+                  onCall: disabled ? () {} : onCall,
+                  onInputRequested: onInputRequested,
+                  inputKey: inputKey,
+                ),
+              ],
+            ),
+            if (disabled)
+              Positioned(
+                top: 18,
+                left: 22,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.48),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.12),
                       ),
                     ),
-                    if (!collapsed) ...[
-                      if (hasTitle) ...[
-                        Text(
-                          title,
-                          maxLines: title.contains('\n') ? 8 : 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            height: 1.22,
-                          ),
+                    child: const SizedBox.square(
+                      dimension: 34,
+                      child: Padding(
+                        padding: EdgeInsets.all(8),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: Colors.white,
                         ),
-                        const SizedBox(height: 10),
-                        Divider(
-                          height: 1,
-                          color: Colors.white.withValues(alpha: 0.13),
-                        ),
-                      ],
-                      for (var index = 0; index < options.length; index++) ...[
-                        _StoryActionOptionRow(
-                          key: optionKeyPrefix == null
-                              ? null
-                              : ValueKey(
-                                  '$optionKeyPrefix-${options[index].id}',
-                                ),
-                          label: options[index].label.isEmpty
-                              ? options[index].id
-                              : options[index].label,
-                          disabled: disabled,
-                          icon: CupertinoIcons.chevron_right,
-                          onPressed: () => onSelected(options[index].id),
-                        ),
-                        if (index < options.length - 1)
-                          Divider(
-                            height: 1,
-                            color: Colors.white.withValues(alpha: 0.13),
-                          ),
-                      ],
-                    ],
-                  ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
-            Divider(
-              height: 1,
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.09)
-                  : Colors.black.withValues(alpha: 0.08),
-            ),
-            const SizedBox(height: 4),
-            _GroupAttachedTextComposer(
-              textController: textController,
-              textFocusNode: textFocusNode,
-              textFieldKey: textFieldKey,
-              canSubmitText: canSubmitText,
-              hintText: hintText,
-              onSendText: onSendText,
-              onCall: disabled ? () {} : onCall,
-              onInputRequested: onInputRequested,
-              inputKey: inputKey,
-            ),
           ],
         ),
       ),
@@ -3890,16 +3926,16 @@ List<InteractiveOption> _soloAspectPanelOptions(
   List<InteractiveOption> options,
   Map<String, dynamic> state,
 ) {
+  const maxVisibleSubtopics = 2;
   final filtered = options
-      .where((option) => option.id.trim().toLowerCase() != 'custom_aspect')
+      .where((option) {
+        final id = option.id.trim().toLowerCase();
+        return id != 'custom_aspect' && id != 'continue_with_topic';
+      })
+      .take(maxVisibleSubtopics)
       .toList(growable: false);
   final status = state['topic_aspect_status']?.toString().trim().toLowerCase();
-  final shouldAddContinue =
-      filtered.isNotEmpty &&
-      status == 'ready' &&
-      !filtered.any(
-        (option) => option.id.trim().toLowerCase() == 'continue_with_topic',
-      );
+  final shouldAddContinue = filtered.isNotEmpty && status == 'ready';
   return _orderedSoloTopicAspects([
     ...filtered,
     if (shouldAddContinue)
@@ -5137,9 +5173,11 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   bool _narrationControlInFlight = false;
   String? _narratingMessageId;
   ChatMessageModel? _narrationMessage;
+  String? _completedNarrationMessageId;
   OverlayEntry? _narrationOverlayEntry;
   VoiceChatController? _voiceController;
   bool _narrationOverlayNeedsReinsert = true;
+  bool _narrationStopRequested = false;
   String? _textSessionError;
   List<_ParsedStoryOption>? _reopenedStoryOptions;
   _ParsedStoryOption? _pendingPerspectiveStoryOption;
@@ -5206,19 +5244,28 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         voiceState.phase == RealtimeVoicePhase.waitingForReady;
   }
 
-  void _clearNarrationUiState() {
+  void _clearNarrationUiState({bool markCompleted = false}) {
+    if (_isNarrationStarting) {
+      _syncNarrationOverlay(true);
+      return;
+    }
     if (_narratingMessageId == null &&
         _narrationMessage == null &&
         !_isNarrationStarting &&
         !_isNarrationPaused) {
       return;
     }
+    final completedMessageId = markCompleted ? _narratingMessageId : null;
     setState(() {
+      if (completedMessageId != null) {
+        _completedNarrationMessageId = completedMessageId;
+      }
       _narratingMessageId = null;
       _narrationMessage = null;
       _isNarrationStarting = false;
       _isNarrationPaused = false;
       _narrationControlInFlight = false;
+      _narrationStopRequested = false;
     });
     _removeNarrationOverlay();
   }
@@ -5627,17 +5674,6 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     await _sendTextStoryTurn('Continue.', visibleText: 'Next');
   }
 
-  Future<void> _sendSuggestedStoryAnswer(_ParsedStoryOption option) async {
-    if (_isSubmittingStoryOption || _isSendingText) return;
-
-    if (_isStartingTextSession) {
-      showToast(context, 'Connecting...', variant: ToastVariant.info);
-      return;
-    }
-
-    await _sendTextStoryTurn(option.title);
-  }
-
   void _restorePreviousStoryOptions() {
     if (_pendingPerspectiveStoryOption != null) {
       setState(() {
@@ -5704,10 +5740,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     required int visibleMessageCount,
     required _ParsedStoryOptions? parsedOptions,
   }) {
-    if (message.isUser || message.isStreaming) return false;
-    if (parsedOptions != null) return false;
-    if (message.message.trim().isEmpty) return false;
-    return index == visibleMessageCount - 1;
+    return false;
   }
 
   String? _trailingAssistantQuestion(ChatMessageModel message) {
@@ -5720,48 +5753,6 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     final question = match?.group(1)?.trim();
     if (question == null || question.length < 8) return null;
     return question;
-  }
-
-  String? _composerContinuationQuestion(
-    List<ChatMessageModel> visibleMessages,
-  ) {
-    if (visibleMessages.isEmpty) return null;
-    return _trailingAssistantQuestion(visibleMessages.last);
-  }
-
-  List<_ParsedStoryOption> _suggestedAnswersForQuestion(String? question) {
-    final lower = (question ?? '').toLowerCase();
-    if (lower.isEmpty) return const <_ParsedStoryOption>[];
-
-    if (lower.contains('insight') || lower.contains('draw from')) {
-      return const [
-        _ParsedStoryOption(
-          title: 'She might realize calm is something she can return to.',
-        ),
-        _ParsedStoryOption(
-          title: 'She could see that worry is only one part of her.',
-        ),
-      ];
-    }
-
-    if (lower.startsWith('how might') || lower.startsWith('how could')) {
-      return const [
-        _ParsedStoryOption(title: 'It could help them see the choice clearly.'),
-        _ParsedStoryOption(title: 'It might reveal what matters most to them.'),
-      ];
-    }
-
-    if (lower.contains('feel')) {
-      return const [
-        _ParsedStoryOption(title: 'She might feel a little more grounded.'),
-        _ParsedStoryOption(title: 'She could feel nervous, but less alone.'),
-      ];
-    }
-
-    return const [
-      _ParsedStoryOption(title: 'She can pause and listen to what feels true.'),
-      _ParsedStoryOption(title: 'She might take one small honest step.'),
-    ];
   }
 
   ChatMessageModel _messageWithoutTrailingQuestion(ChatMessageModel message) {
@@ -5931,21 +5922,6 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     );
   }
 
-  bool _showComposerContinuationActions(
-    List<ChatMessageModel> visibleMessages,
-  ) {
-    if (_dismissedContinuationActions) return false;
-    if (visibleMessages.isEmpty) return false;
-    final latestMessage = visibleMessages.last;
-    final parsedOptions = _parseStoryOptions(latestMessage);
-    return _shouldShowStoryContinuationActions(
-      message: latestMessage,
-      index: visibleMessages.length - 1,
-      visibleMessageCount: visibleMessages.length,
-      parsedOptions: parsedOptions,
-    );
-  }
-
   bool _shouldShowGeneratedChapterPlayIcon(ChatMessageModel message) {
     if (message.isUser || message.isStreaming || message.isPending) {
       return false;
@@ -5977,17 +5953,25 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     try {
       _narrationControlInFlight = true;
       setState(() {
+        _completedNarrationMessageId = null;
+        _narrationStopRequested = false;
         _narratingMessageId = message.id;
         _narrationMessage = message;
         _isNarrationStarting = true;
         _isNarrationPaused = false;
       });
+      _syncNarrationOverlay(true);
       await voiceController.playTextNarration(
         _narrationPrompt(chapterText),
         storySessionId: _textSession?.id,
       );
       if (!mounted) return;
-      setState(() => _isNarrationStarting = false);
+      setState(() {
+        _isNarrationStarting = false;
+        _completedNarrationMessageId = null;
+      });
+      _syncNarrationOverlay(true);
+      _narrationOverlayEntry?.markNeedsBuild();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -6058,6 +6042,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
   }
 
   Future<void> _stopGeneratedChapterNarration({bool keepPaused = false}) async {
+    _narrationStopRequested = true;
     await ref.read(voiceChatControllerProvider.notifier).stopPlayback();
     if (!mounted) return;
     setState(() {
@@ -6067,6 +6052,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
       }
       _isNarrationStarting = false;
       _isNarrationPaused = keepPaused;
+      _narrationStopRequested = false;
     });
   }
 
@@ -6110,6 +6096,7 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     if (_narrationControlInFlight) return;
 
     final isCurrentChapter = _narratingMessageId == message.id;
+    final isCompletedChapter = _completedNarrationMessageId == message.id;
     final voiceState = ref.read(voiceChatControllerProvider);
     final isPlaying =
         voiceState.isPlaying || voiceState.phase == RealtimeVoicePhase.playing;
@@ -6123,6 +6110,19 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
         voiceState.phase == RealtimeVoicePhase.waitingForReady ||
         voiceState.phase == RealtimeVoicePhase.processing;
 
+    if (isCurrentChapter && isCompletedChapter) {
+      setState(() {
+        _completedNarrationMessageId = null;
+        _isNarrationStarting = true;
+        _isNarrationPaused = false;
+      });
+      _syncNarrationOverlay(true);
+      _narrationStopRequested = true;
+      await ref.read(voiceChatControllerProvider.notifier).stopPlayback();
+      _narrationStopRequested = false;
+      await _playGeneratedChapterNarration(message, ChatBubblePlayState.replay);
+      return;
+    }
     if (isCurrentChapter && isPlaying) {
       await _pauseGeneratedChapterNarration();
       return;
@@ -6134,6 +6134,18 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
     if (isCurrentChapter && isLoading) return;
 
     await _playGeneratedChapterNarration(message, ChatBubblePlayState.play);
+  }
+
+  void _markGeneratedChapterNarrationCompleted() {
+    final messageId = _narratingMessageId;
+    if (!mounted || messageId == null) return;
+    setState(() {
+      _completedNarrationMessageId = messageId;
+      _isNarrationStarting = false;
+      _isNarrationPaused = false;
+      _narrationControlInFlight = false;
+    });
+    _narrationOverlayEntry?.markNeedsBuild();
   }
 
   void _syncNarrationOverlay(bool active) {
@@ -6182,17 +6194,11 @@ class _StoryTextChatTabState extends ConsumerState<_StoryTextChatTab> {
                 color: Colors.transparent,
                 child: _StoryNarrationVoiceBar(
                   levelStream: aiAudioLevelStream,
-                  isLoading:
-                      _isNarrationStarting ||
-                      voiceState.isConnecting ||
-                      voiceState.isProcessing,
-                  isPaused: _isNarrationPaused,
-                  isPlaying:
-                      voiceState.isPlaying ||
-                      voiceState.phase == RealtimeVoicePhase.playing,
+                  playState: _narrationOverlayPlayState(voiceState),
                   onTogglePlayback: () =>
                       unawaited(_toggleGeneratedChapterNarration()),
                   onStop: () => unawaited(_stopGeneratedChapterNarration()),
+                  onPlaybackEnded: _markGeneratedChapterNarrationCompleted,
                 ),
               ),
             ],
@@ -6215,17 +6221,9 @@ $chapterText
 ''';
   }
 
-  ChatBubblePlayState _chapterPlayState(
-    ChatMessageModel message,
-    VoiceChatState voiceState,
-  ) {
-    if (_narratingMessageId != message.id) return ChatBubblePlayState.play;
-    if (voiceState.isPlaying ||
-        voiceState.phase == RealtimeVoicePhase.playing) {
-      return ChatBubblePlayState.pause;
-    }
-    if (_isNarrationPaused || voiceState.phase == RealtimeVoicePhase.paused) {
-      return ChatBubblePlayState.play;
+  ChatBubblePlayState _narrationOverlayPlayState(VoiceChatState voiceState) {
+    if (_completedNarrationMessageId == _narratingMessageId) {
+      return ChatBubblePlayState.replay;
     }
     if (_isNarrationStarting ||
         voiceState.isConnecting ||
@@ -6234,6 +6232,39 @@ $chapterText
         voiceState.phase == RealtimeVoicePhase.waitingForReady ||
         voiceState.phase == RealtimeVoicePhase.processing) {
       return ChatBubblePlayState.loading;
+    }
+    if (voiceState.isPlaying ||
+        voiceState.phase == RealtimeVoicePhase.playing) {
+      return ChatBubblePlayState.pause;
+    }
+    if (_isNarrationPaused || voiceState.phase == RealtimeVoicePhase.paused) {
+      return ChatBubblePlayState.play;
+    }
+    return ChatBubblePlayState.replay;
+  }
+
+  ChatBubblePlayState _chapterPlayState(
+    ChatMessageModel message,
+    VoiceChatState voiceState,
+  ) {
+    if (_completedNarrationMessageId == message.id) {
+      return ChatBubblePlayState.replay;
+    }
+    if (_narratingMessageId != message.id) return ChatBubblePlayState.play;
+    if (_isNarrationStarting ||
+        voiceState.isConnecting ||
+        voiceState.isProcessing ||
+        voiceState.phase == RealtimeVoicePhase.connecting ||
+        voiceState.phase == RealtimeVoicePhase.waitingForReady ||
+        voiceState.phase == RealtimeVoicePhase.processing) {
+      return ChatBubblePlayState.loading;
+    }
+    if (voiceState.isPlaying ||
+        voiceState.phase == RealtimeVoicePhase.playing) {
+      return ChatBubblePlayState.pause;
+    }
+    if (_isNarrationPaused || voiceState.phase == RealtimeVoicePhase.paused) {
+      return ChatBubblePlayState.play;
     }
     return ChatBubblePlayState.play;
   }
@@ -6250,8 +6281,15 @@ $chapterText
           ? false
           : _isNarrationVoiceActive(previous);
       final isActive = _isNarrationVoiceActive(next);
+      if (isActive) {
+        _syncNarrationOverlay(true);
+      }
       if (wasActive && !isActive) {
-        _clearNarrationUiState();
+        if (_isNarrationStarting) {
+          _syncNarrationOverlay(true);
+          return;
+        }
+        _clearNarrationUiState(markCompleted: !_narrationStopRequested);
       }
     });
 
@@ -6287,17 +6325,7 @@ $chapterText
         : composerStoryOptionMenu?.options;
     final hasComposerOptions =
         composerOptions != null && composerOptions.isNotEmpty;
-    final hasComposerContinuationActions = _showComposerContinuationActions(
-      visibleMessages,
-    );
-    final composerContinuationQuestion = hasComposerContinuationActions
-        ? _composerContinuationQuestion(visibleMessages)
-        : null;
-    final composerContinuationSuggestions = _suggestedAnswersForQuestion(
-      composerContinuationQuestion,
-    );
-    final hasComposerExtension =
-        hasComposerOptions || hasComposerContinuationActions;
+    final hasComposerExtension = hasComposerOptions;
     final composerOptionsDisabled =
         _isSubmittingStoryOption || _isSendingText || _isStartingTextSession;
     final composerSurface = hasComposerExtension
@@ -6306,20 +6334,13 @@ $chapterText
     final composerRadius = BorderRadius.circular(
       hasComposerExtension ? 24 : 28,
     );
-    final hasContinuationSuggestions =
-        hasComposerContinuationActions &&
-        composerContinuationSuggestions.isNotEmpty;
     final fallbackBottomPadding = _isComposerPanelCollapsed
         ? 132.0
         : hasComposerOptions
         ? 390.0
-        : hasComposerContinuationActions
-        ? (hasContinuationSuggestions ? 420.0 : 260.0)
         : 104.0;
     final maxBottomPadding = _isComposerPanelCollapsed
         ? 156.0
-        : hasContinuationSuggestions
-        ? 460.0
         : hasComposerOptions
         ? 430.0
         : double.infinity;
@@ -6532,23 +6553,6 @@ $chapterText
                                         : _confirmStoryOption(option),
                                   ),
                                 ),
-                              ] else if (hasComposerContinuationActions) ...[
-                                _StoryOptionsInputPanel(
-                                  title:
-                                      composerContinuationQuestion ??
-                                      'What would you like to do next?',
-                                  options: composerContinuationSuggestions,
-                                  disabled: composerOptionsDisabled,
-                                  collapsed: _isComposerPanelCollapsed,
-                                  onNext: () =>
-                                      unawaited(_requestNextStoryParagraph()),
-                                  onRegenerate: _restorePreviousStoryOptions,
-                                  onToggleCollapsed:
-                                      _toggleComposerPanelCollapsed,
-                                  onSelected: (option) => unawaited(
-                                    _sendSuggestedStoryAnswer(option),
-                                  ),
-                                ),
                               ],
                               if (hasComposerExtension) ...[
                                 Divider(
@@ -6711,19 +6715,17 @@ $chapterText
 class _StoryNarrationVoiceBar extends StatefulWidget {
   const _StoryNarrationVoiceBar({
     required this.levelStream,
-    required this.isLoading,
-    required this.isPaused,
-    required this.isPlaying,
+    required this.playState,
     required this.onTogglePlayback,
     required this.onStop,
+    required this.onPlaybackEnded,
   });
 
   final Stream<double> levelStream;
-  final bool isLoading;
-  final bool isPaused;
-  final bool isPlaying;
+  final ChatBubblePlayState playState;
   final VoidCallback onTogglePlayback;
   final VoidCallback onStop;
+  final VoidCallback onPlaybackEnded;
 
   @override
   State<_StoryNarrationVoiceBar> createState() =>
@@ -6733,6 +6735,9 @@ class _StoryNarrationVoiceBar extends StatefulWidget {
 class _StoryNarrationVoiceBarState extends State<_StoryNarrationVoiceBar>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
+  StreamSubscription<double>? _levelSubscription;
+  Timer? _silentPlaybackTimer;
+  bool _reportedPlaybackEnded = false;
 
   @override
   void initState() {
@@ -6741,12 +6746,56 @@ class _StoryNarrationVoiceBarState extends State<_StoryNarrationVoiceBar>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
+    _listenForPlaybackSilence();
+  }
+
+  @override
+  void didUpdateWidget(covariant _StoryNarrationVoiceBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.levelStream != widget.levelStream) {
+      _levelSubscription?.cancel();
+      _listenForPlaybackSilence();
+    }
+    if (widget.playState != ChatBubblePlayState.pause) {
+      _silentPlaybackTimer?.cancel();
+      _silentPlaybackTimer = null;
+    }
+    if (oldWidget.playState != ChatBubblePlayState.pause &&
+        widget.playState == ChatBubblePlayState.pause) {
+      _reportedPlaybackEnded = false;
+    }
   }
 
   @override
   void dispose() {
+    _levelSubscription?.cancel();
+    _silentPlaybackTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
+  }
+
+  void _listenForPlaybackSilence() {
+    _levelSubscription = widget.levelStream.listen((level) {
+      if (!mounted || widget.playState != ChatBubblePlayState.pause) {
+        _silentPlaybackTimer?.cancel();
+        _silentPlaybackTimer = null;
+        return;
+      }
+      if (level > 0.01) {
+        _silentPlaybackTimer?.cancel();
+        _silentPlaybackTimer = null;
+        return;
+      }
+      _silentPlaybackTimer ??= Timer(const Duration(seconds: 3), () {
+        if (!mounted ||
+            _reportedPlaybackEnded ||
+            widget.playState != ChatBubblePlayState.pause) {
+          return;
+        }
+        _reportedPlaybackEnded = true;
+        widget.onPlaybackEnded();
+      });
+    });
   }
 
   @override
@@ -6759,6 +6808,10 @@ class _StoryNarrationVoiceBarState extends State<_StoryNarrationVoiceBar>
     final border = isDark
         ? Colors.white.withValues(alpha: 0.14)
         : Colors.black.withValues(alpha: 0.08);
+    final isLoading = widget.playState == ChatBubblePlayState.loading;
+    final isPaused = widget.playState == ChatBubblePlayState.play;
+    final isPlaying = widget.playState == ChatBubblePlayState.pause;
+    final isReplay = widget.playState == ChatBubblePlayState.replay;
 
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 360),
@@ -6785,7 +6838,7 @@ class _StoryNarrationVoiceBarState extends State<_StoryNarrationVoiceBar>
               SizedBox(
                 width: 166,
                 height: 30,
-                child: widget.isLoading
+                child: isLoading
                     ? AnimatedBuilder(
                         animation: _pulseController,
                         builder: (context, _) {
@@ -6807,11 +6860,26 @@ class _StoryNarrationVoiceBarState extends State<_StoryNarrationVoiceBar>
                           );
                         },
                       )
-                    : widget.isPaused
+                    : isPaused
                     ? Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
                           'Paused',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: foreground.withValues(alpha: 0.72),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            height: 1.1,
+                          ),
+                        ),
+                      )
+                    : isReplay
+                    ? Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Finished',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -6837,11 +6905,18 @@ class _StoryNarrationVoiceBarState extends State<_StoryNarrationVoiceBar>
               ),
               const SizedBox(width: 4),
               _StoryNarrationIconButton(
-                tooltip: widget.isPlaying ? 'Pause' : 'Play',
-                onTap: widget.isLoading ? null : widget.onTogglePlayback,
-                icon: widget.isPlaying
-                    ? CupertinoIcons.pause_fill
-                    : CupertinoIcons.play_fill,
+                tooltip: switch (widget.playState) {
+                  ChatBubblePlayState.pause => 'Pause',
+                  ChatBubblePlayState.replay => 'Replay',
+                  _ => 'Play',
+                },
+                onTap: isLoading ? null : widget.onTogglePlayback,
+                icon: switch (widget.playState) {
+                  ChatBubblePlayState.pause => CupertinoIcons.pause_fill,
+                  ChatBubblePlayState.replay =>
+                    CupertinoIcons.arrow_counterclockwise,
+                  _ => CupertinoIcons.play_fill,
+                },
                 color: foreground,
               ),
               _StoryNarrationIconButton(

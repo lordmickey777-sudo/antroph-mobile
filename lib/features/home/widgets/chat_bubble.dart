@@ -8,7 +8,7 @@ const _assistantBubbleDark = Color(0xFF1A1A1A);
 const _userBubbleLight = Color(0xFF111111);
 const _assistantBubbleLight = Color(0xFFF3F3F3);
 
-enum ChatBubblePlayState { play, loading, pause }
+enum ChatBubblePlayState { play, loading, pause, replay }
 
 class ChatBubble extends StatelessWidget {
   const ChatBubble({
@@ -145,9 +145,11 @@ class _BubblePlayIcon extends StatelessWidget {
       button: true,
       label: 'Play story narration',
       child: Tooltip(
-        message: state == ChatBubblePlayState.pause
-            ? 'Pause narration'
-            : 'Play narration',
+        message: switch (state) {
+          ChatBubblePlayState.pause => 'Pause narration',
+          ChatBubblePlayState.replay => 'Replay narration',
+          _ => 'Play narration',
+        },
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
@@ -190,6 +192,11 @@ class _BubblePlayIconGlyph extends StatelessWidget {
         Icons.pause_rounded,
         color: Colors.black,
         size: 24,
+      ),
+      ChatBubblePlayState.replay => const Icon(
+        Icons.replay_rounded,
+        color: Colors.black,
+        size: 23,
       ),
       _ => const Icon(Icons.play_arrow_rounded, color: Colors.black, size: 25),
     };

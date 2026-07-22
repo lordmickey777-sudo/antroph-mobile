@@ -459,18 +459,23 @@ class _GameCodeShareSheet extends StatelessWidget {
   const _GameCodeShareSheet({required this.code});
 
   final String code;
+  String get _inviteText => 'Join my Antroph group game with room code: $code';
 
   Future<void> _copy(BuildContext context) async {
-    await Clipboard.setData(ClipboardData(text: code));
+    await Clipboard.setData(ClipboardData(text: _inviteText));
     if (!context.mounted) return;
+    showToast(context, 'Invite copied', success: true);
     Navigator.of(context).pop();
-    showToast(context, 'Game code copied', success: true);
   }
 
   Future<void> _share(BuildContext context) async {
+    final box = context.findRenderObject() as RenderBox?;
     await Share.share(
-      'Join my Antroph group game with room code: $code',
+      _inviteText,
       subject: 'Join my Antroph group game',
+      sharePositionOrigin: box == null
+          ? null
+          : box.localToGlobal(Offset.zero) & box.size,
     );
   }
 
