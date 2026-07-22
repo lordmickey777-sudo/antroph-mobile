@@ -9,6 +9,7 @@ class UserProfile {
   final String? timezone;
   final String? language;
   final bool isCompleted;
+  final bool onboardingCompleted;
   final bool personalizationCompleted;
 
   const UserProfile({
@@ -22,6 +23,7 @@ class UserProfile {
     this.timezone,
     this.language,
     this.isCompleted = false,
+    this.onboardingCompleted = false,
     this.personalizationCompleted = false,
   });
 
@@ -37,6 +39,7 @@ class UserProfile {
       timezone: json['timezone'] as String?,
       language: json['language'] as String?,
       isCompleted: json['is_completed'] as bool? ?? false,
+      onboardingCompleted: json['onboarding_completed'] as bool? ?? false,
       personalizationCompleted:
           json['personalization_completed'] as bool? ?? false,
     );

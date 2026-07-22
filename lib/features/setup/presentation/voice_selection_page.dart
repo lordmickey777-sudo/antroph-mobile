@@ -129,9 +129,16 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
       vsync: this,
       duration: const Duration(seconds: 7),
     )..repeat();
+    _redirectIfAlreadyOnboarded();
     _restoreVoice();
     _loadVoices();
     _playerSub = _player.playerStateStream.listen(_onPlayerState);
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _redirectIfAlreadyOnboarded();
   }
 
   @override
@@ -158,6 +165,16 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
       _selectedIndex = index;
       _hasUserSelected = true;
     });
+  }
+
+  Future<void> _redirectIfAlreadyOnboarded() async {
+    try {
+      final profile = await _profileRepository.getMyProfile();
+      if (!mounted || !profile.onboardingCompleted) return;
+      context.go('/home');
+    } catch (_) {
+      // Ignore profile failures and allow the setup flow to continue.
+    }
   }
 
   Future<void> _loadVoices() async {
@@ -396,6 +413,15 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
     await AppSetupStorageService.saveSelectedVoice(selectedVoice);
     await AppSetupStorageService.saveSelectedVoiceId(_current.voiceId);
     await AppSetupStorageService.markSetupCompleted();
+    try {
+      await _profileRepository.completeOnboarding();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      final message = error is ApiError ? error.message : error.toString();
+      showToast(context, message);
+      return;
+    }
     if (!mounted) return;
     context.go('/home');
   }

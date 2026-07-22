@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:antroph_mobile/core/onboarding/app_setup_route_service.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
-import 'package:antroph_mobile/core/onboarding/onboarding_storage_service.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 
 class SplashPage extends ConsumerStatefulWidget {
@@ -27,11 +26,9 @@ class _SplashPageState extends ConsumerState<SplashPage> {
   }
 
   Future<void> _determineStartRoute() async {
-    final hasCompletedOnboarding =
-        await OnboardingStorageService.hasCompletedOnboarding();
-    final minimumDisplay = hasCompletedOnboarding
-        ? Future<void>.value()
-        : Future.delayed(const Duration(milliseconds: 1200));
+    final minimumDisplay = Future<void>.delayed(
+      const Duration(milliseconds: 450),
+    );
 
     try {
       await ref.read(authControllerProvider.future);
@@ -42,18 +39,15 @@ class _SplashPageState extends ConsumerState<SplashPage> {
     await minimumDisplay;
     if (!mounted) return;
 
-    if (!hasCompletedOnboarding) {
-      _navigate('/onboarding');
-      return;
-    }
-
     final user = ref.read(authControllerProvider).value;
     if (user == null) {
       _navigate('/auth/login');
       return;
     }
 
-    final nextRoute = await AppSetupRouteService.resolveAuthenticatedRoute();
+    final nextRoute = await AppSetupRouteService.resolveAuthenticatedRoute(
+      userId: user.id,
+    );
     if (!mounted) return;
     _navigate(nextRoute);
   }

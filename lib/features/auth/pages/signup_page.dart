@@ -92,7 +92,10 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
   }
 
   Future<void> _handleAuthenticatedUser() async {
-    final nextRoute = await AppSetupRouteService.resolveAuthenticatedRoute();
+    final user = ref.read(authControllerProvider).value;
+    final nextRoute = await AppSetupRouteService.resolveAuthenticatedRoute(
+      userId: user?.id,
+    );
     if (!mounted) return;
     context.go(nextRoute);
   }

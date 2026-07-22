@@ -41,9 +41,26 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
   @override
   void initState() {
     super.initState();
+    _redirectIfAlreadyOnboarded();
     _restoreSelection();
     // Warm the voices cache in the background so /setup/voice opens instantly.
     _voicesRepository.prefetch();
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _redirectIfAlreadyOnboarded();
+  }
+
+  Future<void> _redirectIfAlreadyOnboarded() async {
+    try {
+      final profile = await _profileRepository.getMyProfile();
+      if (!mounted || !profile.onboardingCompleted) return;
+      context.go('/home');
+    } catch (_) {
+      // Ignore profile failures and allow the setup flow to continue.
+    }
   }
 
   Future<void> _restoreSelection() async {
@@ -72,8 +89,11 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
     }
   }
 
-  Iterable<String> _splitKeys(String raw) =>
-      raw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).take(_maxSelections);
+  Iterable<String> _splitKeys(String raw) => raw
+      .split(',')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .take(_maxSelections);
 
   void _toggleVibe(String vibeKey) {
     if (_isSaving) return;
@@ -100,6 +120,7 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
     if (hasCompletedSetup) {
       try {
         await _profileRepository.savePersonalization(vibe: joined);
+        await _profileRepository.completeOnboarding();
       } catch (error) {
         if (!mounted) return;
         setState(() => _isSaving = false);
@@ -139,7 +160,12 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: ContentWidth.form),
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(horizontalPadding, 32, horizontalPadding, 24),
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    32,
+                    horizontalPadding,
+                    24,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -147,8 +173,11 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
                         currentStep: 1,
                         totalSteps: 2,
                         title: 'What do you want to focus on?',
-                        subtitle: 'Pick up to 3 goals. You can always update these later.',
-                        onBack: (context.canPop() && !_isSaving) ? () => context.pop() : null,
+                        subtitle:
+                            'Pick up to 3 goals. You can always update these later.',
+                        onBack: (context.canPop() && !_isSaving)
+                            ? () => context.pop()
+                            : null,
                       ),
                       const SizedBox(height: 28),
                       Expanded(
@@ -160,9 +189,12 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
                               for (final option in _vibeOptions)
                                 _VibeChip(
                                   label: option.label,
-                                  isSelected: _selectedVibeKeys.contains(option.key),
+                                  isSelected: _selectedVibeKeys.contains(
+                                    option.key,
+                                  ),
                                   isAtCapacity:
-                                      _selectedVibeKeys.length >= _maxSelections &&
+                                      _selectedVibeKeys.length >=
+                                          _maxSelections &&
                                       !_selectedVibeKeys.contains(option.key),
                                   onTap: () => _toggleVibe(option.key),
                                 ),
@@ -175,19 +207,27 @@ class _InterestSelectionPageState extends State<InterestSelectionPage> {
                         width: double.infinity,
                         height: 60,
                         child: AppButton(
-                          onPressed: _selectedVibeKeys.isEmpty || _isSaving ? null : _continue,
+                          onPressed: _selectedVibeKeys.isEmpty || _isSaving
+                              ? null
+                              : _continue,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: Colors.black,
-                            disabledBackgroundColor: Colors.white.withValues(alpha: 0.18),
-                            disabledForegroundColor: Colors.white.withValues(alpha: 0.6),
+                            disabledBackgroundColor: Colors.white.withValues(
+                              alpha: 0.18,
+                            ),
+                            disabledForegroundColor: Colors.white.withValues(
+                              alpha: 0.6,
+                            ),
                             shape: const StadiumBorder(),
                           ),
                           child: _isSaving
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const TypographyText(
                                   'Continue',
@@ -225,9 +265,13 @@ class _VibeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final disabled = isAtCapacity;
-    final foreground = isSelected ? Colors.black : (disabled ? Colors.white38 : Colors.white);
+    final foreground = isSelected
+        ? Colors.black
+        : (disabled ? Colors.white38 : Colors.white);
     final background = isSelected ? Colors.white : const Color(0xFF1C1F21);
-    final border = isSelected ? Colors.white : (disabled ? Colors.white10 : Colors.white12);
+    final border = isSelected
+        ? Colors.white
+        : (disabled ? Colors.white10 : Colors.white12);
 
     return Opacity(
       opacity: disabled ? 0.6 : 1,
@@ -255,7 +299,11 @@ class _VibeChip extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
                 const SizedBox(width: 6),
-                Icon(isSelected ? Icons.check : Icons.add, size: 14, color: foreground),
+                Icon(
+                  isSelected ? Icons.check : Icons.add,
+                  size: 14,
+                  color: foreground,
+                ),
               ],
             ),
           ),
@@ -288,7 +336,10 @@ class _SetupHeader extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            if (onBack != null) ...<Widget>[_BackCircle(onTap: onBack!), const SizedBox(width: 12)],
+            if (onBack != null) ...<Widget>[
+              _BackCircle(onTap: onBack!),
+              const SizedBox(width: 12),
+            ],
             Expanded(
               child: Row(
                 children: <Widget>[
@@ -321,7 +372,11 @@ class _SetupHeader extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
         const SizedBox(height: 10),
-        TypographyText(subtitle, variant: TypographyVariant.body2, color: Colors.white70),
+        TypographyText(
+          subtitle,
+          variant: TypographyVariant.body2,
+          color: Colors.white70,
+        ),
       ],
     );
   }

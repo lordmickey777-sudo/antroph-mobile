@@ -96,9 +96,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Future<void> _handleAuthenticatedUser() async {
     if (_handledLoginSuccess) return;
     _handledLoginSuccess = true;
-    final nextRoute = await AppSetupRouteService.resolveAuthenticatedRoute();
-    if (!mounted) return;
     final user = ref.read(authControllerProvider).value;
+    final nextRoute = await AppSetupRouteService.resolveAuthenticatedRoute(
+      userId: user?.id,
+    );
+    if (!mounted) return;
     if (user != null) {
       EmailStorageService.saveLastEmail(user.email);
     }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:antroph_mobile/core/auth/state/auth_state.dart';
 import 'package:antroph_mobile/core/auth/widgets/auth_sheet_content.dart';
+import 'package:antroph_mobile/core/onboarding/app_setup_route_service.dart';
 import 'package:antroph_mobile/widgets/app_bottom_sheet.dart';
 
 /// Result of an auth guard check.
@@ -46,6 +48,17 @@ Future<AuthGuardResult> showAuthGuardSheet(
       scrollController: scrollController,
     ),
   );
+
+  if (result == AuthGuardResult.loginSuccessful) {
+    final user = ref.read(authControllerProvider).value;
+    final nextRoute = await AppSetupRouteService.resolveAuthenticatedRoute(
+      userId: user?.id,
+    );
+    if (nextRoute == AppSetupRouteService.onboardingRoute) {
+      if (context.mounted) context.go(nextRoute);
+      return AuthGuardResult.dismissed;
+    }
+  }
 
   return result ?? AuthGuardResult.dismissed;
 }

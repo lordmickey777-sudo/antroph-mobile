@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:antroph_mobile/core/onboarding/onboarding_storage_service.dart';
+import 'package:antroph_mobile/core/auth/state/auth_state.dart';
+import 'package:antroph_mobile/core/onboarding/app_setup_route_service.dart';
 import 'package:antroph_mobile/core/responsive/responsive.dart';
 import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
 
-class OnboardingPage extends StatefulWidget {
+class OnboardingPage extends ConsumerStatefulWidget {
   const OnboardingPage({super.key});
 
   @override
-  State<OnboardingPage> createState() => _OnboardingPageState();
+  ConsumerState<OnboardingPage> createState() => _OnboardingPageState();
 }
 
-class _OnboardingPageState extends State<OnboardingPage> {
+class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   final _controller = PageController();
   int _index = 0;
 
@@ -27,7 +29,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
     ),
     (
       title: 'Create Your\nExperience',
-      subtitle: 'Pick the interests and voice that shape Aura before you land in your story home.',
+      subtitle:
+          'Pick the interests and voice that shape Aura before you land in your story home.',
       asset: 'assets/images/onboarding_3.png',
     ),
   ];
@@ -36,6 +39,18 @@ class _OnboardingPageState extends State<OnboardingPage> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _completeOnboarding() async {
+    final user = ref.read(authControllerProvider).value;
+    if (!mounted) return;
+
+    if (user == null) {
+      context.go('/auth/login');
+      return;
+    }
+
+    context.go(AppSetupRouteService.personalizationRoute);
   }
 
   @override
@@ -73,8 +88,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             height: selected ? 16 : 10,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: selected ? Colors.transparent : Colors.white24,
-                              border: selected ? Border.all(color: Colors.white, width: 0.7) : null,
+                              color: selected
+                                  ? Colors.transparent
+                                  : Colors.white24,
+                              border: selected
+                                  ? Border.all(color: Colors.white, width: 0.7)
+                                  : null,
                             ),
                             child: selected
                                 ? Center(
@@ -94,7 +113,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       const SizedBox(height: 16),
 
                       Padding(
-                        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding,
+                        ),
                         child: TypographyText(
                           _slides[i].title,
                           variant: TypographyVariant.h2,
@@ -127,7 +148,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                 backgroundColor: context.actionButtonBackground,
                                 foregroundColor: context.actionButtonForeground,
                                 shape: const StadiumBorder(),
-                                padding: const EdgeInsets.symmetric(horizontal: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                ),
                               ),
                               onPressed: () async {
                                 if (_index < _slides.length - 1) {
@@ -136,9 +159,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                     curve: Curves.easeOut,
                                   );
                                 } else {
-                                  await OnboardingStorageService.markCompleted();
-                                  if (!mounted) return;
-                                  this.context.go('/auth/login');
+                                  await _completeOnboarding();
                                 }
                               },
                               child: Row(
@@ -160,7 +181,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                   Expanded(
                                     child: Center(
                                       child: TypographyText(
-                                        _index < _slides.length - 1 ? 'Next' : 'Continue',
+                                        _index < _slides.length - 1
+                                            ? 'Next'
+                                            : 'Continue',
                                         variant: TypographyVariant.body1,
                                         color: context.actionButtonForeground,
                                       ),
@@ -190,6 +213,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   Widget _buildTopVisual(BuildContext context, int index) {
     final slide = _slides[index];
-    return Image.asset(slide.asset, width: double.infinity, fit: BoxFit.fitWidth);
+    return Image.asset(
+      slide.asset,
+      width: double.infinity,
+      fit: BoxFit.fitWidth,
+    );
   }
 }

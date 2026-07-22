@@ -45,6 +45,14 @@ class ProfileRepository {
     }
   }
 
+  Future<void> completeOnboarding() async {
+    try {
+      await _dio.post('/users/me/onboarding-complete');
+    } on DioException catch (e) {
+      throw ErrorFormatter.fromDio(e);
+    }
+  }
+
   /// Upload avatar image via multipart/form-data to /users/me/avatar
   /// Returns the avatar URL from the response.
   Future<String> uploadAvatar({
