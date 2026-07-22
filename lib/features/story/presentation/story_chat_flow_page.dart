@@ -28,6 +28,8 @@ import 'package:flutter/services.dart';
 
 enum InteractiveStoryLaunchMode { create, joinByCode, joinPublic }
 
+const double _optionPanelActionSlotVerticalOffset = -10;
+
 bool _usesDynamicStoryOptions(StoryDetailDto detail) {
   final template = (detail.interactiveConfig['template'] as String?)?.trim();
   if (template == 'dynamic_story_menu') return true;
@@ -2078,6 +2080,7 @@ class _InteractiveStoryTabState extends ConsumerState<_InteractiveStoryTab> {
             showWhenUnlinked: false,
             targetAnchor: Alignment.centerLeft,
             followerAnchor: Alignment.centerLeft,
+            offset: const Offset(0, _optionPanelActionSlotVerticalOffset),
             child: _QuizCallButton(
               key: const ValueKey('solo-topic-floating-call'),
               onTap: widget.onCall,
@@ -2864,7 +2867,7 @@ class _GroupSetupOptionPanel extends StatelessWidget {
             ),
             if (disabled)
               Positioned(
-                top: 18,
+                top: 18 + _optionPanelActionSlotVerticalOffset,
                 left: 22,
                 child: IgnorePointer(
                   child: DecoratedBox(

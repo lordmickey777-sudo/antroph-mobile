@@ -8,6 +8,7 @@ import 'package:antroph_mobile/core/theme/theme_provider.dart';
 import 'package:antroph_mobile/features/profile/data/profile_repository.dart';
 import 'package:antroph_mobile/features/setup/data/voice_option.dart';
 import 'package:antroph_mobile/features/setup/data/voices_repository.dart';
+import 'package:antroph_mobile/features/setup/presentation/setup_coach_mark_card.dart';
 import 'package:antroph_mobile/widgets/app_button.dart';
 import 'package:antroph_mobile/widgets/toast.dart';
 import 'package:antroph_mobile/widgets/typography_text.dart';
@@ -16,6 +17,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 class VoiceSelectionPage extends StatefulWidget {
   const VoiceSelectionPage({super.key});
@@ -101,6 +103,11 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
   final ProfileRepository _profileRepository = ProfileRepository();
   final VoicesRepository _voicesRepository = VoicesRepository();
   final AudioPlayer _player = AudioPlayer();
+  final GlobalKey _voiceOrbKey = GlobalKey();
+  final GlobalKey _voiceStripKey = GlobalKey();
+  final GlobalKey _continueButtonKey = GlobalKey();
+  final Map<int, GlobalKey> _voicePillKeys = <int, GlobalKey>{};
+  final ValueNotifier<bool> _savingNotifier = ValueNotifier<bool>(false);
 
   late final AnimationController _idleController;
 
@@ -111,8 +118,12 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
   late List<_BrandedVoice> _voices = List<_BrandedVoice>.of(_fallbackVoices);
   Map<String, String> _previewUrls = <String, String>{};
   String? _playingVoiceId;
+  TutorialCoachMark? _coachMark;
+  Rect? _voicePickerGuideRect;
   bool _playerLoading = false;
   bool _audioSessionConfigured = false;
+  bool _coachMarkShown = false;
+  bool _showVoicePickerGuide = false;
   StreamSubscription<PlayerState>? _playerSub;
 
   _BrandedVoice get _current => _voices[_safeSelectedIndex];
@@ -129,6 +140,7 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
       vsync: this,
       duration: const Duration(seconds: 7),
     )..repeat();
+    _showVoicePickerGuideOnce();
     _redirectIfAlreadyOnboarded();
     _restoreVoice();
     _loadVoices();
@@ -143,6 +155,8 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
 
   @override
   void dispose() {
+    _coachMark?.finish();
+    _savingNotifier.dispose();
     _idleController.dispose();
     _playerSub?.cancel();
     _player.dispose();
@@ -170,11 +184,164 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
   Future<void> _redirectIfAlreadyOnboarded() async {
     try {
       final profile = await _profileRepository.getMyProfile();
-      if (!mounted || !profile.onboardingCompleted) return;
-      context.go('/home');
+      if (!mounted) return;
+      if (profile.onboardingCompleted) {
+        context.go('/home');
+        return;
+      }
     } catch (_) {
       // Ignore profile failures and allow the setup flow to continue.
     }
+  }
+
+  void _showCoachMarkOnce() {
+    if (_coachMarkShown) return;
+    _coachMarkShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _voiceOrbKey.currentContext == null ||
+          _continueButtonKey.currentContext == null) {
+        return;
+      }
+
+      _coachMark = TutorialCoachMark(
+        targets: _coachTargets(),
+        colorShadow: Colors.black,
+        opacityShadow: 0.78,
+        paddingFocus: 10,
+        textSkip: 'Skip',
+        alignSkip: Alignment.topRight,
+        useSafeArea: true,
+        pulseEnable: true,
+        showSkipInLastTarget: false,
+        onClickTarget: _handleCoachTargetTap,
+        onClickTargetWithTapPosition: _handleCoachTargetTapPosition,
+        onFinish: () => _coachMark = null,
+        onSkip: () {
+          _coachMark = null;
+          return true;
+        },
+      )..show(context: context);
+    });
+  }
+
+  List<TargetFocus> _coachTargets() {
+    return <TargetFocus>[
+      TargetFocus(
+        identify: 'voice_preview',
+        keyTarget: _voiceOrbKey,
+        shape: ShapeLightFocus.Circle,
+        paddingFocus: 8,
+        enableTargetTab: false,
+        enableOverlayTab: false,
+        contents: <TargetContent>[
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, _) => SetupCoachMarkCard(
+              title: 'Preview Aura’s voice',
+              message:
+                  'Tap the orb to hear how the selected voice sounds before you continue.',
+              actionLabel: 'Change voice',
+              onAction: _returnToVoicePickerGuide,
+              secondaryActionLabel: 'Continue',
+              onSecondaryAction: () => _coachMark?.next(),
+            ),
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: 'voice_continue',
+        keyTarget: _continueButtonKey,
+        shape: ShapeLightFocus.RRect,
+        radius: 30,
+        paddingFocus: 0,
+        borderSide: const BorderSide(color: Colors.white, width: 2),
+        enableTargetTab: true,
+        enableOverlayTab: false,
+        contents: <TargetContent>[
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, _) => ValueListenableBuilder<bool>(
+              valueListenable: _savingNotifier,
+              builder: (context, isSaving, _) => SetupCoachMarkCard(
+                title: isSaving ? 'Finishing setup' : 'Finish setup',
+                message: isSaving
+                    ? 'Saving your voice and setup info before taking you into the app.'
+                    : 'Once your voice is selected, continue into the app with your choices saved.',
+              ),
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  Future<void> _handleCoachTargetTap(TargetFocus target) async {
+    if (target.identify == 'voice_continue') {
+      await _continue();
+    }
+  }
+
+  void _handleCoachTargetTapPosition(
+    TargetFocus target,
+    TapDownDetails details,
+  ) {
+    if (target.identify == 'voice_preview') {
+      if (_playingVoiceId != _current.voiceId || !_player.playing) {
+        _selectAndPreview(_selectedIndex);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _coachMark?.next();
+      });
+      return;
+    }
+  }
+
+  void _showVoicePickerGuideOnce() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _voiceStripKey.currentContext == null) return;
+      setState(() {
+        _voicePickerGuideRect = _voicePickerTargetRect();
+        _showVoicePickerGuide = true;
+      });
+    });
+  }
+
+  void _completeVoicePickerGuide() {
+    if (!_showVoicePickerGuide) return;
+    setState(() => _showVoicePickerGuide = false);
+    _showCoachMarkOnce();
+  }
+
+  void _returnToVoicePickerGuide() {
+    _coachMark?.finish();
+    _coachMark = null;
+    _coachMarkShown = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _voiceStripKey.currentContext == null) return;
+      setState(() {
+        _voicePickerGuideRect = _voicePickerTargetRect();
+        _showVoicePickerGuide = true;
+      });
+    });
+  }
+
+  Rect? _voicePickerTargetRect() {
+    final context = _voiceStripKey.currentContext;
+    if (context == null) return null;
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return null;
+    final screenSize = MediaQuery.sizeOf(this.context);
+    final topLeft = renderObject.localToGlobal(Offset.zero);
+    final rect = topLeft & renderObject.size;
+    final horizontalPadding = (screenSize.width * 0.035).clamp(14.0, 24.0);
+    const verticalPadding = 12.0;
+    return Rect.fromLTRB(
+      (rect.left - horizontalPadding).clamp(12.0, screenSize.width),
+      (rect.top - verticalPadding).clamp(12.0, screenSize.height),
+      (rect.right + horizontalPadding).clamp(0.0, screenSize.width - 12.0),
+      (rect.bottom + verticalPadding).clamp(0.0, screenSize.height - 12.0),
+    );
   }
 
   Future<void> _loadVoices() async {
@@ -300,6 +467,10 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
         map[_voiceLookupKey(voice.name)];
   }
 
+  GlobalKey _keyForVoiceIndex(int index) {
+    return _voicePillKeys.putIfAbsent(index, GlobalKey.new);
+  }
+
   Future<void> _configureAudioSession() async {
     if (_audioSessionConfigured) return;
     try {
@@ -343,13 +514,14 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
     final voice = _voices[index];
     final switching = index != _selectedIndex;
 
-    if (switching) {
+    if (switching || !_hasUserSelected) {
       HapticFeedback.selectionClick();
       setState(() {
         _selectedIndex = index;
         _hasUserSelected = true;
       });
     }
+    _completeVoicePickerGuide();
 
     final url = _resolvePreviewUrl(_previewUrls, voice);
     if (url == null || url.isEmpty) return;
@@ -397,13 +569,13 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
       return;
     }
 
-    setState(() => _isSaving = true);
+    _setSaving(true);
 
     try {
       await _profileRepository.savePersonalization(vibe: savedVibe);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _isSaving = false);
+      _setSaving(false);
       final message = error is ApiError ? error.message : error.toString();
       showToast(context, message);
       return;
@@ -417,13 +589,18 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
       await _profileRepository.completeOnboarding();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _isSaving = false);
+      _setSaving(false);
       final message = error is ApiError ? error.message : error.toString();
       showToast(context, message);
       return;
     }
     if (!mounted) return;
     context.go('/home');
+  }
+
+  void _setSaving(bool value) {
+    _savingNotifier.value = value;
+    if (mounted) setState(() => _isSaving = value);
   }
 
   @override
@@ -436,152 +613,174 @@ class _VoiceSelectionPageState extends State<VoiceSelectionPage>
     return Theme(
       data: AppTheme.darkTheme,
       child: Scaffold(
-        body: AnimatedContainer(
-          duration: const Duration(milliseconds: 650),
-          curve: Curves.easeOut,
-          decoration: BoxDecoration(
-            gradient: RadialGradient(
-              center: const Alignment(0, -0.45),
-              radius: 1.3,
-              colors: <Color>[
-                Color.lerp(
-                  voice.gradient.first,
-                  const Color(0xFF0A0C0D),
-                  0.92,
-                )!,
-                const Color(0xFF07090A),
-              ],
-            ),
-          ),
-          child: SafeArea(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: ContentWidth.form),
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    24,
-                    horizontalPadding,
-                    20,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      _SetupHeader(
-                        currentStep: 2,
-                        totalSteps: 2,
-                        title: 'Pick a voice for Aura',
-                        subtitle: 'Tap the orb to hear a preview.',
-                        onBack: _isSaving
-                            ? null
-                            : () {
-                                if (context.canPop()) {
-                                  context.pop();
-                                } else {
-                                  context.go('/setup/interests');
-                                }
-                              },
+        body: Stack(
+          children: <Widget>[
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 650),
+              curve: Curves.easeOut,
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(0, -0.45),
+                  radius: 1.3,
+                  colors: <Color>[
+                    Color.lerp(
+                      voice.gradient.first,
+                      const Color(0xFF0A0C0D),
+                      0.92,
+                    )!,
+                    const Color(0xFF07090A),
+                  ],
+                ),
+              ),
+              child: SafeArea(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: ContentWidth.form,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPadding,
+                        24,
+                        horizontalPadding,
+                        20,
                       ),
-                      Expanded(
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              _VoiceOrb(
-                                gradient: voice.gradient,
-                                idle: _idleController,
-                                isPlaying: isPlayingCurrent && _player.playing,
-                                isLoading: isPlayingCurrent && _playerLoading,
-                                hasPreview: hasPreview,
-                                onTap: () => _selectAndPreview(_selectedIndex),
-                              ),
-                              const SizedBox(height: 20),
-                              AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 280),
-                                transitionBuilder: (child, anim) =>
-                                    FadeTransition(
-                                      opacity: anim,
-                                      child: SlideTransition(
-                                        position: Tween<Offset>(
-                                          begin: const Offset(0, 0.15),
-                                          end: Offset.zero,
-                                        ).animate(anim),
-                                        child: child,
-                                      ),
-                                    ),
-                                child: Column(
-                                  key: ValueKey<String>(voice.name),
-                                  children: <Widget>[
-                                    TypographyText(
-                                      voice.name,
-                                      variant: TypographyVariant.h2,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                    const SizedBox(height: 6),
-                                    TypographyText(
-                                      voice.tone,
-                                      variant: TypographyVariant.body2,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.72,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          _SetupHeader(
+                            currentStep: 2,
+                            totalSteps: 2,
+                            title: 'Pick a voice for Aura',
+                            subtitle: 'Tap the orb to hear a preview.',
+                            onBack: _isSaving
+                                ? null
+                                : () {
+                                    if (context.canPop()) {
+                                      context.pop();
+                                    } else {
+                                      context.go('/setup/interests');
+                                    }
+                                  },
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _VoiceStrip(
-                        voices: _voices,
-                        selectedIndex: _selectedIndex,
-                        playingVoiceId: _playingVoiceId,
-                        previewUrls: _previewUrls,
-                        onSelect: _selectAndPreview,
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 60,
-                        child: AppButton(
-                          onPressed: (_isSaving || !_hasUserSelected)
-                              ? null
-                              : _continue,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black,
-                            disabledBackgroundColor: Colors.white.withValues(
-                              alpha: 0.18,
-                            ),
-                            disabledForegroundColor: Colors.white.withValues(
-                              alpha: 0.6,
-                            ),
-                            shape: const StadiumBorder(),
-                          ),
-                          child: _isSaving
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                          Expanded(
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  KeyedSubtree(
+                                    key: _voiceOrbKey,
+                                    child: _VoiceOrb(
+                                      gradient: voice.gradient,
+                                      idle: _idleController,
+                                      isPlaying:
+                                          isPlayingCurrent && _player.playing,
+                                      isLoading:
+                                          isPlayingCurrent && _playerLoading,
+                                      hasPreview: hasPreview,
+                                      onTap: () =>
+                                          _selectAndPreview(_selectedIndex),
+                                    ),
                                   ),
-                                )
-                              : const TypographyText(
-                                  'Continue',
-                                  variant: TypographyVariant.body1,
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.w600,
+                                  const SizedBox(height: 20),
+                                  AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 280),
+                                    transitionBuilder: (child, anim) =>
+                                        FadeTransition(
+                                          opacity: anim,
+                                          child: SlideTransition(
+                                            position: Tween<Offset>(
+                                              begin: const Offset(0, 0.15),
+                                              end: Offset.zero,
+                                            ).animate(anim),
+                                            child: child,
+                                          ),
+                                        ),
+                                    child: Column(
+                                      key: ValueKey<String>(voice.name),
+                                      children: <Widget>[
+                                        TypographyText(
+                                          voice.name,
+                                          variant: TypographyVariant.h2,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                        const SizedBox(height: 6),
+                                        TypographyText(
+                                          voice.tone,
+                                          variant: TypographyVariant.body2,
+                                          color: Colors.white.withValues(
+                                            alpha: 0.72,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          KeyedSubtree(
+                            key: _voiceStripKey,
+                            child: _VoiceStrip(
+                              voices: _voices,
+                              selectedIndex: _selectedIndex,
+                              playingVoiceId: _playingVoiceId,
+                              previewUrls: _previewUrls,
+                              keyForIndex: _keyForVoiceIndex,
+                              onSelect: _selectAndPreview,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          KeyedSubtree(
+                            key: _continueButtonKey,
+                            child: SizedBox(
+                              width: double.infinity,
+                              height: 60,
+                              child: AppButton(
+                                onPressed: (_isSaving || !_hasUserSelected)
+                                    ? null
+                                    : _continue,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: Colors.black,
+                                  disabledBackgroundColor: Colors.white
+                                      .withValues(alpha: 0.18),
+                                  disabledForegroundColor: Colors.white
+                                      .withValues(alpha: 0.6),
+                                  shape: const StadiumBorder(),
                                 ),
-                        ),
+                                child: _isSaving
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const TypographyText(
+                                        'Continue',
+                                        variant: TypographyVariant.body1,
+                                        color: Colors.black,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
+            if (_showVoicePickerGuide && _voicePickerGuideRect != null)
+              _VoicePickerGuideOverlay(
+                targetRect: _voicePickerGuideRect!,
+                animation: _idleController,
+              ),
+          ],
         ),
       ),
     );
@@ -789,6 +988,7 @@ class _VoiceStrip extends StatelessWidget {
     required this.selectedIndex,
     required this.playingVoiceId,
     required this.previewUrls,
+    required this.keyForIndex,
     required this.onSelect,
   });
 
@@ -796,6 +996,7 @@ class _VoiceStrip extends StatelessWidget {
   final int selectedIndex;
   final String? playingVoiceId;
   final Map<String, String> previewUrls;
+  final GlobalKey Function(int index) keyForIndex;
   final ValueChanged<int> onSelect;
 
   @override
@@ -809,16 +1010,143 @@ class _VoiceStrip extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
           final voice = voices[index];
-          return _VoicePill(
-            voice: voice,
-            isSelected: index == selectedIndex,
-            isPlaying: playingVoiceId == voice.voiceId,
-            hasPreview: previewUrls[voice.voiceId]?.isNotEmpty == true,
-            onTap: () => onSelect(index),
+          return KeyedSubtree(
+            key: keyForIndex(index),
+            child: _VoicePill(
+              voice: voice,
+              isSelected: index == selectedIndex,
+              isPlaying: playingVoiceId == voice.voiceId,
+              hasPreview: previewUrls[voice.voiceId]?.isNotEmpty == true,
+              onTap: () => onSelect(index),
+            ),
           );
         },
       ),
     );
+  }
+}
+
+class _VoicePickerGuideOverlay extends StatelessWidget {
+  const _VoicePickerGuideOverlay({
+    required this.targetRect,
+    required this.animation,
+  });
+
+  final Rect targetRect;
+  final Animation<double> animation;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final cardTop = (targetRect.top - 160).clamp(96.0, size.height - 250.0);
+
+    return IgnorePointer(
+      child: Stack(
+        children: <Widget>[
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _VoicePickerSpotlightPainter(
+                targetRect: targetRect.inflate(3),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: animation,
+              builder: (context, _) {
+                final pulse = (math.sin(animation.value * math.pi * 2) + 1) / 2;
+                return CustomPaint(
+                  painter: _VoicePickerBorderPainter(
+                    targetRect: targetRect.inflate(4),
+                    progress: pulse,
+                  ),
+                );
+              },
+            ),
+          ),
+          Positioned(
+            left: 40,
+            right: 40,
+            top: cardTop,
+            child: const SetupCoachMarkCard(
+              title: 'Choose the voice you want',
+              message:
+                  'Swipe left through the options and tap a voice to preview it.',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VoicePickerSpotlightPainter extends CustomPainter {
+  const _VoicePickerSpotlightPainter({required this.targetRect});
+
+  final Rect targetRect;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final overlay = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(Offset.zero & size)
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          targetRect,
+          Radius.circular(targetRect.height / 2),
+        ),
+      );
+
+    canvas.drawPath(
+      overlay,
+      Paint()..color = Colors.black.withValues(alpha: 0.72),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_VoicePickerSpotlightPainter oldDelegate) {
+    return oldDelegate.targetRect != targetRect;
+  }
+}
+
+class _VoicePickerBorderPainter extends CustomPainter {
+  const _VoicePickerBorderPainter({
+    required this.targetRect,
+    required this.progress,
+  });
+
+  final Rect targetRect;
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final radius = Radius.circular(targetRect.height / 2);
+    final rrect = RRect.fromRectAndRadius(targetRect, radius);
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        targetRect.inflate(3 + progress * 2),
+        Radius.circular((targetRect.height + 6 + progress * 4) / 2),
+      ),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4 + progress * 0.8
+        ..color = Colors.white.withValues(alpha: 0.28 + progress * 0.18),
+    );
+
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = Colors.white,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_VoicePickerBorderPainter oldDelegate) {
+    return oldDelegate.targetRect != targetRect ||
+        oldDelegate.progress != progress;
   }
 }
 
