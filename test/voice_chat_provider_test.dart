@@ -513,7 +513,13 @@ class FakeAudioChunkPlayer implements AudioChunkPlayer {
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> pause() async {}
+
+  @override
+  Future<void> resume() async {}
+
+  @override
+  Future<void> stop({bool notifyFinished = true}) async {
     stopped = true;
   }
 

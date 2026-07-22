@@ -11,8 +11,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
+          theme: AppTheme.darkTheme,
           home: const StandardStoryGuidePage(),
         ),
       ),

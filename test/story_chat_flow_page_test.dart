@@ -1268,5 +1268,11 @@ class _NoopAudioChunkPlayer implements AudioChunkPlayer {
   Future<void> dispose() async {}
 
   @override
-  Future<void> stop() async {}
+  Future<void> pause() async {}
+
+  @override
+  Future<void> resume() async {}
+
+  @override
+  Future<void> stop({bool notifyFinished = true}) async {}
 }
