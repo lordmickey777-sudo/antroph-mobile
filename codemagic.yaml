@@ -1,0 +1,52 @@
+workflows:
+  ios-ipa:
+    name: iOS IPA Build
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.antroph.auraapp
+
+    scripts:
+      - name: Prepare environment file
+        script: |
+          if [ ! -f .env ]; then
+            printf '%s\n' \
+              "API_BASE_URL=${API_BASE_URL:-https://antrophbackend.nitoons.com}" \
+              "SENTRY_DSN=${SENTRY_DSN:-}" \
+              "POSTHOG_API_KEY=${POSTHOG_API_KEY:-}" \
+              "POSTHOG_HOST=${POSTHOG_HOST:-https://us.i.posthog.com}" \
+              "REVENUECAT_USE_TEST_STORE=${REVENUECAT_USE_TEST_STORE:-false}" \
+              "REVENUECAT_TEST_API_KEY=${REVENUECAT_TEST_API_KEY:-test_HSuFXrcgoDIhGaDMeEFIQOBnhqo}" \
+              "REVENUECAT_APPLE_API_KEY=${REVENUECAT_APPLE_API_KEY:-}" \
+              "REVENUECAT_GOOGLE_API_KEY=${REVENUECAT_GOOGLE_API_KEY:-}" > .env
+          fi
+
+      - name: Set up code signing
+        script: xcode-project use-profiles
+
+      - name: Get Flutter packages
+        script: flutter pub get
+
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios
+          pod install
+
+      - name: Build App Store IPA
+        script: |
+          flutter build ipa \
+            --release \
+            --build-number="$CM_BUILD_NUMBER" \
+            --dart-define-from-file=.env \
+            --export-options-plist=/Users/builder/export_options.plist
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
